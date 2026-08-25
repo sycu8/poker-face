@@ -6,7 +6,11 @@ import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { seatRingStyle, visualSeatIndex } from "./seatLayout";
-import { WinCelebration, winningPlayerIds } from "./WinCelebration";
+import {
+  WinCelebration,
+  winningBestFiveCodes,
+  winningPlayerIds,
+} from "./WinCelebration";
 
 interface SeatView {
   seatIndex: number;
@@ -412,6 +416,10 @@ export function TablePage({ user }: { user: User }) {
     () => (celebrationWinners ? winningPlayerIds(celebrationWinners) : new Set<string>()),
     [celebrationWinners],
   );
+  const winningCardCodes = useMemo(
+    () => (celebrationWinners ? winningBestFiveCodes(celebrationWinners) : new Set<string>()),
+    [celebrationWinners],
+  );
 
   const displayNameFor = useCallback(
     (playerId: string) =>
@@ -739,7 +747,12 @@ export function TablePage({ user }: { user: User }) {
           <div className="table-center">
             <div className="board">
               {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map((c, i) => (
-                <PlayingCard key={`${c}-${i}`} code={c} size="board" />
+                <PlayingCard
+                  key={`${c}-${i}`}
+                  code={c}
+                  size="board"
+                  className={winningCardCodes.has(c) ? "playing-card--winning" : ""}
+                />
               ))}
             </div>
             <div className="pot">
@@ -814,6 +827,7 @@ export function TablePage({ user }: { user: User }) {
                           key={`${c}-${i}`}
                           code={c}
                           size={isHero ? "hero" : "sm"}
+                          className={winningCardCodes.has(c) ? "playing-card--winning" : ""}
                         />
                       ))}
                     </div>
