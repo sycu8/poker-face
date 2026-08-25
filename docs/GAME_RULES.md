@@ -44,4 +44,4 @@ maxTargetWager = floor(potBeforeAction * potCapMultiplier)
 ## Disconnect / reconnect
 
 - Disconnects must not corrupt a hand.
-- Reconnect restores a **private projected snapshot** and ordered event sequence with monotonic `roomSequence`.
+- Reconnect is **snapshot-only**: the client receives a private projected snapshot with monotonic `sequence` on WebSocket connect (and after stale-version errors). There is no durable per-event `room_events` log — clients do not replay historical event streams.

@@ -9,7 +9,12 @@ import {
   type Street,
   type TableConfig,
 } from "./config";
-import { compareHands, evaluateBestHand } from "./handRank";
+import {
+  categoryDisplayLabel,
+  compareHands,
+  evaluateBestHand,
+  type HandCategory,
+} from "./handRank";
 import { computeSidePots, type SidePot } from "./pots";
 
 export type ActionType = "fold" | "check" | "call" | "bet" | "raise" | "all_in";
@@ -26,8 +31,26 @@ export interface SeatState {
   hasActedThisStreet: boolean;
 }
 
+/** Per-winner showdown details; omitted when the pot was won uncontested (fold). */
+export interface WinningHandInfo {
+  /** Engine category (`straight_flush` for royal flush). */
+  category: HandCategory;
+  /** User-facing label, e.g. "Royal flush", "Full house". */
+  label: string;
+  /** Best five cards that made the hand. */
+  bestFive: Card[];
+  /** Tie-break strength ranks from evaluateBestHand. */
+  strength: number[];
+}
+
 export interface HandResult {
-  winners: Array<{ playerId: string; amount: number; potIndex: number }>;
+  winners: Array<{
+    playerId: string;
+    amount: number;
+    potIndex: number;
+    /** Present when the pot was decided at showdown (2+ eligible). */
+    hand?: WinningHandInfo;
+  }>;
   pots: SidePot[];
   shownHands: Array<{ playerId: string; cards: [Card, Card] }>;
 }
@@ -395,6 +418,7 @@ function advanceStreet(state: GameState, nowMs: number): EngineEvent[] {
 }
 
 function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
+  void _nowMs;
   state.street = "showdown";
   state.actionSeat = null;
   state.turnDeadlineMs = null;
@@ -436,6 +460,12 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
     evaluated.sort((a, b) => compareHands(b.hand, a.hand));
     const best = evaluated[0]!.hand;
     const tied = evaluated.filter((e) => compareHands(e.hand, best) === 0);
+    const winningHand: WinningHandInfo = {
+      category: best.category,
+      label: categoryDisplayLabel(best),
+      bestFive: best.bestFive,
+      strength: best.ranks,
+    };
     const share = Math.floor(pot.amount / tied.length);
     let remainder = pot.amount - share * tied.length;
     for (const t of tied) {
@@ -444,7 +474,7 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
       remainder -= extra;
       const amount = share + extra;
       seat.stack += amount;
-      winners.push({ playerId: t.pid, amount, potIndex });
+      winners.push({ playerId: t.pid, amount, potIndex, hand: winningHand });
     }
   });
 
@@ -614,7 +644,7 @@ export function seatPlayer(
 ): { ok: true } | { ok: false; error: string } {
   const seat = state.seats[seatIndex];
   if (!seat) return { ok: false, error: "Invalid seat." };
-  if (seat.playerId) return { ok: false, error: "This table is full." };
+  if (seat.playerId) return { ok: false, error: "That seat is taken." };
   if (state.seats.some((s) => s.playerId === playerId)) {
     return { ok: false, error: "Already seated." };
   }
@@ -622,6 +652,125 @@ export function seatPlayer(
   seat.displayName = displayName;
   seat.stack = state.config.startingStack;
   seat.status = state.street === "waiting" ? "seated" : "waiting_next_hand";
+  state.sequence += 1;
+  return { ok: true };
+}
+
+function clearSeat(seat: SeatState): void {
+  seat.playerId = null;
+  seat.displayName = null;
+  seat.stack = 0;
+  seat.status = "empty";
+  seat.holeCards = null;
+  seat.betThisStreet = 0;
+  seat.committedThisHand = 0;
+  seat.hasActedThisStreet = false;
+}
+
+/**
+ * Remove a player from their seat. Mid-hand: fold if still active and defer
+ * clearing the seat until the hand returns to waiting (preserves pot math).
+ */
+export function unseatPlayer(
+  state: GameState,
+  playerId: string,
+  nowMs: number,
+):
+  | { ok: true; events: EngineEvent[]; deferred: boolean }
+  | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+
+  const events: EngineEvent[] = [];
+  const inHand =
+    state.street !== "waiting" &&
+    (seat.status === "active" || seat.status === "all_in" || seat.status === "folded");
+
+  if (inHand && seat.status === "active") {
+    const fold = applyAction(
+      state,
+      seat.seatIndex,
+      "fold",
+      undefined,
+      nowMs,
+      `leave:${playerId}:${state.sequence}`,
+    );
+    if (fold.ok) events.push(...fold.events);
+  }
+
+  // Hand may have completed via the fold.
+  if (state.street !== "waiting") {
+    const still = state.seats.find((s) => s.playerId === playerId);
+    if (still) {
+      still.displayName = `${still.displayName ?? "Player"} (left)`;
+    }
+    state.sequence += 1;
+    return { ok: true, events, deferred: true };
+  }
+
+  const still = state.seats.find((s) => s.playerId === playerId);
+  if (still) clearSeat(still);
+  state.sequence += 1;
+  return { ok: true, events, deferred: false };
+}
+
+/** Clear seats marked for deferred leave once the table is between hands. */
+export function flushDeferredLeaves(state: GameState, playerIds: string[]): void {
+  if (state.street !== "waiting") return;
+  for (const id of playerIds) {
+    const seat = state.seats.find((s) => s.playerId === id);
+    if (seat) clearSeat(seat);
+  }
+  if (playerIds.length) state.sequence += 1;
+}
+
+/** Play-money stack reset for a busted (0-chip) seated player. */
+export function rebuyPlayer(
+  state: GameState,
+  playerId: string,
+  chips?: number,
+): { ok: true } | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+  if (seat.stack > 0) {
+    return { ok: false, error: "Rebuy is only for busted seats (0 chips)." };
+  }
+  if (state.street !== "waiting" && seat.status !== "sitting_out" && seat.status !== "waiting_next_hand" && seat.status !== "seated") {
+    return { ok: false, error: "Wait until the hand finishes before rebuying." };
+  }
+  const amount = chips ?? state.config.startingStack;
+  if (!Number.isInteger(amount) || amount < state.config.startingStack || amount > 1000) {
+    return {
+      ok: false,
+      error: `Rebuy must be between ${state.config.startingStack} and 1000 virtual chips.`,
+    };
+  }
+  seat.stack = amount;
+  seat.status = state.street === "waiting" ? "seated" : "waiting_next_hand";
+  state.sequence += 1;
+  return { ok: true };
+}
+
+/** Mark away / return without removing the seat. Does not cancel turn timers. */
+export function setPlayerAway(
+  state: GameState,
+  playerId: string,
+  away: boolean,
+): { ok: true } | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+  if (away) {
+    if (state.street !== "waiting" && (seat.status === "active" || seat.status === "all_in")) {
+      // Stay in the hand; mark sitting_out only between hands.
+      return { ok: false, error: "Finish this hand before going away." };
+    }
+    seat.status = "sitting_out";
+  } else {
+    if (seat.status !== "sitting_out") {
+      return { ok: false, error: "You are not marked away." };
+    }
+    seat.status = state.street === "waiting" ? "seated" : "waiting_next_hand";
+  }
   state.sequence += 1;
   return { ok: true };
 }

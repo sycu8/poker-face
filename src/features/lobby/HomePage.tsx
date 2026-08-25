@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type User } from "../../lib/api";
+import { api, type MyRoom, type User } from "../../lib/api";
+import { TurnstileWidget } from "../auth/TurnstileWidget";
 import { PlayingCard } from "../table/PlayingCard";
 
 export function HomePage({
@@ -20,6 +21,28 @@ export function HomePage({
   const [invite, setInvite] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [myRooms, setMyRooms] = useState<MyRoom[]>([]);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const onToken = useCallback((token: string | null) => setTurnstileToken(token), []);
+
+  useEffect(() => {
+    void api
+      .config()
+      .then((cfg) => setSiteKey(cfg.turnstileSiteKey || null))
+      .catch(() => setSiteKey(null));
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setMyRooms([]);
+      return;
+    }
+    void api
+      .myRooms()
+      .then((r) => setMyRooms(r.rooms))
+      .catch(() => setMyRooms([]));
+  }, [user]);
 
   async function createRoom() {
     setError(null);
@@ -42,6 +65,7 @@ export function HomePage({
       const res = await api.joinRequest({
         inviteCode: invite.trim().toUpperCase(),
         idempotencyKey: crypto.randomUUID(),
+        turnstileToken: turnstileToken ?? undefined,
       });
       setMessage(res.message ?? "Waiting for the host");
       if (res.roomId) navigate(`/table/${res.roomId}`);
@@ -145,6 +169,7 @@ export function HomePage({
                   placeholder="ABC123"
                 />
               </div>
+              <TurnstileWidget siteKey={siteKey} onToken={onToken} />
               <div className="home-panel-actions">
                 <button className="btn btn-secondary" type="button" onClick={() => void askToJoin()}>
                   Ask to join
@@ -162,6 +187,30 @@ export function HomePage({
               ) : null}
             </div>
           ) : null}
+        </section>
+      ) : null}
+
+      {user && myRooms.length > 0 ? (
+        <section className="home-section" aria-labelledby="my-tables">
+          <div className="home-section-intro">
+            <h2 id="my-tables">My tables</h2>
+            <p className="muted">Rooms you host or have a seat at.</p>
+          </div>
+          <ul className="my-tables-list">
+            {myRooms.map((r) => (
+              <li key={r.id}>
+                <Link className="my-table-link" to={`/table/${r.id}`}>
+                  <strong>{r.name}</strong>
+                  <span className="muted">
+                    {r.isHost ? "Host" : "Player"}
+                    {" · "}
+                    blinds {r.smallBlind}/{r.bigBlind}
+                    {r.inviteCode ? ` · ${r.inviteCode}` : ""}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
       ) : null}
 

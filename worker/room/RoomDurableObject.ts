@@ -4,12 +4,17 @@ import {
   applyAction,
   createInitialGameState,
   projectForPlayer,
+  rebuyPlayer,
   seatPlayer,
+  setPlayerAway,
   startHand,
+  flushDeferredLeaves,
+  unseatPlayer,
   type ActionType,
   type GameState,
 } from "../domain/engine";
 import type { TableConfig } from "../domain/config";
+import { writeAnalytics } from "../lib/analytics";
 
 interface ChatMessage {
   id: string;
@@ -34,6 +39,10 @@ interface ClientAttachment {
 /**
  * One SQLite-backed Durable Object per room.
  * Authoritative game state + hibernatable WebSockets + text chat.
+ *
+ * Reconnect model: snapshot-only. Clients receive a private projected snapshot
+ * (with monotonic `sequence`) on connect / after stale actions. The legacy
+ * `room_events` table is not used and is dropped when present.
  */
 export class RoomDurableObject extends DurableObject<Env> {
   private game: GameState | null = null;
@@ -49,6 +58,8 @@ export class RoomDurableObject extends DurableObject<Env> {
   }> = [];
   /** Non-host players asking the host to deal the next hand (coalesced by userId). */
   private startRequests: StartRequest[] = [];
+  /** Players who left/kicked mid-hand — cleared when street returns to waiting. */
+  private pendingLeaves = new Set<string>();
   private actionIdempotency = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -59,12 +70,13 @@ export class RoomDurableObject extends DurableObject<Env> {
           key TEXT PRIMARY KEY,
           value TEXT NOT NULL
         );
-        CREATE TABLE IF NOT EXISTS room_events (
-          sequence INTEGER PRIMARY KEY,
-          payload TEXT NOT NULL,
-          created_at INTEGER NOT NULL
-        );
       `);
+      // Snapshot-only reconnect — drop unused event log if an older DO created it.
+      try {
+        this.ctx.storage.sql.exec(`DROP TABLE IF EXISTS room_events`);
+      } catch {
+        /* ignore */
+      }
       const row = this.ctx.storage.sql
         .exec<{ value: string }>(`SELECT value FROM room_meta WHERE key = 'snapshot'`)
         .toArray()[0];
@@ -82,6 +94,7 @@ export class RoomDurableObject extends DurableObject<Env> {
             displayName: string;
           }>;
           startRequests?: StartRequest[];
+          pendingLeaves?: string[];
         };
         this.roomId = snap.roomId;
         this.hostUserId = snap.hostUserId;
@@ -91,6 +104,7 @@ export class RoomDurableObject extends DurableObject<Env> {
         this.chat = snap.chat ?? [];
         this.pendingJoins = snap.pendingJoins ?? [];
         this.startRequests = snap.startRequests ?? [];
+        this.pendingLeaves = new Set(snap.pendingLeaves ?? []);
       }
     });
   }
@@ -106,12 +120,19 @@ export class RoomDurableObject extends DurableObject<Env> {
       chat: this.chat.slice(-100),
       pendingJoins: this.pendingJoins,
       startRequests: this.startRequests,
+      pendingLeaves: [...this.pendingLeaves],
     });
     this.ctx.storage.sql.exec(
       `INSERT INTO room_meta (key, value) VALUES ('snapshot', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       value,
     );
+  }
+
+  private flushLeavesIfWaiting(): void {
+    if (!this.game || this.game.street !== "waiting" || this.pendingLeaves.size === 0) return;
+    flushDeferredLeaves(this.game, [...this.pendingLeaves]);
+    this.pendingLeaves.clear();
   }
 
   private broadcast(message: unknown, exceptUserId?: string): void {
@@ -260,6 +281,8 @@ export class RoomDurableObject extends DurableObject<Env> {
       let seatIndex = body.seatIndex;
       if (seatIndex === undefined) {
         seatIndex = this.game.seats.findIndex((s) => !s.playerId);
+      } else if (this.game.seats[seatIndex]?.playerId) {
+        return Response.json({ ok: false, error: "That seat is taken." });
       }
       if (seatIndex < 0) {
         return Response.json({ ok: false, error: "This table is full." });
@@ -275,8 +298,97 @@ export class RoomDurableObject extends DurableObject<Env> {
         seatIndex,
         message: "You have a seat",
       });
+      writeAnalytics(this.env, "player_seated", this.roomId ?? "unknown", [seatIndex], [
+        body.userId.slice(0, 8),
+      ]);
       for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
       return Response.json({ ok: true, seatIndex });
+    }
+
+    if (url.pathname === "/leave" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as { userId: string };
+      if (body.userId === this.hostUserId) {
+        return Response.json({
+          ok: false,
+          error: "Host cannot leave while hosting. Transfer host or close the table.",
+        });
+      }
+      const result = unseatPlayer(this.game, body.userId, Date.now());
+      if (!result.ok) return Response.json(result);
+      this.startRequests = this.startRequests.filter((r) => r.userId !== body.userId);
+      if (result.deferred) this.pendingLeaves.add(body.userId);
+      else this.pendingLeaves.delete(body.userId);
+      this.flushLeavesIfWaiting();
+      this.persist();
+      this.broadcast({ type: "player_left", userId: body.userId });
+      writeAnalytics(this.env, "player_left", this.roomId ?? "unknown");
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      if (result.events.length) this.broadcast({ type: "events", events: result.events });
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/kick" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as { hostUserId: string; targetUserId: string };
+      if (body.hostUserId !== this.hostUserId) {
+        return Response.json({ ok: false, error: "Only the host can kick players." });
+      }
+      if (body.targetUserId === this.hostUserId) {
+        return Response.json({ ok: false, error: "Host cannot kick themselves." });
+      }
+      const result = unseatPlayer(this.game, body.targetUserId, Date.now());
+      if (!result.ok) return Response.json(result);
+      this.startRequests = this.startRequests.filter((r) => r.userId !== body.targetUserId);
+      if (result.deferred) this.pendingLeaves.add(body.targetUserId);
+      else this.pendingLeaves.delete(body.targetUserId);
+      this.flushLeavesIfWaiting();
+      this.persist();
+      this.broadcast({ type: "player_kicked", userId: body.targetUserId });
+      writeAnalytics(this.env, "player_kicked", this.roomId ?? "unknown");
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      if (result.events.length) this.broadcast({ type: "events", events: result.events });
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/rebuy" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as {
+        requesterId: string;
+        targetUserId: string;
+        chips?: number;
+      };
+      const isHost = body.requesterId === this.hostUserId;
+      const isSelf = body.requesterId === body.targetUserId;
+      if (!isHost && !isSelf) {
+        return Response.json({ ok: false, error: "Only the host or the player can rebuy." });
+      }
+      const result = rebuyPlayer(this.game, body.targetUserId, body.chips);
+      if (!result.ok) return Response.json(result);
+      this.persist();
+      this.broadcast({ type: "rebuy", userId: body.targetUserId });
+      writeAnalytics(this.env, "rebuy", this.roomId ?? "unknown", [body.chips ?? 0]);
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/away" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as { userId: string; away: boolean };
+      const result = setPlayerAway(this.game, body.userId, body.away);
+      if (!result.ok) return Response.json(result);
+      this.persist();
+      this.broadcast({ type: "away", userId: body.userId, away: body.away });
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/open-seats" && request.method === "GET") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const open = this.game.seats
+        .filter((s) => !s.playerId)
+        .map((s) => s.seatIndex);
+      return Response.json({ ok: true, openSeats: open });
     }
 
     if (url.pathname === "/ws") {
@@ -402,6 +514,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       const events = startHand(this.game, Date.now());
       this.persist();
       await this.ctx.storage.setAlarm(this.game.turnDeadlineMs ?? Date.now() + 1000);
+      writeAnalytics(this.env, "hand_started", this.roomId ?? "unknown", [this.game.handNumber]);
       for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
       this.broadcast({ type: "events", events });
       return;
@@ -451,6 +564,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       } else {
         await this.ctx.storage.deleteAlarm();
       }
+      this.flushLeavesIfWaiting();
       for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
       this.broadcast({ type: "events", events: result.events });
 
@@ -467,11 +581,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           /* queue optional in some local setups */
         }
         try {
-          this.env.ANALYTICS.writeDataPoint({
-            blobs: ["hand_complete", this.roomId],
-            doubles: [this.game.handNumber],
-            indexes: [this.roomId],
-          });
+          writeAnalytics(this.env, "hand_complete", this.roomId, [this.game.handNumber]);
         } catch {
           /* analytics best-effort */
         }
@@ -504,6 +614,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       `timeout:${this.game.sequence}`,
     );
     if (!result.ok) return;
+    this.flushLeavesIfWaiting();
     this.persist();
     if (this.game.turnDeadlineMs) {
       await this.ctx.storage.setAlarm(this.game.turnDeadlineMs);

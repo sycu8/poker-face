@@ -8,6 +8,8 @@ import {
   sessionCookieHeader,
 } from "./session";
 import { hashPassword, verifyPassword } from "./password";
+import { verifyTurnstile } from "../lib/turnstile";
+import { writeAnalytics } from "../lib/analytics";
 import { errorJson, json, randomId, readJson, sha256Hex } from "../lib/http";
 
 const usernameSchema = z
@@ -47,23 +49,6 @@ const resetPasswordSchema = z.object({
   newPassword: passwordSchema,
   turnstileToken: z.string().min(1).optional(),
 });
-
-async function verifyTurnstile(env: Env, token: string | undefined, ip: string | null) {
-  // Skip until TURNSTILE_SECRET_KEY is configured (local or early deploy).
-  if (!env.TURNSTILE_SECRET_KEY) return true;
-  if (!token) return false;
-  const body = new URLSearchParams({
-    secret: env.TURNSTILE_SECRET_KEY,
-    response: token,
-  });
-  if (ip) body.set("remoteip", ip);
-  const res = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-    method: "POST",
-    body,
-  });
-  const data = (await res.json()) as { success?: boolean };
-  return Boolean(data.success);
-}
 
 export async function handleAuth(
   request: Request,
@@ -150,6 +135,7 @@ export async function handleAuth(
         .run();
 
       const session = await createSession(env, userId);
+      writeAnalytics(env, "auth_register", userId);
       return new Response(
         JSON.stringify({
           user: { id: userId, displayName, username: parsed.data.username },
@@ -207,6 +193,7 @@ export async function handleAuth(
       if (!ok) return errorJson(401, "Invalid username or password.");
 
       const session = await createSession(env, row.id);
+      writeAnalytics(env, "auth_login", row.id);
       return new Response(
         JSON.stringify({
           user: {

@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- helpers shared with tests */
 import type { CSSProperties } from "react";
 
 type Suit = "c" | "d" | "h" | "s";

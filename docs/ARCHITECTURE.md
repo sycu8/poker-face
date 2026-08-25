@@ -2,9 +2,9 @@
 
 - **Client:** React SPA/PWA (Vite) with branded UI, username/password auth, room table, chat, optional RealtimeKit voice.
 - **Worker:** Single entry serves Static Assets + `/api/*` + `/ws/*`.
-- **RoomDurableObject:** One SQLite DO per room — authoritative engine, hibernatable WebSockets, alarms for turn timers, text chat.
+- **RoomDurableObject:** One SQLite DO per room — authoritative engine, hibernatable WebSockets, alarms for turn timers, text chat. Reconnect is **snapshot-only** (projected view + `sequence`); unused `room_events` path removed.
 - **D1:** Users (username + email + password hash), sessions, rooms, membership, join requests, hand summaries, idempotency keys.
-- **KV:** Non-authoritative config lookups only.
+- **KV (`CONFIG_KV`):** Non-authoritative flags/copy (`copy:*`, `flag:*`) for `/api/config`.
 - **R2 + Queues:** Async hand archival / replay JSON.
 - **Analytics Engine:** Aggregate events without PII.
 - **Rate limits + Turnstile:** Registration, password reset, and join abuse paths.
