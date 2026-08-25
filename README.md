@@ -52,10 +52,6 @@ See `docs/BRAND_GUIDE.md` and `logo/`.
 - [`docs/BRAND_GUIDE.md`](docs/BRAND_GUIDE.md) — brand and copy
 - [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md) — staging/production deploy
 
-## Game rules
-
-See `docs/GAME_RULES.md`.
-
 ## Environments
 
 Keep local, staging, and production resources separate. Fill IDs in `wrangler.jsonc` from created Cloudflare resources; never commit secrets. Use `wrangler.template.jsonc` as the ID-free reference.
