@@ -132,8 +132,32 @@ export function evaluateBestHand(cards: Card[]): EvaluatedHand {
   return best!;
 }
 
+const CATEGORY_DISPLAY: Record<HandCategory, string> = {
+  high_card: "High card",
+  one_pair: "One pair",
+  two_pair: "Two pair",
+  three_of_a_kind: "Three of a kind",
+  straight: "Straight",
+  flush: "Flush",
+  full_house: "Full house",
+  four_of_a_kind: "Four of a kind",
+  straight_flush: "Straight flush",
+};
+
+/** True when the five-card hand is an Ace-high straight flush. */
+export function isRoyalFlush(hand: EvaluatedHand): boolean {
+  return hand.category === "straight_flush" && hand.ranks[0] === 12;
+}
+
+/** User-facing rank name (includes "Royal flush"). */
+export function categoryDisplayLabel(hand: EvaluatedHand): string {
+  if (isRoyalFlush(hand)) return "Royal flush";
+  return CATEGORY_DISPLAY[hand.category];
+}
+
+/** Legacy helper; prefer categoryDisplayLabel for user-facing copy. */
 export function categoryLabel(category: HandCategory): string {
-  return category.replaceAll("_", " ");
+  return CATEGORY_DISPLAY[category] ?? category.replaceAll("_", " ");
 }
 
 export function rankLabel(rank: Rank): string {

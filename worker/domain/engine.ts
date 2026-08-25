@@ -9,7 +9,12 @@ import {
   type Street,
   type TableConfig,
 } from "./config";
-import { compareHands, evaluateBestHand } from "./handRank";
+import {
+  categoryDisplayLabel,
+  compareHands,
+  evaluateBestHand,
+  type HandCategory,
+} from "./handRank";
 import { computeSidePots, type SidePot } from "./pots";
 
 export type ActionType = "fold" | "check" | "call" | "bet" | "raise" | "all_in";
@@ -26,8 +31,26 @@ export interface SeatState {
   hasActedThisStreet: boolean;
 }
 
+/** Per-winner showdown details; omitted when the pot was won uncontested (fold). */
+export interface WinningHandInfo {
+  /** Engine category (`straight_flush` for royal flush). */
+  category: HandCategory;
+  /** User-facing label, e.g. "Royal flush", "Full house". */
+  label: string;
+  /** Best five cards that made the hand. */
+  bestFive: Card[];
+  /** Tie-break strength ranks from evaluateBestHand. */
+  strength: number[];
+}
+
 export interface HandResult {
-  winners: Array<{ playerId: string; amount: number; potIndex: number }>;
+  winners: Array<{
+    playerId: string;
+    amount: number;
+    potIndex: number;
+    /** Present when the pot was decided at showdown (2+ eligible). */
+    hand?: WinningHandInfo;
+  }>;
   pots: SidePot[];
   shownHands: Array<{ playerId: string; cards: [Card, Card] }>;
 }
@@ -436,6 +459,12 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
     evaluated.sort((a, b) => compareHands(b.hand, a.hand));
     const best = evaluated[0]!.hand;
     const tied = evaluated.filter((e) => compareHands(e.hand, best) === 0);
+    const winningHand: WinningHandInfo = {
+      category: best.category,
+      label: categoryDisplayLabel(best),
+      bestFive: best.bestFive,
+      strength: best.ranks,
+    };
     const share = Math.floor(pot.amount / tied.length);
     let remainder = pot.amount - share * tied.length;
     for (const t of tied) {
@@ -444,7 +473,7 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
       remainder -= extra;
       const amount = share + extra;
       seat.stack += amount;
-      winners.push({ playerId: t.pid, amount, potIndex });
+      winners.push({ playerId: t.pid, amount, potIndex, hand: winningHand });
     }
   });
 

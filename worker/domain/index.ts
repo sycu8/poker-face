@@ -19,4 +19,5 @@ export type {
   LegalActions,
   PublicGameView,
   SeatState,
+  WinningHandInfo,
 } from "./engine";
