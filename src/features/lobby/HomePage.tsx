@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type User } from "../../lib/api";
+import { PlayingCard } from "../table/PlayingCard";
 
 export function HomePage({
   user,
@@ -84,8 +85,8 @@ export function HomePage({
           <div className="home-felt">
             <div className="home-felt-glow" />
             <div className="home-felt-cards">
-              <span className="home-mini-card home-mini-card--a">A♠</span>
-              <span className="home-mini-card home-mini-card--b">K♥</span>
+              <PlayingCard code="As" size="hero" className="home-mini-card--a" />
+              <PlayingCard code="Kh" size="hero" className="home-mini-card--b" />
             </div>
             <div className="home-felt-chip" />
           </div>
