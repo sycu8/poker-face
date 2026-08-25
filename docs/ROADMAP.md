@@ -45,6 +45,19 @@ Play-money Texas Hold’em for friends. Virtual chips only. This roadmap is the 
 4. [ ] Optional passkeys alongside passwords (deferred — WebAuthn tables dropped; reintroduce later)
 5. [x] Table themes / avatars
 
+### Poker Now parity (Hold’em-only)
+
+See [`POKERNOW_PARITY.md`](./POKERNOW_PARITY.md).
+
+1. [x] Guest join via invite (display name + short guest session)
+2. [x] Session ledger + CSV
+3. [x] Host pause / resume
+4. [x] Time bank
+5. [x] True spectator (approve as watch-only)
+6. [x] Host transfer + close table
+7. [x] Max seats 10, bigger cards, rabbit hunt
+8. [ ] Ante / live straddle (deferred)
+
 ```mermaid
 flowchart LR
   P1[Phase 1 — Launch polish] --> P2[Phase 2 — Secondary systems]
@@ -62,3 +75,4 @@ flowchart LR
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — Worker / DO / D1 layout
 - [`GITHUB_ACTIONS_DEPLOY.md`](./GITHUB_ACTIONS_DEPLOY.md) — staging/production deploy
 - [`BRAND_GUIDE.md`](./BRAND_GUIDE.md) — brand and copy
+- [`POKERNOW_PARITY.md`](./POKERNOW_PARITY.md) — guest join, ledger, pause, time bank, spectators

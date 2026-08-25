@@ -3,6 +3,7 @@ import type { Env } from "../env";
 import {
   clearSessionCookie,
   createSession,
+  GUEST_SESSION_TTL_MS,
   readSessionToken,
   requireUser,
   sessionCookieHeader,
@@ -50,6 +51,11 @@ const resetPasswordSchema = z.object({
   turnstileToken: z.string().min(1).optional(),
 });
 
+const guestSchema = z.object({
+  displayName: z.string().trim().min(2).max(32),
+  turnstileToken: z.string().min(1).optional(),
+});
+
 export async function handleAuth(
   request: Request,
   env: Env,
@@ -63,8 +69,66 @@ export async function handleAuth(
         id: auth.user.id,
         displayName: auth.user.displayName,
         username: auth.user.username,
+        isGuest: auth.user.isGuest,
       },
     });
+  }
+
+  if (path === "/api/auth/guest" && request.method === "POST") {
+    try {
+      if (!env.SESSION_SECRET) {
+        return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
+      }
+      const limited = await env.AUTH_RATE_LIMIT.limit({
+        key: `guest:${request.headers.get("cf-connecting-ip") ?? "anon"}`,
+      });
+      if (!limited.success) return errorJson(429, "Too many guest sessions. Try again shortly.");
+
+      const parsed = await readJson(request, guestSchema);
+      if (!parsed.ok) return parsed.response;
+
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
+
+      const userId = randomId("gst");
+      const displayName = parsed.data.displayName;
+      const now = Date.now();
+      await env.DB.prepare(
+        `INSERT INTO users (id, display_name, username, email, password_hash, is_guest, created_at, updated_at)
+         VALUES (?, ?, NULL, NULL, NULL, 1, ?, ?)`,
+      )
+        .bind(userId, displayName, now, now)
+        .run();
+
+      const session = await createSession(env, userId, GUEST_SESSION_TTL_MS);
+      writeAnalytics(env, "auth_guest", userId);
+      return new Response(
+        JSON.stringify({
+          user: { id: userId, displayName, username: null, isGuest: true },
+          privacyNote:
+            "Guest names are not accounts. Create a full account to host tables or keep your handle.",
+        }),
+        {
+          status: 201,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": sessionCookieHeader(
+              session.token,
+              env.APP_ORIGIN,
+              GUEST_SESSION_TTL_MS / 1000,
+            ),
+          },
+        },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Guest sign-in failed.";
+      console.error("guest failed", message);
+      return errorJson(500, message);
+    }
   }
 
   if (path === "/api/auth/logout" && request.method === "POST") {

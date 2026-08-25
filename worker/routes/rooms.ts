@@ -24,7 +24,8 @@ const joinRequestSchema = z.object({
 const decideSchema = z.object({
   requestId: z.string().min(1),
   approve: z.boolean(),
-  seatIndex: z.number().int().min(0).max(8).optional(),
+  seatIndex: z.number().int().min(0).max(9).optional().nullable(),
+  asSpectator: z.boolean().optional(),
   idempotencyKey: z.string().min(8).max(80),
 });
 
@@ -32,6 +33,7 @@ const updateConfigSchema = z.object({
   smallBlind: z.number().int().positive().optional(),
   startingStack: z.number().int().min(10).max(1000).optional(),
   potCapMultiplier: z.number().min(1).max(10).optional(),
+  timeBankSeconds: z.number().int().min(0).max(600).optional(),
 });
 
 const rebuySchema = z.object({
@@ -47,6 +49,19 @@ const awaySchema = z.object({
   away: z.boolean(),
 });
 
+const transferHostSchema = z.object({
+  targetUserId: z.string().min(1),
+});
+
+const pauseSchema = z.object({
+  paused: z.boolean(),
+});
+
+const seatPlayerSchema = z.object({
+  targetUserId: z.string().min(1),
+  seatIndex: z.number().int().min(0).max(9).optional(),
+});
+
 export async function handleRooms(
   request: Request,
   env: Env,
@@ -60,7 +75,7 @@ export async function handleRooms(
               r.starting_stack, r.updated_at, m.role, m.seat_index, m.status AS member_status
        FROM room_members m
        JOIN rooms r ON r.id = m.room_id
-       WHERE m.user_id = ? AND m.status IN ('seated', 'away')
+       WHERE m.user_id = ? AND m.status IN ('seated', 'away', 'spectator')
        ORDER BY r.updated_at DESC
        LIMIT 50`,
     )
@@ -101,6 +116,12 @@ export async function handleRooms(
   if (path === "/api/rooms" && request.method === "POST") {
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
+    if (auth.user.isGuest) {
+      return errorJson(
+        403,
+        "Guests cannot create tables. Create a free account to host.",
+      );
+    }
     const parsed = await readJson(request, createRoomSchema);
     if (!parsed.ok) return parsed.response;
     const cfg = validateConfigInput(parsed.data);
@@ -314,6 +335,9 @@ export async function handleRooms(
       return json({ status: "rejected", message: "Join request declined." });
     }
 
+    const asSpectator =
+      parsed.data.asSpectator === true || parsed.data.seatIndex === null;
+
     const stub = env.ROOM.get(env.ROOM.idFromName(jr.room_id));
     const seatRes = await stub.fetch("https://room/approve", {
       method: "POST",
@@ -321,12 +345,21 @@ export async function handleRooms(
       body: JSON.stringify({
         userId: jr.user_id,
         displayName: jr.display_name,
-        seatIndex: parsed.data.seatIndex,
+        seatIndex: asSpectator ? null : parsed.data.seatIndex,
+        asSpectator,
         requestId: jr.id,
       }),
     });
-    const seatBody = (await seatRes.json()) as { ok: boolean; seatIndex?: number; error?: string };
+    const seatBody = (await seatRes.json()) as {
+      ok: boolean;
+      seatIndex?: number;
+      spectator?: boolean;
+      error?: string;
+    };
     if (!seatBody.ok) return errorJson(409, seatBody.error ?? "This table is full.");
+
+    const memberStatus = seatBody.spectator ? "spectator" : "seated";
+    const memberRole = "player";
 
     await env.DB.batch([
       env.DB.prepare(
@@ -340,14 +373,17 @@ export async function handleRooms(
       env.DB.prepare(
         `INSERT INTO room_members
          (room_id, user_id, role, seat_index, display_name, status, created_at, updated_at)
-         VALUES (?, ?, 'player', ?, ?, 'seated', ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(room_id, user_id) DO UPDATE SET
-           status = 'seated', seat_index = excluded.seat_index, updated_at = excluded.updated_at`,
+           status = excluded.status, seat_index = excluded.seat_index,
+           display_name = excluded.display_name, updated_at = excluded.updated_at`,
       ).bind(
         jr.room_id,
         jr.user_id,
-        seatBody.seatIndex ?? 0,
+        memberRole,
+        seatBody.spectator ? null : (seatBody.seatIndex ?? 0),
         jr.display_name,
+        memberStatus,
         now,
         now,
       ),
@@ -370,8 +406,9 @@ export async function handleRooms(
 
     return json({
       status: "approved",
-      seatIndex: seatBody.seatIndex,
-      message: "You have a seat",
+      seatIndex: seatBody.spectator ? null : seatBody.seatIndex,
+      spectator: Boolean(seatBody.spectator),
+      message: seatBody.spectator ? "You can watch this table." : "You have a seat",
     });
   }
 
@@ -387,7 +424,7 @@ export async function handleRooms(
       .first<{ role: string }>();
     if (!member) return errorJson(404, "You are not at this table.");
     if (member.role === "host") {
-      return errorJson(400, "Host cannot leave while hosting. Close the table instead.");
+      return errorJson(400, "Host cannot leave while hosting. Transfer host or close the table.");
     }
 
     const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
@@ -509,6 +546,213 @@ export async function handleRooms(
       status: parsed.data.away ? "away" : "seated",
       message: parsed.data.away ? "Marked away." : "Back at the table.",
     });
+  }
+
+  const pauseMatch = path.match(/^\/api\/rooms\/([^/]+)\/pause$/);
+  if (pauseMatch && request.method === "POST") {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    const roomId = pauseMatch[1]!;
+    const parsed = await readJson(request, pauseSchema);
+    if (!parsed.ok) return parsed.response;
+    const room = await env.DB.prepare(`SELECT host_user_id FROM rooms WHERE id = ?`)
+      .bind(roomId)
+      .first<{ host_user_id: string }>();
+    if (!room) return errorJson(404, "Table not found.");
+    if (room.host_user_id !== auth.user.id) {
+      return errorJson(403, "Only the host can pause.");
+    }
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const doRes = await stub.fetch("https://room/pause", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ hostUserId: auth.user.id, paused: parsed.data.paused }),
+    });
+    const doBody = (await doRes.json()) as { ok: boolean; paused?: boolean; error?: string };
+    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not pause.");
+    return json({
+      status: "ok",
+      paused: Boolean(doBody.paused),
+      message: doBody.paused ? "Table paused." : "Table resumed.",
+    });
+  }
+
+  const transferMatch = path.match(/^\/api\/rooms\/([^/]+)\/transfer-host$/);
+  if (transferMatch && request.method === "POST") {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    if (auth.user.isGuest) {
+      return errorJson(403, "Guests cannot transfer host. Create an account first.");
+    }
+    const roomId = transferMatch[1]!;
+    const parsed = await readJson(request, transferHostSchema);
+    if (!parsed.ok) return parsed.response;
+    const room = await env.DB.prepare(`SELECT host_user_id FROM rooms WHERE id = ?`)
+      .bind(roomId)
+      .first<{ host_user_id: string }>();
+    if (!room) return errorJson(404, "Table not found.");
+    if (room.host_user_id !== auth.user.id) {
+      return errorJson(403, "Only the host can transfer.");
+    }
+
+    const target = await env.DB.prepare(
+      `SELECT u.id, u.display_name, u.is_guest, m.status
+       FROM room_members m JOIN users u ON u.id = m.user_id
+       WHERE m.room_id = ? AND m.user_id = ? AND m.status IN ('seated', 'away', 'spectator')`,
+    )
+      .bind(roomId, parsed.data.targetUserId)
+      .first<{ id: string; display_name: string; is_guest: number | null; status: string }>();
+    if (!target) return errorJson(404, "That player is not at this table.");
+    if (target.is_guest) {
+      return errorJson(400, "Host can only transfer to a registered account.");
+    }
+
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const doRes = await stub.fetch("https://room/transfer-host", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        hostUserId: auth.user.id,
+        targetUserId: target.id,
+        targetDisplayName: target.display_name,
+      }),
+    });
+    const doBody = (await doRes.json()) as { ok: boolean; error?: string };
+    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not transfer host.");
+
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE rooms SET host_user_id = ?, updated_at = ? WHERE id = ?`).bind(
+        target.id,
+        now,
+        roomId,
+      ),
+      env.DB.prepare(
+        `UPDATE room_members SET role = 'player', updated_at = ? WHERE room_id = ? AND user_id = ?`,
+      ).bind(now, roomId, auth.user.id),
+      env.DB.prepare(
+        `UPDATE room_members SET role = 'host', updated_at = ? WHERE room_id = ? AND user_id = ?`,
+      ).bind(now, roomId, target.id),
+    ]);
+
+    return json({
+      status: "ok",
+      hostUserId: target.id,
+      message: `${target.display_name} is now the host.`,
+    });
+  }
+
+  const closeMatch = path.match(/^\/api\/rooms\/([^/]+)\/close$/);
+  if (closeMatch && request.method === "POST") {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    const roomId = closeMatch[1]!;
+    const room = await env.DB.prepare(`SELECT host_user_id FROM rooms WHERE id = ?`)
+      .bind(roomId)
+      .first<{ host_user_id: string }>();
+    if (!room) return errorJson(404, "Table not found.");
+    if (room.host_user_id !== auth.user.id) {
+      return errorJson(403, "Only the host can close the table.");
+    }
+
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const doRes = await stub.fetch("https://room/close", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ hostUserId: auth.user.id }),
+    });
+    const doBody = (await doRes.json()) as { ok: boolean; error?: string };
+    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not close table.");
+
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(`UPDATE rooms SET status = 'closed', updated_at = ? WHERE id = ?`).bind(
+        now,
+        roomId,
+      ),
+      env.DB.prepare(
+        `UPDATE room_members SET status = 'left', seat_index = NULL, updated_at = ?
+         WHERE room_id = ? AND status IN ('seated', 'away', 'spectator')`,
+      ).bind(now, roomId),
+    ]);
+
+    return json({ status: "closed", message: "Table closed." });
+  }
+
+  const ledgerMatch = path.match(/^\/api\/rooms\/([^/]+)\/ledger$/);
+  if (ledgerMatch && (request.method === "GET" || request.method === "POST")) {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    const roomId = ledgerMatch[1]!;
+    const member = await env.DB.prepare(
+      `SELECT 1 AS ok FROM room_members WHERE room_id = ? AND user_id = ?`,
+    )
+      .bind(roomId, auth.user.id)
+      .first();
+    if (!member) return errorJson(403, "Ask to join this table first.");
+
+    const url = new URL(request.url);
+    const format = url.searchParams.get("format");
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const doUrl = format === "csv" ? "https://room/ledger?format=csv" : "https://room/ledger";
+    const doRes = await stub.fetch(doUrl);
+    if (format === "csv") {
+      const text = await doRes.text();
+      return new Response(text, {
+        headers: {
+          "content-type": "text/csv; charset=utf-8",
+          "content-disposition": `attachment; filename="ledger-${roomId}.csv"`,
+        },
+      });
+    }
+    const doBody = (await doRes.json()) as { ok: boolean; ledger?: unknown; error?: string };
+    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not load ledger.");
+    return json({ ledger: doBody.ledger });
+  }
+
+  const seatMatch = path.match(/^\/api\/rooms\/([^/]+)\/seat$/);
+  if (seatMatch && request.method === "POST") {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    const roomId = seatMatch[1]!;
+    const parsed = await readJson(request, seatPlayerSchema);
+    if (!parsed.ok) return parsed.response;
+    const room = await env.DB.prepare(`SELECT host_user_id FROM rooms WHERE id = ?`)
+      .bind(roomId)
+      .first<{ host_user_id: string }>();
+    if (!room) return errorJson(404, "Table not found.");
+    if (room.host_user_id !== auth.user.id && parsed.data.targetUserId !== auth.user.id) {
+      return errorJson(403, "Only the host can seat another player.");
+    }
+    const target = await env.DB.prepare(
+      `SELECT user_id, display_name, status FROM room_members WHERE room_id = ? AND user_id = ?`,
+    )
+      .bind(roomId, parsed.data.targetUserId)
+      .first<{ user_id: string; display_name: string; status: string }>();
+    if (!target) return errorJson(404, "Player not at this table.");
+
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const doRes = await stub.fetch("https://room/seat-spectator", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        userId: target.user_id,
+        displayName: target.display_name,
+        seatIndex: parsed.data.seatIndex,
+      }),
+    });
+    const doBody = (await doRes.json()) as { ok: boolean; seatIndex?: number; error?: string };
+    if (!doBody.ok) return errorJson(409, doBody.error ?? "Could not seat player.");
+
+    const now = Date.now();
+    await env.DB.prepare(
+      `UPDATE room_members SET status = 'seated', seat_index = ?, updated_at = ?
+       WHERE room_id = ? AND user_id = ?`,
+    )
+      .bind(doBody.seatIndex ?? 0, now, roomId, target.user_id)
+      .run();
+
+    return json({ status: "seated", seatIndex: doBody.seatIndex, message: "Seated." });
   }
 
   const handsMatch = path.match(/^\/api\/rooms\/([^/]+)\/hands$/);
@@ -640,6 +884,7 @@ export async function handleRooms(
       smallBlind: nextSmall,
       startingStack: nextStack,
       potCapMultiplier: nextCap,
+      timeBankSeconds: parsed.data.timeBankSeconds,
     });
     if (!cfg.ok) return errorJson(400, cfg.error);
 
@@ -651,6 +896,7 @@ export async function handleRooms(
         smallBlind: parsed.data.smallBlind,
         startingStack: parsed.data.startingStack,
         potCapMultiplier: parsed.data.potCapMultiplier,
+        timeBankSeconds: parsed.data.timeBankSeconds,
       }),
     });
     const doBody = (await doRes.json()) as { ok: boolean; error?: string; pending?: boolean };
