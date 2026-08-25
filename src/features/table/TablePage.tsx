@@ -105,6 +105,7 @@ export function TablePage({ user }: { user: User }) {
   const [chatText, setChatText] = useState("");
   const [raiseTo, setRaiseTo] = useState(0);
   const [copied, setCopied] = useState(false);
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
   const [configMsg, setConfigMsg] = useState<string | null>(null);
   const [editSb, setEditSb] = useState(1);
   const [editStack, setEditStack] = useState(100);
@@ -256,7 +257,42 @@ export function TablePage({ user }: { user: User }) {
     if (!meta?.inviteCode) return;
     await navigator.clipboard.writeText(meta.inviteCode);
     setCopied(true);
+    setShareMsg(null);
     setTimeout(() => setCopied(false), 1500);
+  }
+
+  function shareText() {
+    const code = meta?.inviteCode ?? "";
+    const table = meta?.roomName ?? "Poker Faces table";
+    return `Join my Poker Faces table “${table}”. Invite code: ${code}. Open ${location.origin}, sign in, and ask to join. Virtual chips only.`;
+  }
+
+  async function shareInvite() {
+    if (!meta?.inviteCode) return;
+    const title = meta.roomName ? `Join ${meta.roomName}` : "Join my Poker Faces table";
+    const text = shareText();
+    const url = location.origin;
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ title, text, url });
+        setShareMsg("Shared");
+        setTimeout(() => setShareMsg(null), 1500);
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      setShareMsg("Invite copied");
+      setTimeout(() => setShareMsg(null), 1500);
+    } catch (err) {
+      // User canceled the share sheet — ignore AbortError.
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      try {
+        await navigator.clipboard.writeText(text);
+        setShareMsg("Invite copied");
+        setTimeout(() => setShareMsg(null), 1500);
+      } catch {
+        setShareMsg("Could not share");
+      }
+    }
   }
 
   async function saveRules() {
@@ -325,11 +361,14 @@ export function TablePage({ user }: { user: User }) {
             <span className="badge">Virtual chips only</span>
           </p>
           {meta?.inviteCode ? (
-            <p style={{ marginTop: "0.35rem" }}>
+            <p style={{ marginTop: "0.35rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
               Invite{" "}
-              <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>{" "}
+              <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>
+              <button className="btn btn-primary" type="button" onClick={() => void shareInvite()}>
+                {shareMsg ?? "Share"}
+              </button>
               <button className="btn btn-secondary" type="button" onClick={() => void copyInvite()}>
-                {copied ? "Copied" : "Copy"}
+                {copied ? "Copied" : "Copy code"}
               </button>
             </p>
           ) : null}
@@ -343,6 +382,11 @@ export function TablePage({ user }: { user: User }) {
           ) : null}
         </div>
         <div className="cta-row">
+          {meta?.inviteCode ? (
+            <button className="btn btn-secondary" type="button" onClick={() => void shareInvite()}>
+              {shareMsg ?? "Share table"}
+            </button>
+          ) : null}
           {isHost ? (
             <button className="btn btn-primary" type="button" onClick={() => send({ type: "start_hand" })}>
               Deal everyone in
