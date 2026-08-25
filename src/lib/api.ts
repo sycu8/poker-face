@@ -143,18 +143,7 @@ export const api = {
     fetch(`/api/rooms/${roomId}/voice-token`, {
       method: "POST",
       credentials: "include",
-    }).then((r) => parse<VoiceTokenResponse>(r)),
-};
-
-export type VoiceTokenResponse = {
-  available: boolean;
-  token?: string;
-  meetingId?: string;
-  reason?:
-    | "not_configured"
-    | "meeting_create_failed"
-    | "participant_failed"
-    | "exception"
-    | string;
-  message?: string;
+    }).then((r) =>
+      parse<{ available: boolean; token?: string; message?: string }>(r),
+    ),
 };
