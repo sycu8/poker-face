@@ -1,0 +1,17 @@
+{
+  "name": "Poker Faces",
+  "short_name": "Poker Faces",
+  "description": "Private poker nights, wherever everyone is. Virtual chips only.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07100D",
+  "theme_color": "#07100D",
+  "icons": [
+    {
+      "src": "/logo/poker-faces-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

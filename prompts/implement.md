@@ -1,0 +1,1 @@
+You are implementing Poker Faces on Cloudflare. Read README.md, docs/GAME_RULES.md, and docs/BRAND_GUIDE.md before editing. Preserve privacy of hole cards, host-approved guest join, and virtual-chips-only language.
