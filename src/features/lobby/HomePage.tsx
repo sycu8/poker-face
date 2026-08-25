@@ -128,9 +128,11 @@ export function HomePage({
                   onChange={(e) => setStartingStack(Number(e.target.value))}
                 />
               </div>
-              <button className="btn btn-primary" type="button" onClick={() => void createRoom()}>
-                Create a room
-              </button>
+              <div className="home-panel-actions">
+                <button className="btn btn-primary" type="button" onClick={() => void createRoom()}>
+                  Create a room
+                </button>
+              </div>
             </div>
             <div className="panel">
               <h3 className="home-panel-title">Ask to join</h3>
@@ -143,16 +145,22 @@ export function HomePage({
                   placeholder="ABC123"
                 />
               </div>
-              <button className="btn btn-secondary" type="button" onClick={() => void askToJoin()}>
-                Ask to join
-              </button>
+              <div className="home-panel-actions">
+                <button className="btn btn-secondary" type="button" onClick={() => void askToJoin()}>
+                  Ask to join
+                </button>
+              </div>
             </div>
           </div>
-          {message ? <p className="badge">{message}</p> : null}
-          {error ? (
-            <p role="alert" style={{ color: "var(--danger)" }}>
-              {error}
-            </p>
+          {message || error ? (
+            <div className="home-status">
+              {message ? <p className="badge">{message}</p> : null}
+              {error ? (
+                <p role="alert" style={{ color: "var(--danger)", margin: 0 }}>
+                  {error}
+                </p>
+              ) : null}
+            </div>
           ) : null}
         </section>
       ) : null}
