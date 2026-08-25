@@ -1,6 +1,7 @@
 /** Password hashing with Web Crypto PBKDF2 (Workers-compatible). */
 
-const PBKDF2_ITERS = 310_000;
+// Keep iterations modest: Workers isolate CPU budgets are tight for auth paths.
+const PBKDF2_ITERS = 100_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
 
@@ -43,7 +44,9 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const parts = stored.split("$");
   if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;
   const iterations = Number(parts[1]);
-  if (!Number.isFinite(iterations) || iterations < 100_000) return false;
+  if (!Number.isFinite(iterations) || iterations < 50_000 || iterations > 1_000_000) {
+    return false;
+  }
   const salt = base64ToBytes(parts[2]);
   const expected = base64ToBytes(parts[3]);
   const keyMaterial = await crypto.subtle.importKey(

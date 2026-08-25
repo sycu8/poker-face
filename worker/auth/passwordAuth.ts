@@ -76,101 +76,119 @@ export async function handleAuth(
   }
 
   if (path === "/api/auth/register" && request.method === "POST") {
-    const limited = await env.AUTH_RATE_LIMIT.limit({
-      key: request.headers.get("cf-connecting-ip") ?? "anon",
-    });
-    if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
+    try {
+      if (!env.SESSION_SECRET) {
+        return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
+      }
+      const limited = await env.AUTH_RATE_LIMIT.limit({
+        key: request.headers.get("cf-connecting-ip") ?? "anon",
+      });
+      if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
 
-    const parsed = await readJson(request, registerSchema);
-    if (!parsed.ok) return parsed.response;
+      const parsed = await readJson(request, registerSchema);
+      if (!parsed.ok) return parsed.response;
 
-    const okTurnstile = await verifyTurnstile(
-      env,
-      parsed.data.turnstileToken,
-      request.headers.get("cf-connecting-ip"),
-    );
-    if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
-    const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ?`)
-      .bind(parsed.data.username)
-      .first();
-    if (existing) return errorJson(409, "That username is taken.");
+      const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ?`)
+        .bind(parsed.data.username)
+        .first();
+      if (existing) return errorJson(409, "That username is taken.");
 
-    const userId = randomId("usr");
-    const displayName = parsed.data.displayName ?? parsed.data.username;
-    const passwordHash = await hashPassword(parsed.data.password);
-    const now = Date.now();
-    await env.DB.prepare(
-      `INSERT INTO users (id, display_name, username, password_hash, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(userId, displayName, parsed.data.username, passwordHash, now, now)
-      .run();
+      const userId = randomId("usr");
+      const displayName = parsed.data.displayName ?? parsed.data.username;
+      const passwordHash = await hashPassword(parsed.data.password);
+      const now = Date.now();
+      await env.DB.prepare(
+        `INSERT INTO users (id, display_name, username, password_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(userId, displayName, parsed.data.username, passwordHash, now, now)
+        .run();
 
-    const session = await createSession(env, userId);
-    return new Response(
-      JSON.stringify({
-        user: { id: userId, displayName, username: parsed.data.username },
-      }),
-      {
-        status: 201,
-        headers: {
-          "content-type": "application/json",
-          "set-cookie": sessionCookieHeader(session.token, env.APP_ORIGIN),
+      const session = await createSession(env, userId);
+      return new Response(
+        JSON.stringify({
+          user: { id: userId, displayName, username: parsed.data.username },
+        }),
+        {
+          status: 201,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": sessionCookieHeader(session.token, env.APP_ORIGIN),
+          },
         },
-      },
-    );
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Registration failed.";
+      console.error("register failed", message);
+      return errorJson(500, message);
+    }
   }
 
   if (path === "/api/auth/login" && request.method === "POST") {
-    const limited = await env.AUTH_RATE_LIMIT.limit({
-      key: request.headers.get("cf-connecting-ip") ?? "anon",
-    });
-    if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
+    try {
+      if (!env.SESSION_SECRET) {
+        return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
+      }
+      const limited = await env.AUTH_RATE_LIMIT.limit({
+        key: request.headers.get("cf-connecting-ip") ?? "anon",
+      });
+      if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
 
-    const parsed = await readJson(request, loginSchema);
-    if (!parsed.ok) return parsed.response;
+      const parsed = await readJson(request, loginSchema);
+      if (!parsed.ok) return parsed.response;
 
-    const okTurnstile = await verifyTurnstile(
-      env,
-      parsed.data.turnstileToken,
-      request.headers.get("cf-connecting-ip"),
-    );
-    if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
-    const row = await env.DB.prepare(
-      `SELECT id, display_name, username, password_hash FROM users WHERE username = ?`,
-    )
-      .bind(parsed.data.username)
-      .first<{
-        id: string;
-        display_name: string;
-        username: string;
-        password_hash: string | null;
-      }>();
+      const row = await env.DB.prepare(
+        `SELECT id, display_name, username, password_hash FROM users WHERE username = ?`,
+      )
+        .bind(parsed.data.username)
+        .first<{
+          id: string;
+          display_name: string;
+          username: string;
+          password_hash: string | null;
+        }>();
 
-    if (!row?.password_hash) {
-      return errorJson(401, "Invalid username or password.");
+      if (!row?.password_hash) {
+        return errorJson(401, "Invalid username or password.");
+      }
+      const ok = await verifyPassword(parsed.data.password, row.password_hash);
+      if (!ok) return errorJson(401, "Invalid username or password.");
+
+      const session = await createSession(env, row.id);
+      return new Response(
+        JSON.stringify({
+          user: {
+            id: row.id,
+            displayName: row.display_name,
+            username: row.username,
+          },
+        }),
+        {
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": sessionCookieHeader(session.token, env.APP_ORIGIN),
+          },
+        },
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed.";
+      console.error("login failed", message);
+      return errorJson(500, message);
     }
-    const ok = await verifyPassword(parsed.data.password, row.password_hash);
-    if (!ok) return errorJson(401, "Invalid username or password.");
-
-    const session = await createSession(env, row.id);
-    return new Response(
-      JSON.stringify({
-        user: {
-          id: row.id,
-          displayName: row.display_name,
-          username: row.username,
-        },
-      }),
-      {
-        headers: {
-          "content-type": "application/json",
-          "set-cookie": sessionCookieHeader(session.token, env.APP_ORIGIN),
-        },
-      },
-    );
   }
 
   return null;
