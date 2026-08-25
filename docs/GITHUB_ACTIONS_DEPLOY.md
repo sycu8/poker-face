@@ -8,7 +8,7 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit) |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id |
-| `SESSION_SECRET` | Shared session HMAC secret (or use per-env overrides below) |
+| `SESSION_SECRET` | Shared session HMAC secret (or use per-env overrides below). If unset, CI generates an ephemeral value each deploy (sessions reset). |
 
 ## Recommended secrets
 
