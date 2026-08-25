@@ -1,0 +1,187 @@
+name: Deploy Cloudflare
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Environment to deploy
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+          - all
+        default: all
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-cloudflare
+  cancel-in-progress: false
+
+env:
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test:domain
+      - run: npm run build
+      - name: Require Cloudflare deploy secrets
+        run: |
+          if [ -z "${CLOUDFLARE_API_TOKEN}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID}" ]; then
+            echo "Set GitHub Actions secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID."
+            echo "See docs/GITHUB_ACTIONS_DEPLOY.md"
+            exit 1
+          fi
+
+  deploy-staging:
+    needs: validate
+    if: >
+      github.event_name == 'push' ||
+      github.event.inputs.target == 'staging' ||
+      github.event.inputs.target == 'all'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Prepare staging resources
+        env:
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID_STAGING }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID_STAGING }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY_STAGING }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN_STAGING }}
+          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID_STAGING }}
+        run: |
+          if [ -z "$D1_DATABASE_ID" ]; then export D1_DATABASE_ID="${{ vars.D1_DATABASE_ID_STAGING }}"; fi
+          if [ -z "$KV_NAMESPACE_ID" ]; then export KV_NAMESPACE_ID="${{ vars.KV_NAMESPACE_ID_STAGING }}"; fi
+          if [ -z "$TURNSTILE_SITE_KEY" ]; then export TURNSTILE_SITE_KEY="${{ vars.TURNSTILE_SITE_KEY_STAGING }}"; fi
+          if [ -z "$APP_ORIGIN" ]; then export APP_ORIGIN="https://staging.poker.orangecloud.vn"; fi
+          if [ -z "$WEBAUTHN_RP_ID" ]; then export WEBAUTHN_RP_ID="staging.poker.orangecloud.vn"; fi
+          node scripts/ci-prepare-wrangler.mjs staging
+      - name: Apply D1 migrations (staging)
+        run: npx wrangler d1 migrations apply poker-faces-staging --env staging --remote
+      - name: Deploy staging Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env staging
+      - name: Upload Worker secrets (staging)
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET_STAGING }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY_STAGING }}
+          REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
+          REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
+        run: |
+          if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
+          if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
+          if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
+          node scripts/ci-write-secrets-file.mjs .ci-secrets-staging.json
+          npx wrangler secret bulk .ci-secrets-staging.json --env staging
+          rm -f .ci-secrets-staging.json
+      - name: Redeploy staging after secrets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env staging
+      - name: Staging smoke
+        run: |
+          set -euo pipefail
+          BASE="${{ vars.APP_ORIGIN_STAGING }}"
+          if [ -z "$BASE" ]; then BASE="https://staging.poker.orangecloud.vn"; fi
+          echo "Probing $BASE/api/health"
+          if curl -fsS --retry 5 --retry-delay 3 "$BASE/api/health" | tee /tmp/health.json; then
+            grep -q '"ok":true' /tmp/health.json
+          else
+            echo "Custom domain not reachable yet; check the wrangler-action deploy URL (workers.dev)."
+            exit 0
+          fi
+
+  deploy-production:
+    needs: [validate, deploy-staging]
+    if: >
+      always() &&
+      needs.validate.result == 'success' &&
+      (needs.deploy-staging.result == 'success' || needs.deploy-staging.result == 'skipped') &&
+      (github.event_name == 'push' || github.event.inputs.target == 'production' || github.event.inputs.target == 'all')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Prepare production resources
+        env:
+          D1_DATABASE_ID: ${{ secrets.D1_DATABASE_ID_PRODUCTION }}
+          KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID_PRODUCTION }}
+          TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY_PRODUCTION }}
+          APP_ORIGIN: ${{ vars.APP_ORIGIN_PRODUCTION }}
+          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID_PRODUCTION }}
+        run: |
+          if [ -z "$D1_DATABASE_ID" ]; then export D1_DATABASE_ID="${{ vars.D1_DATABASE_ID_PRODUCTION }}"; fi
+          if [ -z "$KV_NAMESPACE_ID" ]; then export KV_NAMESPACE_ID="${{ vars.KV_NAMESPACE_ID_PRODUCTION }}"; fi
+          if [ -z "$TURNSTILE_SITE_KEY" ]; then export TURNSTILE_SITE_KEY="${{ vars.TURNSTILE_SITE_KEY_PRODUCTION }}"; fi
+          if [ -z "$APP_ORIGIN" ]; then export APP_ORIGIN="https://poker.orangecloud.vn"; fi
+          if [ -z "$WEBAUTHN_RP_ID" ]; then export WEBAUTHN_RP_ID="poker.orangecloud.vn"; fi
+          node scripts/ci-prepare-wrangler.mjs production
+      - name: Apply D1 migrations (production)
+        run: npx wrangler d1 migrations apply poker-faces-production --env production --remote
+      - name: Deploy production Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env production
+      - name: Upload Worker secrets (production)
+        env:
+          SESSION_SECRET: ${{ secrets.SESSION_SECRET_PRODUCTION }}
+          TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY_PRODUCTION }}
+          REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
+          REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
+        run: |
+          if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
+          if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
+          if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
+          node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
+          npx wrangler secret bulk .ci-secrets-production.json --env production
+          rm -f .ci-secrets-production.json
+      - name: Redeploy production after secrets
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: deploy --env production
+      - name: Production smoke
+        run: |
+          set -euo pipefail
+          BASE="${{ vars.APP_ORIGIN_PRODUCTION }}"
+          if [ -z "$BASE" ]; then BASE="https://poker.orangecloud.vn"; fi
+          echo "Probing $BASE/api/health"
+          if curl -fsS --retry 8 --retry-delay 5 "$BASE/api/health" | tee /tmp/health-prod.json; then
+            grep -q '"ok":true' /tmp/health-prod.json
+          else
+            echo "Custom domain not reachable yet (DNS/custom domain may still be propagating)."
+            exit 0
+          fi

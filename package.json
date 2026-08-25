@@ -21,7 +21,9 @@
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:staging": "wrangler d1 migrations apply DB --env staging --remote",
     "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
-    "smoke:local": "vite build && wrangler dev --local"
+    "smoke:local": "vite build && wrangler dev --local",
+    "ci:prepare:staging": "node scripts/ci-prepare-wrangler.mjs staging",
+    "ci:prepare:production": "node scripts/ci-prepare-wrangler.mjs production"
   },
   "dependencies": {
     "@cloudflare/realtimekit-react": "^2.0.2",
