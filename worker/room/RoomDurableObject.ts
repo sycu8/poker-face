@@ -19,6 +19,12 @@ interface ChatMessage {
   at: number;
 }
 
+interface StartRequest {
+  userId: string;
+  displayName: string;
+  at: number;
+}
+
 interface ClientAttachment {
   userId: string;
   displayName: string;
@@ -41,6 +47,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     userId: string;
     displayName: string;
   }> = [];
+  /** Non-host players asking the host to deal the next hand (coalesced by userId). */
+  private startRequests: StartRequest[] = [];
   private actionIdempotency = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -73,6 +81,7 @@ export class RoomDurableObject extends DurableObject<Env> {
             userId: string;
             displayName: string;
           }>;
+          startRequests?: StartRequest[];
         };
         this.roomId = snap.roomId;
         this.hostUserId = snap.hostUserId;
@@ -81,6 +90,7 @@ export class RoomDurableObject extends DurableObject<Env> {
         this.game = snap.game;
         this.chat = snap.chat ?? [];
         this.pendingJoins = snap.pendingJoins ?? [];
+        this.startRequests = snap.startRequests ?? [];
       }
     });
   }
@@ -95,6 +105,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       game: this.game,
       chat: this.chat.slice(-100),
       pendingJoins: this.pendingJoins,
+      startRequests: this.startRequests,
     });
     this.ctx.storage.sql.exec(
       `INSERT INTO room_meta (key, value) VALUES ('snapshot', ?)
@@ -116,10 +127,23 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
   }
 
+  private startRequestSummary() {
+    const latest = this.startRequests[this.startRequests.length - 1] ?? null;
+    return {
+      count: this.startRequests.length,
+      latestDisplayName: latest?.displayName ?? null,
+      requesters: this.startRequests.map((r) => ({
+        userId: r.userId,
+        displayName: r.displayName,
+      })),
+    };
+  }
+
   private sendProjection(ws: WebSocket): void {
     if (!this.game) return;
     const att = ws.deserializeAttachment() as ClientAttachment | null;
     const view = projectForPlayer(this.game, att?.userId ?? null);
+    const isHost = att?.userId === this.hostUserId;
     ws.send(
       JSON.stringify({
         type: "snapshot",
@@ -131,7 +155,12 @@ export class RoomDurableObject extends DurableObject<Env> {
           hostUserId: this.hostUserId,
         },
         chat: this.chat.slice(-50),
-        pendingJoins: att?.userId === this.hostUserId ? this.pendingJoins : undefined,
+        pendingJoins: isHost ? this.pendingJoins : undefined,
+        startRequests: isHost ? this.startRequestSummary() : undefined,
+        askedToStart:
+          !isHost && att?.userId
+            ? this.startRequests.some((r) => r.userId === att.userId)
+            : undefined,
       }),
     );
   }
@@ -308,11 +337,68 @@ export class RoomDurableObject extends DurableObject<Env> {
       return;
     }
 
+    if (data.type === "request_start") {
+      if (att.userId === this.hostUserId) {
+        ws.send(JSON.stringify({ type: "error", error: "You can deal whenever you are ready." }));
+        return;
+      }
+      if (this.game.street !== "waiting") {
+        ws.send(JSON.stringify({ type: "error", error: "A hand is already in progress." }));
+        return;
+      }
+      const seated = this.game.seats.some((s) => s.playerId === att.userId);
+      if (!seated) {
+        ws.send(JSON.stringify({ type: "error", error: "Take a seat before asking to deal." }));
+        return;
+      }
+
+      const now = Date.now();
+      const existing = this.startRequests.find((r) => r.userId === att.userId);
+      if (existing) {
+        // Idempotent: same player clicking again does not spam the host.
+        if (now - existing.at < 5_000) {
+          ws.send(
+            JSON.stringify({
+              type: "start_request_ack",
+              askedToStart: true,
+              ...this.startRequestSummary(),
+            }),
+          );
+          return;
+        }
+        existing.displayName = att.displayName;
+        existing.at = now;
+        // Move to end so they are the latest requester.
+        this.startRequests = [
+          ...this.startRequests.filter((r) => r.userId !== att.userId),
+          existing,
+        ];
+      } else {
+        this.startRequests.push({
+          userId: att.userId,
+          displayName: att.displayName,
+          at: now,
+        });
+      }
+      this.persist();
+      const summary = this.startRequestSummary();
+      this.broadcast({
+        type: "start_request",
+        userId: att.userId,
+        displayName: att.displayName,
+        ...summary,
+      });
+      ws.send(JSON.stringify({ type: "start_request_ack", askedToStart: true, ...summary }));
+      for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
+      return;
+    }
+
     if (data.type === "start_hand") {
       if (att.userId !== this.hostUserId) {
         ws.send(JSON.stringify({ type: "error", error: "Only the host can deal." }));
         return;
       }
+      this.startRequests = [];
       const events = startHand(this.game, Date.now());
       this.persist();
       await this.ctx.storage.setAlarm(this.game.turnDeadlineMs ?? Date.now() + 1000);

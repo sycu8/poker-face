@@ -13,7 +13,7 @@ Virtual chips only. No purchases, cash-out, wallets, or real-money language.
 - SQLite-backed Durable Object per room (hibernatable WebSockets)
 - D1 (users, sessions, rooms, hand summaries)
 - KV / R2 / Queues / Analytics Engine / Rate Limiting / Turnstile
-- Username + password auth (PBKDF2) with cookie sessions
+- Username + email + password auth (PBKDF2) with cookie sessions; in-app password reset (username + email verify, no SMTP)
 - Host-approved private tables, text chat, optional voice
 - PWA manifest + service worker shell cache
 - Voice via Cloudflare RealtimeKit (degraded-safe when unset)
@@ -44,9 +44,13 @@ npm run dev
 
 See `docs/BRAND_GUIDE.md` and `logo/`.
 
-## Game rules
+## Docs
 
-See `docs/GAME_RULES.md`.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped state, gaps, and phased product plan
+- [`docs/GAME_RULES.md`](docs/GAME_RULES.md) — play-money rules
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Worker / DO / D1 layout
+- [`docs/BRAND_GUIDE.md`](docs/BRAND_GUIDE.md) — brand and copy
+- [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md) — staging/production deploy
 
 ## Environments
 
