@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 import { VoicePanel } from "../voice/VoicePanel";
+import { PlayingCard } from "./PlayingCard";
 
 interface SeatView {
   seatIndex: number;
@@ -583,13 +584,7 @@ export function TablePage({ user }: { user: User }) {
       <div className="table-felt" aria-label="Poker table">
         <div className="board">
           {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map((c, i) => (
-            <div
-              key={`${c}-${i}`}
-              className={c === "?" ? "card back" : "card"}
-              aria-label={c === "?" ? "Hidden card" : c}
-            >
-              {c === "?" ? "" : c}
-            </div>
+            <PlayingCard key={`${c}-${i}`} code={c} size="board" />
           ))}
         </div>
         <div className="pot">
@@ -617,10 +612,8 @@ export function TablePage({ user }: { user: User }) {
             ) : null}
             {seat.holeCards ? (
               <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                {seat.holeCards.map((c) => (
-                  <div key={c} className="card" style={{ width: 36, height: 52, fontSize: "0.8rem" }}>
-                    {c}
-                  </div>
+                {seat.holeCards.map((c, i) => (
+                  <PlayingCard key={`${c}-${i}`} code={c} size="hole" />
                 ))}
               </div>
             ) : null}
