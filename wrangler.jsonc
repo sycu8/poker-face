@@ -129,6 +129,7 @@
     },
     "production": {
       "name": "poker-faces",
+      "workers_dev": true,
       "routes": [
         { "pattern": "poker.orangecloud.vn", "custom_domain": true }
       ],
