@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 import { VoicePanel } from "../voice/VoicePanel";
+<<<<<<< HEAD
 import { PlayingCard } from "./PlayingCard";
+=======
+import { WinCelebration, winningPlayerIds } from "./WinCelebration";
+>>>>>>> origin/cursor/win-hand-animation-cb85
 
 interface SeatView {
   seatIndex: number;
@@ -16,7 +20,17 @@ interface SeatView {
 }
 
 interface HandResult {
-  winners: Array<{ playerId: string; amount: number; potIndex: number }>;
+  winners: Array<{
+    playerId: string;
+    amount: number;
+    potIndex: number;
+    hand?: {
+      category: string;
+      label: string;
+      bestFive: string[];
+      strength: number[];
+    };
+  }>;
   shownHands?: Array<{ playerId: string; cards: [string, string] }>;
 }
 
@@ -315,10 +329,23 @@ export function TablePage({ user }: { user: User }) {
     return view.lastHandResult.winners
       .map((w) => {
         const seat = view.seats.find((s) => s.playerId === w.playerId);
-        return `${seat?.displayName ?? "Player"} +${w.amount}`;
+        const rank = w.hand?.label ? ` (${w.hand.label})` : "";
+        return `${seat?.displayName ?? "Player"} +${w.amount}${rank}`;
       })
       .join(" · ");
   }, [view]);
+
+  const celebrationWinners = view?.lastHandResult?.winners ?? null;
+  const winnerIdSet = useMemo(
+    () => (celebrationWinners ? winningPlayerIds(celebrationWinners) : new Set<string>()),
+    [celebrationWinners],
+  );
+
+  const displayNameFor = useCallback(
+    (playerId: string) =>
+      view?.seats.find((s) => s.playerId === playerId)?.displayName ?? "Player",
+    [view],
+  );
 
   async function copyInvite() {
     if (!meta?.inviteCode) return;
@@ -567,6 +594,13 @@ export function TablePage({ user }: { user: User }) {
       ) : null}
 
       <div className="table-felt" aria-label="Poker table">
+        {celebrationWinners && celebrationWinners.length > 0 ? (
+          <WinCelebration
+            winners={celebrationWinners}
+            displayNameFor={displayNameFor}
+            handNumber={view?.handNumber ?? 0}
+          />
+        ) : null}
         <div className="board">
           {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map((c, i) => (
             <PlayingCard key={`${c}-${i}`} code={c} size="board" />
@@ -582,7 +616,9 @@ export function TablePage({ user }: { user: User }) {
         {(view?.seats ?? []).map((seat) => (
           <div
             key={seat.seatIndex}
-            className={`seat${view?.actionSeat === seat.seatIndex ? " active-turn" : ""}`}
+            className={`seat${view?.actionSeat === seat.seatIndex ? " active-turn" : ""}${
+              seat.playerId && winnerIdSet.has(seat.playerId) ? " seat--winner" : ""
+            }`}
           >
             <div className="name">
               {seat.displayName ?? "Open seat"}
