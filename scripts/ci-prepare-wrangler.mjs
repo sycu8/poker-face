@@ -2,7 +2,7 @@
 /**
  * CI helper: ensure Cloudflare resources exist and patch wrangler.jsonc IDs.
  * Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.
- * Optional overrides: D1_DATABASE_ID, KV_NAMESPACE_ID, TURNSTILE_SITE_KEY, APP_ORIGIN, WEBAUTHN_RP_ID
+ * Optional: D1_DATABASE_ID, KV_NAMESPACE_ID, TURNSTILE_SITE_KEY, APP_ORIGIN, WEBAUTHN_RP_ID
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -14,7 +14,9 @@ if (envName !== "staging" && envName !== "production") {
   process.exit(1);
 }
 
-if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
+const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+const apiToken = process.env.CLOUDFLARE_API_TOKEN;
+if (!apiToken || !accountId) {
   console.error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required.");
   process.exit(1);
 }
@@ -22,12 +24,12 @@ if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
 const root = path.resolve(import.meta.dirname, "..");
 const wranglerPath = path.join(root, "wrangler.jsonc");
 
-function run(cmd, args, opts = {}) {
+function run(cmd, args) {
   return execFileSync(cmd, args, {
     cwd: root,
     encoding: "utf8",
     stdio: ["ignore", "pipe", "pipe"],
-    ...opts,
+    env: process.env,
   });
 }
 
@@ -40,59 +42,57 @@ function wrangler(args) {
   }
 }
 
-function parseJsonFromOutput(text) {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end === -1) return null;
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    return null;
+async function cfApi(pathname, init = {}) {
+  const res = await fetch(`https://api.cloudflare.com/client/v4${pathname}`, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${apiToken}`,
+      "content-type": "application/json",
+      ...(init.headers ?? {}),
+    },
+  });
+  const body = await res.json();
+  if (!res.ok || body.success === false) {
+    throw new Error(
+      `Cloudflare API ${pathname} failed: ${res.status} ${JSON.stringify(body.errors ?? body)}`,
+    );
   }
+  return body;
 }
 
-function ensureD1(databaseName) {
-  if (process.env.D1_DATABASE_ID && !process.env.D1_DATABASE_ID.includes("REPLACE")) {
-    return process.env.D1_DATABASE_ID;
-  }
-  const listOut = wrangler(["d1", "list", "--json"]);
-  let list;
-  try {
-    list = JSON.parse(listOut);
-  } catch {
-    list = [];
-  }
-  const existing = (Array.isArray(list) ? list : list?.result ?? []).find(
-    (db) => db.name === databaseName || db.uuid === process.env.D1_DATABASE_ID,
-  );
+function isUuid(value) {
+  return Boolean(value && /^[0-9a-f-]{36}$/i.test(value) && !value.includes("REPLACE"));
+}
+
+async function ensureD1(databaseName) {
+  if (isUuid(process.env.D1_DATABASE_ID)) return process.env.D1_DATABASE_ID;
+
+  const listed = await cfApi(`/accounts/${accountId}/d1/database`);
+  const existing = (listed.result ?? []).find((db) => db.name === databaseName);
   if (existing?.uuid) return existing.uuid;
 
   const created = wrangler(["d1", "create", databaseName]);
   console.log(created);
-  const uuidMatch = created.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  const uuidMatch = created.match(
+    /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i,
+  );
   if (!uuidMatch) throw new Error(`Could not parse D1 id for ${databaseName}`);
   return uuidMatch[1];
 }
 
-function ensureKv(title) {
-  if (process.env.KV_NAMESPACE_ID && !process.env.KV_NAMESPACE_ID.includes("REPLACE")) {
-    return process.env.KV_NAMESPACE_ID;
-  }
-  const listOut = wrangler(["kv", "namespace", "list", "--json"]);
-  let list;
-  try {
-    list = JSON.parse(listOut);
-  } catch {
-    list = [];
-  }
-  const existing = (Array.isArray(list) ? list : []).find((ns) => ns.title === title);
+async function ensureKv(title) {
+  if (isUuid(process.env.KV_NAMESPACE_ID)) return process.env.KV_NAMESPACE_ID;
+
+  const listed = await cfApi(`/accounts/${accountId}/storage/kv/namespaces`);
+  const existing = (listed.result ?? []).find((ns) => ns.title === title);
   if (existing?.id) return existing.id;
 
-  const created = wrangler(["kv", "namespace", "create", title]);
-  console.log(created);
-  const idMatch = created.match(/id\s*=\s*"([^"]+)"/i) || created.match(/"id"\s*:\s*"([^"]+)"/);
-  if (!idMatch) throw new Error(`Could not parse KV id for ${title}`);
-  return idMatch[1];
+  const created = await cfApi(`/accounts/${accountId}/storage/kv/namespaces`, {
+    method: "POST",
+    body: JSON.stringify({ title }),
+  });
+  if (!created.result?.id) throw new Error(`Could not create KV namespace ${title}`);
+  return created.result.id;
 }
 
 function ensureR2(bucket) {
@@ -108,15 +108,15 @@ function ensureQueue(name) {
     wrangler(["queues", "create", name]);
   } catch (err) {
     const msg = String(err.message ?? err);
-    if (!/already exists|409|code: 409/i.test(msg)) {
-      // list and continue if present
-      try {
-        const listed = wrangler(["queues", "list"]);
-        if (!listed.includes(name)) throw err;
-      } catch {
-        if (!/already exists|409/i.test(msg)) throw err;
-      }
+    if (/already exists|409|Code: 409/i.test(msg)) return;
+    // Some accounts return a non-zero exit even when the queue exists.
+    try {
+      const listed = wrangler(["queues", "list"]);
+      if (listed.includes(name)) return;
+    } catch {
+      /* fall through */
     }
+    if (!/already exists|409/i.test(msg)) throw err;
   }
 }
 
@@ -142,8 +142,9 @@ const names =
       };
 
 console.log(`Preparing Cloudflare resources for ${envName}…`);
-const d1Id = ensureD1(names.d1);
-const kvId = ensureKv(names.kv);
+
+const d1Id = await ensureD1(names.d1);
+const kvId = await ensureKv(names.kv);
 ensureR2(names.r2);
 ensureQueue(names.queue);
 ensureQueue(names.dlq);
@@ -158,7 +159,7 @@ const rpId = process.env.WEBAUTHN_RP_ID;
 if (appOrigin) {
   configText = configText.replace(
     new RegExp(
-      `("ENVIRONMENT": "${envName === "staging" ? "staging" : "production"}"[\\s\\S]*?"APP_ORIGIN": ")([^"]*)(")`,
+      `("ENVIRONMENT": "${envName}"[\\s\\S]*?"APP_ORIGIN": ")([^"]*)(")`,
     ),
     `$1${appOrigin}$3`,
   );
@@ -166,18 +167,21 @@ if (appOrigin) {
 if (rpId) {
   configText = configText.replace(
     new RegExp(
-      `("ENVIRONMENT": "${envName === "staging" ? "staging" : "production"}"[\\s\\S]*?"WEBAUTHN_RP_ID": ")([^"]*)(")`,
+      `("ENVIRONMENT": "${envName}"[\\s\\S]*?"WEBAUTHN_RP_ID": ")([^"]*)(")`,
     ),
     `$1${rpId}$3`,
   );
 }
 if (turnstileSiteKey) {
-  // Replace TURNSTILE_SITE_KEY inside the matching env block only — simple global for empty string in that env is brittle;
-  // write after JSONC strip comments via string replace of known empty values when preparing.
-  configText = configText.replace(
-    `"TURNSTILE_SITE_KEY": ""`,
-    `"TURNSTILE_SITE_KEY": ${JSON.stringify(turnstileSiteKey)}`,
-  );
+  // Replace only within the target env block.
+  const envMarker = `"ENVIRONMENT": "${envName}"`;
+  const idx = configText.indexOf(envMarker);
+  if (idx !== -1) {
+    const before = configText.slice(0, idx);
+    let after = configText.slice(idx);
+    after = after.replace(`"TURNSTILE_SITE_KEY": ""`, `"TURNSTILE_SITE_KEY": ${JSON.stringify(turnstileSiteKey)}`);
+    configText = before + after;
+  }
 }
 
 writeFileSync(wranglerPath, configText);
@@ -194,4 +198,3 @@ console.log(
     2,
   ),
 );
-void parseJsonFromOutput;
