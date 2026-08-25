@@ -1,5 +1,5 @@
 import type { Env } from "./env";
-import { handleAuth } from "./auth/webauthn";
+import { handleAuth } from "./auth/passwordAuth";
 import { handleRooms } from "./routes/rooms";
 import { handleVoice } from "./voice/realtimekit";
 import { requireUser } from "./auth/session";

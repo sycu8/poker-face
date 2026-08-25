@@ -16,8 +16,6 @@
   "vars": {
     "ENVIRONMENT": "local",
     "APP_ORIGIN": "http://localhost:5173",
-    "WEBAUTHN_RP_ID": "localhost",
-    "WEBAUTHN_RP_NAME": "Poker Faces",
     "TURNSTILE_SITE_KEY": ""
   },
   "d1_databases": [

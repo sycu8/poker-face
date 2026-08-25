@@ -11,8 +11,6 @@
   "vars": {
     "ENVIRONMENT": "local",
     "APP_ORIGIN": "http://localhost:5173",
-    "WEBAUTHN_RP_ID": "localhost",
-    "WEBAUTHN_RP_NAME": "Poker Faces",
     "TURNSTILE_SITE_KEY": "1x00000000000000000000AA"
   },
   "d1_databases": [
@@ -78,8 +76,6 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "APP_ORIGIN": "https://staging.poker.orangecloud.vn",
-        "WEBAUTHN_RP_ID": "staging.poker.orangecloud.vn",
-        "WEBAUTHN_RP_NAME": "Poker Faces Staging",
         "TURNSTILE_SITE_KEY": ""
       },
       "d1_databases": [
@@ -136,8 +132,6 @@
       "vars": {
         "ENVIRONMENT": "production",
         "APP_ORIGIN": "https://poker.orangecloud.vn",
-        "WEBAUTHN_RP_ID": "poker.orangecloud.vn",
-        "WEBAUTHN_RP_NAME": "Poker Faces",
         "TURNSTILE_SITE_KEY": ""
       },
       "d1_databases": [

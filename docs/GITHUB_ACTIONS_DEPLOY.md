@@ -28,8 +28,6 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | --- | --- |
 | `APP_ORIGIN_STAGING` | `https://staging.poker.orangecloud.vn` |
 | `APP_ORIGIN_PRODUCTION` | `https://poker.orangecloud.vn` |
-| `WEBAUTHN_RP_ID_STAGING` | `staging.poker.orangecloud.vn` |
-| `WEBAUTHN_RP_ID_PRODUCTION` | `poker.orangecloud.vn` |
 | `TURNSTILE_SITE_KEY_STAGING` / `_PRODUCTION` | empty until widgets exist |
 | `REALTIMEKIT_APP_ID` | — |
 

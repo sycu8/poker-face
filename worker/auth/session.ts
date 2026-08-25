@@ -25,6 +25,7 @@ export function readSessionToken(request: Request): string | null {
 export interface SessionUser {
   id: string;
   displayName: string;
+  username: string | null;
   sessionId: string;
 }
 
@@ -36,7 +37,7 @@ export async function requireUser(
   if (!token) return { ok: false, status: 401, error: "Sign in required." };
   const tokenHash = await sha256Hex(`${env.SESSION_SECRET}:${token}`);
   const row = await env.DB.prepare(
-    `SELECT s.id as session_id, s.expires_at, s.revoked_at, u.id as user_id, u.display_name
+    `SELECT s.id as session_id, s.expires_at, s.revoked_at, u.id as user_id, u.display_name, u.username
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ?`,
   )
@@ -47,13 +48,19 @@ export async function requireUser(
       revoked_at: number | null;
       user_id: string;
       display_name: string;
+      username: string | null;
     }>();
   if (!row || row.revoked_at || row.expires_at < Date.now()) {
     return { ok: false, status: 401, error: "Session expired." };
   }
   return {
     ok: true,
-    user: { id: row.user_id, displayName: row.display_name, sessionId: row.session_id },
+    user: {
+      id: row.user_id,
+      displayName: row.display_name,
+      username: row.username,
+      sessionId: row.session_id,
+    },
   };
 }
 

@@ -68,13 +68,11 @@ jobs:
           KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID_STAGING }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY_STAGING }}
           APP_ORIGIN: ${{ vars.APP_ORIGIN_STAGING }}
-          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID_STAGING }}
         run: |
           if [ -z "$D1_DATABASE_ID" ]; then export D1_DATABASE_ID="${{ vars.D1_DATABASE_ID_STAGING }}"; fi
           if [ -z "$KV_NAMESPACE_ID" ]; then export KV_NAMESPACE_ID="${{ vars.KV_NAMESPACE_ID_STAGING }}"; fi
           if [ -z "$TURNSTILE_SITE_KEY" ]; then export TURNSTILE_SITE_KEY="${{ vars.TURNSTILE_SITE_KEY_STAGING }}"; fi
           if [ -z "$APP_ORIGIN" ]; then export APP_ORIGIN="https://staging.poker.orangecloud.vn"; fi
-          if [ -z "$WEBAUTHN_RP_ID" ]; then export WEBAUTHN_RP_ID="staging.poker.orangecloud.vn"; fi
           node scripts/ci-prepare-wrangler.mjs staging
       - name: Apply D1 migrations (staging)
         run: npx wrangler d1 migrations apply poker-faces-staging --env staging --remote
@@ -149,13 +147,11 @@ jobs:
           KV_NAMESPACE_ID: ${{ secrets.KV_NAMESPACE_ID_PRODUCTION }}
           TURNSTILE_SITE_KEY: ${{ secrets.TURNSTILE_SITE_KEY_PRODUCTION }}
           APP_ORIGIN: ${{ vars.APP_ORIGIN_PRODUCTION }}
-          WEBAUTHN_RP_ID: ${{ vars.WEBAUTHN_RP_ID_PRODUCTION }}
         run: |
           if [ -z "$D1_DATABASE_ID" ]; then export D1_DATABASE_ID="${{ vars.D1_DATABASE_ID_PRODUCTION }}"; fi
           if [ -z "$KV_NAMESPACE_ID" ]; then export KV_NAMESPACE_ID="${{ vars.KV_NAMESPACE_ID_PRODUCTION }}"; fi
           if [ -z "$TURNSTILE_SITE_KEY" ]; then export TURNSTILE_SITE_KEY="${{ vars.TURNSTILE_SITE_KEY_PRODUCTION }}"; fi
           if [ -z "$APP_ORIGIN" ]; then export APP_ORIGIN="https://poker.orangecloud.vn"; fi
-          if [ -z "$WEBAUTHN_RP_ID" ]; then export WEBAUTHN_RP_ID="poker.orangecloud.vn"; fi
           node scripts/ci-prepare-wrangler.mjs production
       - name: Apply D1 migrations (production)
         run: npx wrangler d1 migrations apply poker-faces-production --env production --remote

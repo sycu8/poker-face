@@ -10,8 +10,6 @@ export interface Env {
   JOIN_RATE_LIMIT: RateLimit;
   ENVIRONMENT: string;
   APP_ORIGIN: string;
-  WEBAUTHN_RP_ID: string;
-  WEBAUTHN_RP_NAME: string;
   TURNSTILE_SITE_KEY: string;
   SESSION_SECRET: string;
   TURNSTILE_SECRET_KEY?: string;
