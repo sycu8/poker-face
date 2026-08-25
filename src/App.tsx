@@ -60,9 +60,22 @@ export function App() {
         </Link>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           {user ? (
-            <span className="badge" aria-label={`Signed in as ${user.displayName}`}>
-              {user.displayName}
-            </span>
+            <>
+              <span className="badge" aria-label={`Signed in as ${user.displayName}`}>
+                {user.displayName}
+              </span>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() =>
+                  void api.logout().then(() => {
+                    setUser(null);
+                  })
+                }
+              >
+                Sign out
+              </button>
+            </>
           ) : (
             <>
               <Link className="btn btn-secondary" to="/auth">

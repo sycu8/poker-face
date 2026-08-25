@@ -14,7 +14,9 @@ Virtual chips only. No purchases, cash-out, wallets, or real-money language.
 - D1 (users, sessions, rooms, hand summaries)
 - KV / R2 / Queues / Analytics Engine / Rate Limiting / Turnstile
 - Username + password auth (PBKDF2) with cookie sessions
-- Voice via Cloudflare RealtimeKit (degraded-safe)
+- Host-approved private tables, text chat, optional voice
+- PWA manifest + service worker shell cache
+- Voice via Cloudflare RealtimeKit (degraded-safe when unset)
 
 ## Quick start
 

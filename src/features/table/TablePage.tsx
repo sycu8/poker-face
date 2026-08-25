@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 import { VoicePanel } from "../voice/VoicePanel";
 
@@ -14,14 +14,26 @@ interface SeatView {
   isViewer: boolean;
 }
 
+interface HandResult {
+  winners: Array<{ playerId: string; amount: number; potIndex: number }>;
+  shownHands?: Array<{ playerId: string; cards: [string, string] }>;
+}
+
 interface GameView {
   street: string;
   board: string[];
   pot: number;
   sequence: number;
+  handNumber: number;
   actionSeat: number | null;
   turnDeadlineMs: number | null;
   seats: SeatView[];
+  lastHandResult: HandResult | null;
+  pendingConfig: {
+    smallBlind?: number;
+    startingStack?: number;
+    potCapMultiplier?: number;
+  } | null;
   legalActions: {
     canFold: boolean;
     canCheck: boolean;
@@ -35,7 +47,19 @@ interface GameView {
     maxRaiseTo: number;
     canAllIn: boolean;
   } | null;
-  config: { smallBlind: number; bigBlind: number };
+  config: {
+    smallBlind: number;
+    bigBlind: number;
+    startingStack: number;
+    potCapMultiplier: number;
+  };
+}
+
+interface RoomMeta {
+  roomId: string | null;
+  roomName: string | null;
+  inviteCode: string | null;
+  hostUserId: string | null;
 }
 
 interface ChatMessage {
@@ -44,9 +68,35 @@ interface ChatMessage {
   text: string;
 }
 
+const STREET_LABEL: Record<string, string> = {
+  waiting: "Waiting to deal",
+  preflop: "Preflop",
+  flop: "Flop",
+  turn: "Turn",
+  river: "River",
+  showdown: "Showdown",
+};
+
+function useTurnSeconds(deadlineMs: number | null): number | null {
+  const [left, setLeft] = useState<number | null>(null);
+  useEffect(() => {
+    if (!deadlineMs) {
+      setLeft(null);
+      return;
+    }
+    const tick = () => setLeft(Math.max(0, Math.ceil((deadlineMs - Date.now()) / 1000)));
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [deadlineMs]);
+  return left;
+}
+
 export function TablePage({ user }: { user: User }) {
   const { roomId = "" } = useParams();
+  const [access, setAccess] = useState<"loading" | "member" | "pending" | "rejected">("loading");
   const [view, setView] = useState<GameView | null>(null);
+  const [meta, setMeta] = useState<RoomMeta | null>(null);
   const [chat, setChat] = useState<ChatMessage[]>([]);
   const [pendingJoins, setPendingJoins] = useState<
     Array<{ requestId: string; userId: string; displayName: string }>
@@ -54,7 +104,44 @@ export function TablePage({ user }: { user: User }) {
   const [status, setStatus] = useState("Connecting…");
   const [chatText, setChatText] = useState("");
   const [raiseTo, setRaiseTo] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [configMsg, setConfigMsg] = useState<string | null>(null);
+  const [editSb, setEditSb] = useState(1);
+  const [editStack, setEditStack] = useState(100);
+  const [editCap, setEditCap] = useState(2);
   const wsRef = useRef<WebSocket | null>(null);
+  const turnLeft = useTurnSeconds(view?.turnDeadlineMs ?? null);
+
+  const refreshAccess = useCallback(async () => {
+    const res = await api.getRoom(roomId);
+    if (res.access === "member") {
+      setAccess("member");
+      setMeta({
+        roomId: res.room.id,
+        roomName: res.room.name,
+        inviteCode: res.room.inviteCode,
+        hostUserId: res.room.hostUserId,
+      });
+      setEditSb(res.room.smallBlind);
+      setEditStack(res.room.startingStack);
+      setEditCap(res.room.potCapMultiplier);
+      return "member" as const;
+    }
+    if (res.access === "pending") {
+      setAccess("pending");
+      setMeta({
+        roomId: res.room.id,
+        roomName: res.room.name,
+        inviteCode: res.room.inviteCode,
+        hostUserId: res.room.hostUserId,
+      });
+      setStatus(res.message);
+      return "pending" as const;
+    }
+    setAccess("rejected");
+    setStatus(res.message);
+    return "rejected" as const;
+  }, [roomId]);
 
   const connect = useCallback(() => {
     const proto = location.protocol === "https:" ? "wss" : "ws";
@@ -63,12 +150,17 @@ export function TablePage({ user }: { user: User }) {
     ws.onopen = () => setStatus("Connected");
     ws.onclose = () => {
       setStatus("Rejoining your seat…");
-      setTimeout(connect, 1200);
+      setTimeout(() => {
+        void refreshAccess().then((a) => {
+          if (a === "member") connect();
+        });
+      }, 1200);
     };
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data as string) as {
         type: string;
         view?: GameView;
+        meta?: RoomMeta;
         chat?: ChatMessage[];
         pendingJoins?: typeof pendingJoins;
         message?: ChatMessage;
@@ -76,21 +168,64 @@ export function TablePage({ user }: { user: User }) {
       };
       if (msg.type === "snapshot" && msg.view) {
         setView(msg.view);
+        if (msg.meta) setMeta((m) => ({ ...m, ...msg.meta! }));
         if (msg.chat) setChat(msg.chat);
         if (msg.pendingJoins) setPendingJoins(msg.pendingJoins);
-        setStatus("The room is yours.");
+        else if (msg.pendingJoins === undefined && msg.meta?.hostUserId !== user.id) {
+          /* keep */
+        }
+        setStatus("At the table.");
       }
       if (msg.type === "chat" && msg.message) {
         setChat((c) => [...c, msg.message!]);
       }
+      if (msg.type === "join_request" && msg) {
+        const jr = msg as unknown as {
+          requestId: string;
+          userId: string;
+          displayName: string;
+        };
+        if (jr.requestId) {
+          setPendingJoins((list) =>
+            list.some((x) => x.requestId === jr.requestId) ? list : [...list, jr],
+          );
+        }
+      }
       if (msg.type === "error" && msg.error) setStatus(msg.error);
     };
-  }, [roomId]);
+  }, [roomId, refreshAccess, user.id]);
 
   useEffect(() => {
-    connect();
-    return () => wsRef.current?.close();
-  }, [connect]);
+    let cancelled = false;
+    let poll: number | undefined;
+    void (async () => {
+      try {
+        const a = await refreshAccess();
+        if (cancelled) return;
+        if (a === "member") connect();
+        if (a === "pending") {
+          poll = window.setInterval(() => {
+            void refreshAccess().then((next) => {
+              if (next === "member") {
+                if (poll) window.clearInterval(poll);
+                connect();
+              }
+            });
+          }, 2000);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setAccess("rejected");
+          setStatus(e instanceof Error ? e.message : "Could not open this table.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (poll) window.clearInterval(poll);
+      wsRef.current?.close();
+    };
+  }, [connect, refreshAccess]);
 
   const send = (payload: unknown) => {
     wsRef.current?.send(JSON.stringify(payload));
@@ -103,19 +238,109 @@ export function TablePage({ user }: { user: User }) {
   }, [legal?.minRaiseTo, legal?.minBet]);
 
   const isHost = useMemo(
-    () => view?.seats.some((s) => s.seatIndex === 0 && s.playerId === user.id),
-    [view, user.id],
+    () => meta?.hostUserId === user.id || view?.seats.some((s) => s.seatIndex === 0 && s.playerId === user.id),
+    [meta, view, user.id],
   );
+
+  const winnerNames = useMemo(() => {
+    if (!view?.lastHandResult) return null;
+    return view.lastHandResult.winners
+      .map((w) => {
+        const seat = view.seats.find((s) => s.playerId === w.playerId);
+        return `${seat?.displayName ?? "Player"} +${w.amount}`;
+      })
+      .join(" · ");
+  }, [view]);
+
+  async function copyInvite() {
+    if (!meta?.inviteCode) return;
+    await navigator.clipboard.writeText(meta.inviteCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+
+  async function saveRules() {
+    setConfigMsg(null);
+    try {
+      const res = await api.updateRoomConfig(roomId, {
+        smallBlind: editSb,
+        startingStack: editStack,
+        potCapMultiplier: editCap,
+      });
+      setConfigMsg(res.message ?? "Updated.");
+    } catch (e) {
+      setConfigMsg(e instanceof Error ? e.message : "Could not update rules.");
+    }
+  }
+
+  if (access === "loading") {
+    return (
+      <section className="hero">
+        <h1>Opening the table…</h1>
+        <p className="muted">{status}</p>
+      </section>
+    );
+  }
+
+  if (access === "pending") {
+    return (
+      <section className="hero">
+        <h1>{meta?.roomName ?? "Private table"}</h1>
+        <p>Waiting for the host to approve your seat. Virtual chips only.</p>
+        <p className="badge">{status}</p>
+        {meta?.inviteCode ? <p className="muted">Invite code {meta.inviteCode}</p> : null}
+        <div className="cta-row">
+          <Link className="btn btn-secondary" to="/">
+            Back to lobby
+          </Link>
+        </div>
+      </section>
+    );
+  }
+
+  if (access === "rejected") {
+    return (
+      <section className="hero">
+        <h1>No seat this time</h1>
+        <p>{status}</p>
+        <Link className="btn btn-primary" to="/">
+          Back to lobby
+        </Link>
+      </section>
+    );
+  }
 
   return (
     <section>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontFamily: "var(--font-display)", marginBottom: 0 }}>Private table</h1>
+          <h1 style={{ fontFamily: "var(--font-display)", marginBottom: 0 }}>
+            {meta?.roomName ?? "Private table"}
+          </h1>
           <p className="muted" style={{ marginTop: 0 }}>
-            {status} · Blinds {view?.config.smallBlind ?? "–"}/{view?.config.bigBlind ?? "–"} ·{" "}
+            {status} · {STREET_LABEL[view?.street ?? "waiting"] ?? view?.street} · Hand{" "}
+            {view?.handNumber ?? 0} · Blinds {view?.config.smallBlind ?? "–"}/
+            {view?.config.bigBlind ?? "–"}
+            {turnLeft !== null ? ` · ${turnLeft}s` : ""} ·{" "}
             <span className="badge">Virtual chips only</span>
           </p>
+          {meta?.inviteCode ? (
+            <p style={{ marginTop: "0.35rem" }}>
+              Invite{" "}
+              <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>{" "}
+              <button className="btn btn-secondary" type="button" onClick={() => void copyInvite()}>
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </p>
+          ) : null}
+          {winnerNames ? (
+            <p className="badge" style={{ marginTop: "0.5rem" }}>
+              Last hand: {winnerNames}
+            </p>
+          ) : null}
+          {view?.pendingConfig ? (
+            <p className="muted">Rule changes pending for the next hand.</p>
+          ) : null}
         </div>
         <div className="cta-row">
           {isHost ? (
@@ -123,10 +348,13 @@ export function TablePage({ user }: { user: User }) {
               Deal everyone in
             </button>
           ) : null}
+          <Link className="btn btn-secondary" to="/">
+            Leave table
+          </Link>
         </div>
       </div>
 
-      {pendingJoins.length > 0 ? (
+      {pendingJoins.length > 0 && isHost ? (
         <div className="panel" style={{ marginBottom: "1rem" }}>
           <strong>Join requests</strong>
           {pendingJoins.map((j) => (
@@ -138,22 +366,46 @@ export function TablePage({ user }: { user: User }) {
                 gap: "0.5rem",
                 marginTop: "0.6rem",
                 alignItems: "center",
+                flexWrap: "wrap",
               }}
             >
               <span>{j.displayName} asks to join</span>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={() =>
-                  void api.decideJoin({
-                    requestId: j.requestId,
-                    approve: true,
-                    idempotencyKey: crypto.randomUUID(),
-                  })
-                }
-              >
-                Take a seat
-              </button>
+              <div className="cta-row">
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() =>
+                    void api
+                      .decideJoin({
+                        requestId: j.requestId,
+                        approve: true,
+                        idempotencyKey: crypto.randomUUID(),
+                      })
+                      .then(() =>
+                        setPendingJoins((list) => list.filter((x) => x.requestId !== j.requestId)),
+                      )
+                  }
+                >
+                  Take a seat
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() =>
+                    void api
+                      .decideJoin({
+                        requestId: j.requestId,
+                        approve: false,
+                        idempotencyKey: crypto.randomUUID(),
+                      })
+                      .then(() =>
+                        setPendingJoins((list) => list.filter((x) => x.requestId !== j.requestId)),
+                      )
+                  }
+                >
+                  Decline
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -162,12 +414,19 @@ export function TablePage({ user }: { user: User }) {
       <div className="table-felt" aria-label="Poker table">
         <div className="board">
           {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map((c, i) => (
-            <div key={`${c}-${i}`} className={c === "?" ? "card back" : "card"} aria-label={c === "?" ? "Hidden card" : c}>
+            <div
+              key={`${c}-${i}`}
+              className={c === "?" ? "card back" : "card"}
+              aria-label={c === "?" ? "Hidden card" : c}
+            >
               {c === "?" ? "" : c}
             </div>
           ))}
         </div>
-        <div className="pot">Pot {view?.pot ?? 0}</div>
+        <div className="pot">
+          Pot {view?.pot ?? 0}
+          {view?.street ? ` · ${STREET_LABEL[view.street] ?? view.street}` : ""}
+        </div>
       </div>
 
       <div className="seats">
@@ -176,9 +435,17 @@ export function TablePage({ user }: { user: User }) {
             key={seat.seatIndex}
             className={`seat${view?.actionSeat === seat.seatIndex ? " active-turn" : ""}`}
           >
-            <div className="name">{seat.displayName ?? "Open seat"}</div>
-            <div className="muted">{seat.status}</div>
-            {seat.playerId ? <div className="stack">{seat.stack} chips</div> : null}
+            <div className="name">
+              {seat.displayName ?? "Open seat"}
+              {seat.isViewer ? " (you)" : ""}
+            </div>
+            <div className="muted">{seat.status.replaceAll("_", " ")}</div>
+            {seat.playerId ? (
+              <div className="stack">
+                {seat.stack} chips
+                {seat.betThisStreet > 0 ? ` · bet ${seat.betThisStreet}` : ""}
+              </div>
+            ) : null}
             {seat.holeCards ? (
               <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
                 {seat.holeCards.map((c) => (
@@ -347,6 +614,50 @@ export function TablePage({ user }: { user: User }) {
           </form>
         </div>
         <VoicePanel roomId={roomId} />
+        {isHost ? (
+          <div className="panel">
+            <strong>Table rules</strong>
+            <p className="muted">Mid-hand changes apply on the next deal.</p>
+            <div className="field">
+              <label htmlFor="editSb">Small blind</label>
+              <input
+                id="editSb"
+                type="number"
+                min={1}
+                value={editSb}
+                onChange={(e) => setEditSb(Number(e.target.value))}
+              />
+              <span className="muted">Big blind {editSb * 2}</span>
+            </div>
+            <div className="field">
+              <label htmlFor="editStack">Starting stack</label>
+              <input
+                id="editStack"
+                type="number"
+                min={10}
+                max={1000}
+                value={editStack}
+                onChange={(e) => setEditStack(Number(e.target.value))}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="editCap">Pot-cap multiplier</label>
+              <input
+                id="editCap"
+                type="number"
+                min={1}
+                max={10}
+                step={0.5}
+                value={editCap}
+                onChange={(e) => setEditCap(Number(e.target.value))}
+              />
+            </div>
+            <button className="btn btn-secondary" type="button" onClick={() => void saveRules()}>
+              Save rules
+            </button>
+            {configMsg ? <p className="muted">{configMsg}</p> : null}
+          </div>
+        ) : null}
       </div>
     </section>
   );
