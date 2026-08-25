@@ -66,7 +66,12 @@ export const api = {
       if (r.status === 401) return { user: null as User | null };
       return parse<{ user: User }>(r);
     }),
-  register: (body: { username: string; password: string; displayName?: string }) =>
+  register: (body: {
+    username: string;
+    email: string;
+    password: string;
+    displayName?: string;
+  }) =>
     fetch("/api/auth/register", {
       method: "POST",
       credentials: "include",
@@ -80,6 +85,13 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
+  resetPassword: (body: { username: string; email: string; newPassword: string }) =>
+    fetch("/api/auth/reset-password", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => parse<{ ok: boolean; message?: string }>(r)),
   logout: () =>
     fetch("/api/auth/logout", {
       method: "POST",
