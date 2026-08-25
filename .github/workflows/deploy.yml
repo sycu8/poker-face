@@ -98,6 +98,10 @@ jobs:
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
+          if [ -z "$SESSION_SECRET" ]; then
+            echo "::warning::SESSION_SECRET not set in GitHub Actions secrets; generating ephemeral value for this deploy. Set repository secret SESSION_SECRET for stable auth."
+            export SESSION_SECRET="$(openssl rand -hex 32)"
+          fi
           node scripts/ci-write-secrets-file.mjs .ci-secrets-staging.json
           # Target the named Worker via source env; secrets are not in the Vite output config.
           npx wrangler secret bulk .ci-secrets-staging.json --env staging --config wrangler.jsonc
@@ -113,12 +117,14 @@ jobs:
           set -euo pipefail
           BASE="${{ vars.APP_ORIGIN_STAGING }}"
           if [ -z "$BASE" ]; then BASE="https://staging.poker.orangecloud.vn"; fi
+          FALLBACK="https://poker-faces-staging.sycu-lee.workers.dev"
           echo "Probing $BASE/api/health"
           if curl -fsS --retry 5 --retry-delay 3 "$BASE/api/health" | tee /tmp/health.json; then
             grep -q '"ok":true' /tmp/health.json
           else
-            echo "Custom domain not reachable yet; check the wrangler-action deploy URL (workers.dev)."
-            exit 0
+            echo "Custom domain not reachable; probing workers.dev fallback $FALLBACK"
+            curl -fsS --retry 5 --retry-delay 3 "$FALLBACK/api/health" | tee /tmp/health.json
+            grep -q '"ok":true' /tmp/health.json
           fi
 
   deploy-production:
@@ -171,6 +177,10 @@ jobs:
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
+          if [ -z "$SESSION_SECRET" ]; then
+            echo "::warning::SESSION_SECRET not set in GitHub Actions secrets; generating ephemeral value for this deploy. Set repository secret SESSION_SECRET for stable auth."
+            export SESSION_SECRET="$(openssl rand -hex 32)"
+          fi
           node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
           npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
           rm -f .ci-secrets-production.json
@@ -185,10 +195,12 @@ jobs:
           set -euo pipefail
           BASE="${{ vars.APP_ORIGIN_PRODUCTION }}"
           if [ -z "$BASE" ]; then BASE="https://poker.orangecloud.vn"; fi
+          FALLBACK="https://poker-faces.sycu-lee.workers.dev"
           echo "Probing $BASE/api/health"
           if curl -fsS --retry 8 --retry-delay 5 "$BASE/api/health" | tee /tmp/health-prod.json; then
             grep -q '"ok":true' /tmp/health-prod.json
           else
-            echo "Custom domain not reachable yet (DNS/custom domain may still be propagating)."
-            exit 0
+            echo "Custom domain not reachable; probing workers.dev fallback $FALLBACK"
+            curl -fsS --retry 8 --retry-delay 5 "$FALLBACK/api/health" | tee /tmp/health-prod.json
+            grep -q '"ok":true' /tmp/health-prod.json
           fi
