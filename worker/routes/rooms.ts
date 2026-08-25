@@ -4,6 +4,7 @@ import { requireUser } from "../auth/session";
 import { validateConfigInput } from "../domain/config";
 import { writeAnalytics } from "../lib/analytics";
 import { verifyTurnstile } from "../lib/turnstile";
+import { coalesceJoinRequest } from "../lib/joinCoalesce";
 import { errorJson, inviteCode, json, randomId, readJson } from "../lib/http";
 
 const createRoomSchema = z.object({
@@ -199,14 +200,44 @@ export async function handleRooms(
     )
       .bind(room.id, auth.user.id)
       .first<{ status: string }>();
-    if (member?.status === "seated") {
-      const payload = { status: "approved", roomId: room.id, message: "You have a seat" };
+
+    const pendingExisting = await env.DB.prepare(
+      `SELECT id FROM join_requests
+       WHERE room_id = ? AND user_id = ? AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+      .bind(room.id, auth.user.id)
+      .first<{ id: string }>();
+
+    const requestId = randomId("jr");
+    const coalesced = coalesceJoinRequest({
+      memberStatus: member?.status,
+      pendingRequestId: pendingExisting?.id,
+      newRequestId: requestId,
+    });
+    const now = Date.now();
+    const displayName = parsed.data.displayName ?? auth.user.displayName;
+
+    if (coalesced.status === "approved") {
+      return json({ status: "approved", roomId: room.id, message: coalesced.message });
+    }
+
+    if (pendingExisting && coalesced.requestId === pendingExisting.id) {
+      const payload = {
+        status: "pending" as const,
+        requestId: pendingExisting.id,
+        roomId: room.id,
+        message: coalesced.message,
+      };
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO idempotency_keys (scope, key, response_json, created_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+        .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey, JSON.stringify(payload), now)
+        .run();
       return json(payload);
     }
 
-    const requestId = randomId("jr");
-    const now = Date.now();
-    const displayName = parsed.data.displayName ?? auth.user.displayName;
     try {
       await env.DB.prepare(
         `INSERT INTO join_requests
@@ -301,6 +332,11 @@ export async function handleRooms(
       env.DB.prepare(
         `UPDATE join_requests SET status = 'approved', decided_at = ? WHERE id = ?`,
       ).bind(now, jr.id),
+      // Collapse any duplicate pending rows for the same user (pre-fix clients).
+      env.DB.prepare(
+        `UPDATE join_requests SET status = 'rejected', decided_at = ?
+         WHERE room_id = ? AND user_id = ? AND status = 'pending' AND id != ?`,
+      ).bind(now, jr.room_id, jr.user_id, jr.id),
       env.DB.prepare(
         `INSERT INTO room_members
          (room_id, user_id, role, seat_index, display_name, status, created_at, updated_at)
@@ -316,6 +352,21 @@ export async function handleRooms(
         now,
       ),
     ]);
+
+    // Drop any duplicate pending cards for this user from the live room view.
+    const dupes = await env.DB.prepare(
+      `SELECT id FROM join_requests
+       WHERE room_id = ? AND user_id = ? AND status = 'rejected' AND decided_at = ? AND id != ?`,
+    )
+      .bind(jr.room_id, jr.user_id, now, jr.id)
+      .all<{ id: string }>();
+    for (const row of dupes.results ?? []) {
+      await stub.fetch("https://room/reject", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ requestId: row.id, userId: jr.user_id }),
+      });
+    }
 
     return json({
       status: "approved",

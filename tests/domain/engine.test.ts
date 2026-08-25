@@ -144,6 +144,25 @@ describe("engine privacy and flow", () => {
     expect(state.lastHandResult?.winners.every((w) => w.hand === undefined)).toBe(true);
   });
 
+  it("ignores deal while a hand is already in progress", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error("bad config");
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "p1", "Ada", 0);
+    seatPlayer(state, "p2", "Bea", 1);
+    startHand(state, 1_000_000);
+    expect(state.street).toBe("preflop");
+    const handNumber = state.handNumber;
+    const sequence = state.sequence;
+    const board = [...state.board];
+    const events = startHand(state, 1_000_500);
+    expect(events).toHaveLength(0);
+    expect(state.street).toBe("preflop");
+    expect(state.handNumber).toBe(handNumber);
+    expect(state.sequence).toBe(sequence);
+    expect(state.board).toEqual(board);
+  });
+
   it("includes winning hand category on showdown HandResult", () => {
     const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
     if (!cfg.ok) throw new Error("bad config");

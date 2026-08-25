@@ -171,6 +171,9 @@ function postBlind(seat: SeatState, amount: number): number {
 
 export function startHand(state: GameState, nowMs: number): EngineEvent[] {
   const events: EngineEvent[] = [];
+  if (state.street !== "waiting") {
+    return events;
+  }
   if (state.pendingConfig) {
     state.config = promoteConfig(state.config, state.pendingConfig);
     state.pendingConfig = null;
