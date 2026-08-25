@@ -53,11 +53,29 @@ async function cfApi(pathname, init = {}) {
   });
   const body = await res.json();
   if (!res.ok || body.success === false) {
-    throw new Error(
+    const err = new Error(
       `Cloudflare API ${pathname} failed: ${res.status} ${JSON.stringify(body.errors ?? body)}`,
     );
+    err.status = res.status;
+    err.errors = body.errors ?? [];
+    throw err;
   }
   return body;
+}
+
+/** Paginate Cloudflare list endpoints that return result_info.page / total_pages. */
+async function cfApiListAll(pathname) {
+  const items = [];
+  let page = 1;
+  let totalPages = 1;
+  while (page <= totalPages) {
+    const sep = pathname.includes("?") ? "&" : "?";
+    const body = await cfApi(`${pathname}${sep}page=${page}&per_page=100`);
+    items.push(...(body.result ?? []));
+    totalPages = body.result_info?.total_pages ?? 1;
+    page += 1;
+  }
+  return items;
 }
 
 function isUuid(value) {
@@ -67,8 +85,8 @@ function isUuid(value) {
 async function ensureD1(databaseName) {
   if (isUuid(process.env.D1_DATABASE_ID)) return process.env.D1_DATABASE_ID;
 
-  const listed = await cfApi(`/accounts/${accountId}/d1/database`);
-  const existing = (listed.result ?? []).find((db) => db.name === databaseName);
+  const listed = await cfApiListAll(`/accounts/${accountId}/d1/database`);
+  const existing = listed.find((db) => db.name === databaseName);
   if (existing?.uuid) return existing.uuid;
 
   const created = wrangler(["d1", "create", databaseName]);
@@ -83,16 +101,52 @@ async function ensureD1(databaseName) {
 async function ensureKv(title) {
   if (isUuid(process.env.KV_NAMESPACE_ID)) return process.env.KV_NAMESPACE_ID;
 
-  const listed = await cfApi(`/accounts/${accountId}/storage/kv/namespaces`);
-  const existing = (listed.result ?? []).find((ns) => ns.title === title);
-  if (existing?.id) return existing.id;
+  const findExisting = async () => {
+    const listed = await cfApiListAll(`/accounts/${accountId}/storage/kv/namespaces`);
+    const fromApi = listed.find((ns) => ns.title === title)?.id;
+    if (fromApi) return fromApi;
 
-  const created = await cfApi(`/accounts/${accountId}/storage/kv/namespaces`, {
-    method: "POST",
-    body: JSON.stringify({ title }),
-  });
-  if (!created.result?.id) throw new Error(`Could not create KV namespace ${title}`);
-  return created.result.id;
+    // Wrangler list as fallback when REST pagination/order misses the title.
+    try {
+      const out = wrangler(["kv", "namespace", "list"]);
+      const jsonStart = out.indexOf("[");
+      if (jsonStart !== -1) {
+        const parsed = JSON.parse(out.slice(jsonStart));
+        const hit = parsed.find((ns) => ns.title === title);
+        if (hit?.id) return hit.id;
+      }
+      const line = out.split("\n").find((l) => l.includes(title));
+      const idMatch = line?.match(/([0-9a-f]{32})/i);
+      if (idMatch) return idMatch[1];
+    } catch {
+      /* ignore */
+    }
+    return undefined;
+  };
+
+  const existingId = await findExisting();
+  if (existingId) return existingId;
+
+  try {
+    const created = await cfApi(`/accounts/${accountId}/storage/kv/namespaces`, {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    });
+    if (!created.result?.id) throw new Error(`Could not create KV namespace ${title}`);
+    return created.result.id;
+  } catch (err) {
+    const codes = (err.errors ?? []).map((e) => e.code);
+    const msg = String(err.message ?? err);
+    // 10014: namespace with this account ID and title already exists
+    if (codes.includes(10014) || /already exists/i.test(msg)) {
+      const id = await findExisting();
+      if (id) return id;
+      throw new Error(
+        `KV namespace "${title}" already exists but its id could not be resolved. Set KV_NAMESPACE_ID_PRODUCTION / KV_NAMESPACE_ID_STAGING.`,
+      );
+    }
+    throw err;
+  }
 }
 
 function ensureR2(bucket) {
