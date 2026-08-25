@@ -1,18 +1,30 @@
 import type { FormEvent } from "react";
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 
 type Mode = "login" | "register";
 
 export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<Mode>("login");
+  const [searchParams] = useSearchParams();
+  const modeFromUrl: Mode = searchParams.get("mode") === "register" ? "register" : "login";
+  const [mode, setMode] = useState<Mode>(modeFromUrl);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setMode(modeFromUrl);
+  }, [modeFromUrl]);
+
+  function switchMode(next: Mode) {
+    setMode(next);
+    setError(null);
+    navigate(next === "register" ? "/auth?mode=register" : "/auth", { replace: true });
+  }
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -40,9 +52,35 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
 
   return (
     <section className="hero">
-      <h1>Deal everyone in.</h1>
-      <p>Sign in with a username and password to host or join a private table. Virtual chips only.</p>
+      <h1>{mode === "register" ? "Create your seat." : "Deal everyone in."}</h1>
+      <p>
+        {mode === "register"
+          ? "Sign up with a username and password to host or join a private table. Virtual chips only."
+          : "Sign in with a username and password to host or join a private table. Virtual chips only."}
+      </p>
       <form className="panel" style={{ maxWidth: 420 }} onSubmit={(e) => void submit(e)}>
+        <div className="cta-row" style={{ marginBottom: "0.75rem" }} role="tablist" aria-label="Auth mode">
+          <button
+            className={mode === "login" ? "btn btn-primary" : "btn btn-secondary"}
+            type="button"
+            role="tab"
+            aria-selected={mode === "login"}
+            disabled={busy}
+            onClick={() => switchMode("login")}
+          >
+            Sign in
+          </button>
+          <button
+            className={mode === "register" ? "btn btn-primary" : "btn btn-secondary"}
+            type="button"
+            role="tab"
+            aria-selected={mode === "register"}
+            disabled={busy}
+            onClick={() => switchMode("register")}
+          >
+            Sign up
+          </button>
+        </div>
         <div className="field">
           <label htmlFor="username">Username</label>
           <input
@@ -96,21 +134,54 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
         ) : null}
         <div className="cta-row">
           <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy ? "Working…" : mode === "register" ? "Create account" : "Sign in"}
+            {busy ? "Working…" : mode === "register" ? "Sign up" : "Sign in"}
           </button>
-          <button
-            className="btn btn-secondary"
-            type="button"
-            disabled={busy}
-            onClick={() => {
-              setMode(mode === "login" ? "register" : "login");
-              setError(null);
-            }}
-          >
-            {mode === "login" ? "Need an account?" : "Have an account?"}
-          </button>
+          {mode === "login" ? (
+            <p className="muted" style={{ margin: 0, alignSelf: "center" }}>
+              New here?{" "}
+              <button
+                type="button"
+                style={{
+                  background: "none",
+                  border: 0,
+                  padding: 0,
+                  color: "var(--gold)",
+                  cursor: "pointer",
+                  font: "inherit",
+                  textDecoration: "underline",
+                }}
+                disabled={busy}
+                onClick={() => switchMode("register")}
+              >
+                Sign up
+              </button>
+            </p>
+          ) : (
+            <p className="muted" style={{ margin: 0, alignSelf: "center" }}>
+              Already have an account?{" "}
+              <button
+                type="button"
+                style={{
+                  background: "none",
+                  border: 0,
+                  padding: 0,
+                  color: "var(--gold)",
+                  cursor: "pointer",
+                  font: "inherit",
+                  textDecoration: "underline",
+                }}
+                disabled={busy}
+                onClick={() => switchMode("login")}
+              >
+                Sign in
+              </button>
+            </p>
+          )}
         </div>
       </form>
+      <p className="muted" style={{ marginTop: "1rem" }}>
+        <Link to="/">Back to lobby</Link>
+      </p>
     </section>
   );
 }

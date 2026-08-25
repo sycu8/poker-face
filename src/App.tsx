@@ -64,9 +64,14 @@ export function App() {
               {user.displayName}
             </span>
           ) : (
-            <Link className="btn btn-secondary" to="/auth">
-              Sign in
-            </Link>
+            <>
+              <Link className="btn btn-secondary" to="/auth">
+                Sign in
+              </Link>
+              <Link className="btn btn-primary" to="/auth?mode=register">
+                Sign up
+              </Link>
+            </>
           )}
         </div>
       </header>
