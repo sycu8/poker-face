@@ -193,6 +193,11 @@ jobs:
           node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
           npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
           rm -f .ci-secrets-production.json
+          if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
+            echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin) at repo level or on the production environment, then re-run Deploy Cloudflare."
+          else
+            echo "REALTIMEKIT_API_TOKEN is present for production secret bulk."
+          fi
       - name: Redeploy production after secrets
         uses: cloudflare/wrangler-action@v3
         with:
