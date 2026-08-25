@@ -547,7 +547,6 @@ export function TablePage({ user }: { user: User }) {
             <p className="muted">Rule changes pending for the next hand.</p>
           ) : null}
         </div>
-
         <div className="table-top-actions">
           <div className="cta-row">
             {meta?.inviteCode ? (
