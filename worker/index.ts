@@ -3,6 +3,7 @@ import { handleAuth } from "./auth/passwordAuth";
 import { handleRooms } from "./routes/rooms";
 import { handleVoice } from "./voice/realtimekit";
 import { requireUser } from "./auth/session";
+import { readPublicConfig } from "./lib/configKv";
 import { errorJson, json } from "./lib/http";
 import { RoomDurableObject } from "./room/RoomDurableObject";
 
@@ -85,16 +86,8 @@ export default {
     }
 
     if (url.pathname === "/api/config") {
-      return json({
-        turnstileSiteKey: env.TURNSTILE_SITE_KEY,
-        environment: env.ENVIRONMENT,
-        appOrigin: env.APP_ORIGIN,
-        copy: {
-          tagline: "Your table. Your people.",
-          support: "Private poker nights, wherever everyone is.",
-          chips: "Virtual chips only. No purchases or cash-out.",
-        },
-      });
+      const cfg = await readPublicConfig(env);
+      return json(cfg);
     }
 
     const authRes = await handleAuth(request, env, url.pathname);

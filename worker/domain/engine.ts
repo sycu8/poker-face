@@ -643,7 +643,7 @@ export function seatPlayer(
 ): { ok: true } | { ok: false; error: string } {
   const seat = state.seats[seatIndex];
   if (!seat) return { ok: false, error: "Invalid seat." };
-  if (seat.playerId) return { ok: false, error: "This table is full." };
+  if (seat.playerId) return { ok: false, error: "That seat is taken." };
   if (state.seats.some((s) => s.playerId === playerId)) {
     return { ok: false, error: "Already seated." };
   }
@@ -651,6 +651,125 @@ export function seatPlayer(
   seat.displayName = displayName;
   seat.stack = state.config.startingStack;
   seat.status = state.street === "waiting" ? "seated" : "waiting_next_hand";
+  state.sequence += 1;
+  return { ok: true };
+}
+
+function clearSeat(seat: SeatState): void {
+  seat.playerId = null;
+  seat.displayName = null;
+  seat.stack = 0;
+  seat.status = "empty";
+  seat.holeCards = null;
+  seat.betThisStreet = 0;
+  seat.committedThisHand = 0;
+  seat.hasActedThisStreet = false;
+}
+
+/**
+ * Remove a player from their seat. Mid-hand: fold if still active and defer
+ * clearing the seat until the hand returns to waiting (preserves pot math).
+ */
+export function unseatPlayer(
+  state: GameState,
+  playerId: string,
+  nowMs: number,
+):
+  | { ok: true; events: EngineEvent[]; deferred: boolean }
+  | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+
+  const events: EngineEvent[] = [];
+  const inHand =
+    state.street !== "waiting" &&
+    (seat.status === "active" || seat.status === "all_in" || seat.status === "folded");
+
+  if (inHand && seat.status === "active") {
+    const fold = applyAction(
+      state,
+      seat.seatIndex,
+      "fold",
+      undefined,
+      nowMs,
+      `leave:${playerId}:${state.sequence}`,
+    );
+    if (fold.ok) events.push(...fold.events);
+  }
+
+  // Hand may have completed via the fold.
+  if (state.street !== "waiting") {
+    const still = state.seats.find((s) => s.playerId === playerId);
+    if (still) {
+      still.displayName = `${still.displayName ?? "Player"} (left)`;
+    }
+    state.sequence += 1;
+    return { ok: true, events, deferred: true };
+  }
+
+  const still = state.seats.find((s) => s.playerId === playerId);
+  if (still) clearSeat(still);
+  state.sequence += 1;
+  return { ok: true, events, deferred: false };
+}
+
+/** Clear seats marked for deferred leave once the table is between hands. */
+export function flushDeferredLeaves(state: GameState, playerIds: string[]): void {
+  if (state.street !== "waiting") return;
+  for (const id of playerIds) {
+    const seat = state.seats.find((s) => s.playerId === id);
+    if (seat) clearSeat(seat);
+  }
+  if (playerIds.length) state.sequence += 1;
+}
+
+/** Play-money stack reset for a busted (0-chip) seated player. */
+export function rebuyPlayer(
+  state: GameState,
+  playerId: string,
+  chips?: number,
+): { ok: true } | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+  if (seat.stack > 0) {
+    return { ok: false, error: "Rebuy is only for busted seats (0 chips)." };
+  }
+  if (state.street !== "waiting" && seat.status !== "sitting_out" && seat.status !== "waiting_next_hand" && seat.status !== "seated") {
+    return { ok: false, error: "Wait until the hand finishes before rebuying." };
+  }
+  const amount = chips ?? state.config.startingStack;
+  if (!Number.isInteger(amount) || amount < state.config.startingStack || amount > 1000) {
+    return {
+      ok: false,
+      error: `Rebuy must be between ${state.config.startingStack} and 1000 virtual chips.`,
+    };
+  }
+  seat.stack = amount;
+  seat.status = state.street === "waiting" ? "seated" : "waiting_next_hand";
+  state.sequence += 1;
+  return { ok: true };
+}
+
+/** Mark away / return without removing the seat. Does not cancel turn timers. */
+export function setPlayerAway(
+  state: GameState,
+  playerId: string,
+  away: boolean,
+): { ok: true } | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+  if (away) {
+    if (state.street !== "waiting" && (seat.status === "active" || seat.status === "all_in")) {
+      // Stay in the hand; mark sitting_out only between hands.
+      return { ok: false, error: "Finish this hand before going away." };
+    }
+    seat.status = "sitting_out";
+  } else {
+    if (seat.status !== "sitting_out") {
+      return { ok: false, error: "You are not marked away." };
+    }
+    seat.status = state.street === "waiting" ? "seated" : "waiting_next_hand";
+  }
   state.sequence += 1;
   return { ok: true };
 }

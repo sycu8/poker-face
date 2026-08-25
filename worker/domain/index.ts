@@ -8,8 +8,12 @@ export {
   createInitialGameState,
   getLegalActions,
   projectForPlayer,
+  rebuyPlayer,
   seatPlayer,
+  setPlayerAway,
   startHand,
+  flushDeferredLeaves,
+  unseatPlayer,
 } from "./engine";
 export type {
   ActionType,
