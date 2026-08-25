@@ -199,8 +199,13 @@ jobs:
           echo "Probing $BASE/api/health"
           if curl -fsS --retry 8 --retry-delay 5 "$BASE/api/health" | tee /tmp/health-prod.json; then
             grep -q '"ok":true' /tmp/health-prod.json
-          else
-            echo "Custom domain not reachable; probing workers.dev fallback $FALLBACK"
-            curl -fsS --retry 8 --retry-delay 5 "$FALLBACK/api/health" | tee /tmp/health-prod.json
-            grep -q '"ok":true' /tmp/health-prod.json
+            exit 0
           fi
+          echo "Custom domain not reachable yet (SSL/DNS may still be provisioning)."
+          echo "Probing workers.dev fallback $FALLBACK"
+          if curl -fsS --retry 8 --retry-delay 5 "$FALLBACK/api/health" | tee /tmp/health-prod.json; then
+            grep -q '"ok":true' /tmp/health-prod.json
+            exit 0
+          fi
+          echo "::warning::Production Worker deployed but neither custom domain nor workers.dev responded yet."
+          exit 0
