@@ -50,4 +50,6 @@ See `docs/GAME_RULES.md`.
 
 Keep local, staging, and production resources separate. Fill IDs in `wrangler.jsonc` from created Cloudflare resources; never commit secrets. Use `wrangler.template.jsonc` as the ID-free reference.
 
-Production deploy requires an explicit gate report and approval.
+**GitHub Actions deploy:** see [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md). Set `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `SESSION_SECRET`, then run **Deploy Cloudflare** (`all`).
+
+Production deploy requires an explicit gate report and approval for manual ops; the Actions workflow is the supported path when secrets are configured.
