@@ -108,6 +108,11 @@ jobs:
           # Target the named Worker via source env; secrets are not in the Vite output config.
           npx wrangler secret bulk .ci-secrets-staging.json --env staging --config wrangler.jsonc
           rm -f .ci-secrets-staging.json
+          if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
+            echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin) at repo level or on the staging environment, then re-run Deploy Cloudflare."
+          else
+            echo "REALTIMEKIT_API_TOKEN is present for staging secret bulk."
+          fi
       - name: Redeploy staging after secrets
         uses: cloudflare/wrangler-action@v3
         with:
