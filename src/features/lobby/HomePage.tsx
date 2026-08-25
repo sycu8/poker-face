@@ -109,8 +109,8 @@ export function HomePage({
           <div className="home-felt">
             <div className="home-felt-glow" />
             <div className="home-felt-cards">
-              <PlayingCard code="As" size="hero" className="home-mini-card--a" />
-              <PlayingCard code="Kh" size="hero" className="home-mini-card--b" />
+              <PlayingCard code="As" size="md" className="home-mini-card--a" />
+              <PlayingCard code="Kh" size="md" className="home-mini-card--b" />
             </div>
             <div className="home-felt-chip" />
           </div>
