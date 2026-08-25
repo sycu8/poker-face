@@ -313,6 +313,34 @@ button {
 
 .home-section-cta {
   margin-top: 1.5rem;
+  justify-content: center;
+}
+
+.home-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.home-action-grid .panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-action-grid .home-panel-actions {
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+
+.home-status {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.65rem;
+  margin-top: 1rem;
 }
 
 .home-flow {
@@ -382,17 +410,37 @@ button {
 .cta-row {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
   gap: 0.75rem;
 }
 
+.cta-row--start {
+  justify-content: flex-start;
+}
+
+.cta-row--end {
+  justify-content: flex-end;
+}
+
 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 44px;
   min-width: 44px;
   border-radius: 999px;
   border: 1px solid transparent;
   padding: 0.7rem 1.2rem;
   font-weight: 700;
+  text-align: center;
+  text-decoration: none;
   transition: transform 180ms ease-out, background 180ms ease-out, border-color 180ms ease-out;
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .btn:active {
@@ -541,8 +589,198 @@ button {
 .actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
+  justify-content: center;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 1.25rem;
+  padding: 0.85rem 0.5rem;
+}
+
+.actions .btn {
+  flex: 0 1 auto;
+}
+
+.actions input[type="number"] {
+  min-height: 44px;
+  width: 110px;
+  border-radius: 12px;
+  border: 1px solid #ffffff22;
+  background: #06140f;
+  color: var(--ivory);
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+}
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.app-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  margin-inline: auto;
+}
+
+.auth-mode-tabs {
+  margin-bottom: 0.85rem;
+}
+
+.auth-submit-row {
+  margin-top: 0.25rem;
+}
+
+.auth-switch {
+  margin: 0.85rem 0 0;
+  text-align: center;
+  width: 100%;
+}
+
+.auth-switch button {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--gold);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.auth-back {
   margin-top: 1rem;
+  text-align: center;
+}
+
+.table-top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.table-top-meta {
+  width: 100%;
+}
+
+.table-top-meta h1 {
+  font-family: var(--font-display);
+  margin: 0 0 0.35rem;
+}
+
+.table-top-meta .muted {
+  margin: 0;
+}
+
+.table-invite-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+}
+
+.table-top-actions {
+  width: 100%;
+}
+
+.join-request-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+.join-request-row .cta-row {
+  width: 100%;
+}
+
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.75rem;
+}
+
+.chat-form {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.chat-form input {
+  flex: 1 1 160px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid #ffffff22;
+  background: #06140f;
+  color: var(--ivory);
+  padding: 0.5rem 0.75rem;
+}
+
+.table-side-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+@media (min-width: 720px) {
+  .table-top {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .table-top-actions {
+    width: auto;
+    flex-shrink: 0;
+  }
+
+  .table-top-actions .cta-row {
+    justify-content: flex-end;
+  }
+
+  .table-invite-row {
+    justify-content: flex-start;
+  }
+
+  .join-request-row {
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .join-request-row .cta-row {
+    width: auto;
+    justify-content: flex-end;
+  }
+
+  .app-header-actions {
+    justify-content: flex-end;
+  }
 }
 
 .chat {

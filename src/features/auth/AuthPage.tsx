@@ -51,15 +51,15 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   }
 
   return (
-    <section className="hero">
+    <section className="hero" style={{ justifyItems: "center", textAlign: "center" }}>
       <h1>{mode === "register" ? "Create your seat." : "Deal everyone in."}</h1>
-      <p>
+      <p style={{ marginInline: "auto" }}>
         {mode === "register"
           ? "Sign up with a username and password to host or join a private table. Virtual chips only."
           : "Sign in with a username and password to host or join a private table. Virtual chips only."}
       </p>
-      <form className="panel" style={{ maxWidth: 420 }} onSubmit={(e) => void submit(e)}>
-        <div className="cta-row" style={{ marginBottom: "0.75rem" }} role="tablist" aria-label="Auth mode">
+      <form className="panel auth-panel" onSubmit={(e) => void submit(e)} style={{ textAlign: "left" }}>
+        <div className="cta-row auth-mode-tabs" role="tablist" aria-label="Auth mode">
           <button
             className={mode === "login" ? "btn btn-primary" : "btn btn-secondary"}
             type="button"
@@ -128,58 +128,32 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           />
         </div>
         {error ? (
-          <p role="alert" style={{ color: "var(--danger)" }}>
+          <p role="alert" style={{ color: "var(--danger)", textAlign: "center" }}>
             {error}
           </p>
         ) : null}
-        <div className="cta-row">
+        <div className="cta-row auth-submit-row">
           <button className="btn btn-primary" type="submit" disabled={busy}>
             {busy ? "Working…" : mode === "register" ? "Sign up" : "Sign in"}
           </button>
-          {mode === "login" ? (
-            <p className="muted" style={{ margin: 0, alignSelf: "center" }}>
-              New here?{" "}
-              <button
-                type="button"
-                style={{
-                  background: "none",
-                  border: 0,
-                  padding: 0,
-                  color: "var(--gold)",
-                  cursor: "pointer",
-                  font: "inherit",
-                  textDecoration: "underline",
-                }}
-                disabled={busy}
-                onClick={() => switchMode("register")}
-              >
-                Sign up
-              </button>
-            </p>
-          ) : (
-            <p className="muted" style={{ margin: 0, alignSelf: "center" }}>
-              Already have an account?{" "}
-              <button
-                type="button"
-                style={{
-                  background: "none",
-                  border: 0,
-                  padding: 0,
-                  color: "var(--gold)",
-                  cursor: "pointer",
-                  font: "inherit",
-                  textDecoration: "underline",
-                }}
-                disabled={busy}
-                onClick={() => switchMode("login")}
-              >
-                Sign in
-              </button>
-            </p>
-          )}
         </div>
+        {mode === "login" ? (
+          <p className="muted auth-switch">
+            New here?{" "}
+            <button type="button" disabled={busy} onClick={() => switchMode("register")}>
+              Sign up
+            </button>
+          </p>
+        ) : (
+          <p className="muted auth-switch">
+            Already have an account?{" "}
+            <button type="button" disabled={busy} onClick={() => switchMode("login")}>
+              Sign in
+            </button>
+          </p>
+        )}
       </form>
-      <p className="muted" style={{ marginTop: "1rem" }}>
+      <p className="muted auth-back">
         <Link to="/">Back to lobby</Link>
       </p>
     </section>
