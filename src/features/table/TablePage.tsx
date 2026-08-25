@@ -2,11 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 import { VoicePanel } from "../voice/VoicePanel";
-<<<<<<< HEAD
 import { PlayingCard } from "./PlayingCard";
-=======
 import { WinCelebration, winningPlayerIds } from "./WinCelebration";
->>>>>>> origin/cursor/win-hand-animation-cb85
 
 interface SeatView {
   seatIndex: number;
