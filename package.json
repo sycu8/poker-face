@@ -1,0 +1,60 @@
+{
+  "name": "poker-faces",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Private play-money Texas Hold'em for friends on Cloudflare",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --pretty false",
+    "lint": "eslint . --max-warnings 0",
+    "format:check": "prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:domain": "vitest run tests/domain",
+    "cf-typegen": "wrangler types",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:staging": "wrangler d1 migrations apply DB --env staging --remote",
+    "db:migrate:production": "wrangler d1 migrations apply DB --env production --remote",
+    "smoke:local": "vite build && wrangler dev --local"
+  },
+  "dependencies": {
+    "@cloudflare/realtimekit-react": "^2.0.2",
+    "@fontsource/fraunces": "^5.2.5",
+    "@fontsource/manrope": "^5.2.5",
+    "@simplewebauthn/browser": "^13.3.0",
+    "@simplewebauthn/server": "^13.3.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.6.2",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.53.1",
+    "@cloudflare/vitest-plugin": "^1.0.0",
+    "@cloudflare/workers-types": "^4.20250821.0",
+    "@eslint/js": "^9.29.0",
+    "@types/node": "^26.3.0",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.5.2",
+    "eslint": "^9.29.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.2.0",
+    "prettier": "^3.6.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.34.1",
+    "vite": "^6.3.5",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.125.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

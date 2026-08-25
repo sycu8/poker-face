@@ -1,0 +1,16 @@
+node_modules
+dist
+.wrangler
+.dev.vars
+.env
+.env.local
+*.local
+.DS_Store
+coverage
+.vscode/*
+!.vscode/extensions.json
+.test-data
+playwright-report
+test-results
+*.log
+.mf
