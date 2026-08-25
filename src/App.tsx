@@ -5,8 +5,18 @@ import { HomePage } from "./features/lobby/HomePage";
 import { AuthPage } from "./features/auth/AuthPage";
 import { TablePage } from "./features/table/TablePage";
 
+type ThemeId = "felt" | "midnight" | "sunset";
+
+function loadTheme(): ThemeId {
+  const saved = localStorage.getItem("pf-theme");
+  if (saved === "midnight" || saved === "sunset" || saved === "felt") return saved;
+  return "felt";
+}
+
 export function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  const [theme, setTheme] = useState<ThemeId>(loadTheme);
+  const [themesEnabled, setThemesEnabled] = useState(true);
   const [copy, setCopy] = useState({
     tagline: "Your table. Your people.",
     support: "Private poker nights, wherever everyone is.",
@@ -14,10 +24,16 @@ export function App() {
   });
 
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem("pf-theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
     void (async () => {
       try {
         const cfg = await api.config();
         setCopy(cfg.copy);
+        if (cfg.flags?.themesEnabled === false) setThemesEnabled(false);
       } catch {
         /* keep defaults */
       }
@@ -51,6 +67,20 @@ export function App() {
           </div>
         </Link>
         <div className="app-header-actions">
+          {themesEnabled ? (
+            <label className="theme-picker muted">
+              Theme
+              <select
+                value={theme}
+                onChange={(e) => setTheme(e.target.value as ThemeId)}
+                aria-label="Table theme"
+              >
+                <option value="felt">Felt</option>
+                <option value="midnight">Midnight</option>
+                <option value="sunset">Sunset</option>
+              </select>
+            </label>
+          ) : null}
           {user ? (
             <>
               <span className="badge" aria-label={`Signed in as ${user.displayName}`}>
@@ -82,10 +112,7 @@ export function App() {
       </header>
 
       <Routes>
-        <Route
-          path="/"
-          element={<HomePage user={user} copy={copy} onAuthed={setUser} />}
-        />
+        <Route path="/" element={<HomePage user={user} copy={copy} onAuthed={setUser} />} />
         <Route path="/auth" element={<AuthPage onAuthed={setUser} />} />
         <Route
           path="/table/:roomId"

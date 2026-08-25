@@ -1065,3 +1065,117 @@ button {
     transition: none !important;
   }
 }
+
+/* --- Roadmap additions: themes, avatars, my tables, hand history --- */
+
+:root,
+html[data-theme="felt"] {
+  --theme-felt: #1a4d3a;
+}
+
+html[data-theme="midnight"] {
+  --bg0: #0b1020;
+  --bg1: #121a2e;
+  --panel: #162033;
+  --ink: #e8eefc;
+  --mist: #9aabc8;
+  --accent: #5b8def;
+  --accent-2: #3d6fd4;
+  --felt: #1a2744;
+}
+
+html[data-theme="sunset"] {
+  --bg0: #1a1210;
+  --bg1: #2a1a14;
+  --panel: #322018;
+  --ink: #f6ebe3;
+  --mist: #c4a893;
+  --accent: #e0894a;
+  --accent-2: #c46a2e;
+  --felt: #3a2418;
+}
+
+.theme-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+}
+
+.theme-picker select {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid #ffffff22;
+  border-radius: 8px;
+  padding: 0.25rem 0.45rem;
+}
+
+.player-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px #ffffff33;
+}
+
+.my-tables-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.my-table-link {
+  display: grid;
+  gap: 0.15rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid #ffffff14;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 160ms ease, border-color 160ms ease;
+}
+
+.my-table-link:hover {
+  transform: translateY(-1px);
+  border-color: #ffffff33;
+}
+
+.hand-history-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: center;
+}
+
+.hand-replay {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #ffffff14;
+  text-align: left;
+}
+
+.hand-replay-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 0.35rem;
+}
+
+.between-hand {
+  animation: rise 280ms ease both;
+  border-color: #f4bc5644;
+}
+
+.turnstile-wrap {
+  min-height: 65px;
+}

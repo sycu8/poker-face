@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 import { VoicePanel } from "../voice/VoicePanel";
+import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
+import { PlayerAvatar } from "./PlayerAvatar";
 import { WinCelebration, winningPlayerIds } from "./WinCelebration";
 
 interface SeatView {
@@ -105,6 +107,7 @@ function useTurnSeconds(deadlineMs: number | null): number | null {
 }
 
 export function TablePage({ user }: { user: User }) {
+  const navigate = useNavigate();
   const { roomId = "" } = useParams();
   const [access, setAccess] = useState<"loading" | "member" | "pending" | "rejected">("loading");
   const [view, setView] = useState<GameView | null>(null);
@@ -113,6 +116,10 @@ export function TablePage({ user }: { user: User }) {
   const [pendingJoins, setPendingJoins] = useState<
     Array<{ requestId: string; userId: string; displayName: string }>
   >([]);
+  const [seatPick, setSeatPick] = useState<Record<string, number | "">>({});
+  const [openSeats, setOpenSeats] = useState<number[]>([]);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
   const [startRequests, setStartRequests] = useState<{
     count: number;
     latestDisplayName: string | null;
@@ -302,7 +309,25 @@ export function TablePage({ user }: { user: User }) {
     [view, user.id],
   );
 
+  const mySeat = useMemo(
+    () => view?.seats.find((s) => s.playerId === user.id) ?? null,
+    [view, user.id],
+  );
+
   const waitingToDeal = view?.street === "waiting";
+  const seatedReady = useMemo(
+    () => (view?.seats ?? []).filter((s) => s.playerId && s.stack > 0 && s.status !== "sitting_out").length,
+    [view],
+  );
+  const bustedSelf = Boolean(mySeat && mySeat.stack === 0);
+
+  useEffect(() => {
+    if (!isHost || !roomId || pendingJoins.length === 0) return;
+    void api
+      .openSeats(roomId)
+      .then((r) => setOpenSeats(r.openSeats))
+      .catch(() => setOpenSeats([]));
+  }, [isHost, roomId, pendingJoins.length, view?.sequence]);
 
   const startRequestLabel = useMemo(() => {
     if (startRequests.count <= 0) return null;
@@ -319,6 +344,55 @@ export function TablePage({ user }: { user: User }) {
     lastAskAtRef.current = now;
     setAskedToStart(true);
     send({ type: "request_start" });
+  }
+
+  async function leaveTable() {
+    if (!roomId) return;
+    setActionMsg(null);
+    try {
+      if (isHost) {
+        navigate("/");
+        return;
+      }
+      await api.leaveRoom(roomId);
+      navigate("/");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not leave.");
+    }
+  }
+
+  async function kickPlayer(targetUserId: string) {
+    if (!roomId) return;
+    setActionMsg(null);
+    try {
+      await api.kickPlayer(roomId, targetUserId);
+      setActionMsg("Player removed.");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not kick.");
+    }
+  }
+
+  async function doRebuy(targetUserId?: string) {
+    if (!roomId) return;
+    setActionMsg(null);
+    try {
+      const res = await api.rebuy(roomId, targetUserId ? { targetUserId } : {});
+      setActionMsg(res.message ?? "Stack reset.");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not rebuy.");
+    }
+  }
+
+  async function toggleAway() {
+    if (!roomId || !mySeat) return;
+    const away = mySeat.status !== "sitting_out";
+    setActionMsg(null);
+    try {
+      const res = await api.setAway(roomId, away);
+      setActionMsg(res.message ?? (away ? "Away." : "Back."));
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not update presence.");
+    }
   }
 
   const winnerNames = useMemo(() => {
@@ -503,13 +577,42 @@ export function TablePage({ user }: { user: User }) {
                 {askedToStart ? "Asked host" : "Ask host to start"}
               </button>
             ) : null}
-            <Link className="btn btn-secondary" to="/">
-              Leave table
-            </Link>
+            <button className="btn btn-secondary" type="button" onClick={() => void leaveTable()}>
+              {isHost ? "Back to lobby" : "Leave table"}
+            </button>
           </div>
         </div>
-        </div>
       </div>
+
+      {waitingToDeal && access === "member" ? (
+        <div className="panel between-hand" role="status" style={{ marginBottom: "1rem", textAlign: "center" }}>
+          <strong>
+            {view?.handNumber ? `Hand #${view.handNumber} complete` : "Waiting to deal"}
+          </strong>
+          <p className="muted" style={{ margin: "0.35rem 0 0" }}>
+            {seatedReady < 2
+              ? "Need at least two seated players with chips before the host can deal."
+              : isHost
+                ? "Everyone is ready when you are — deal the next hand."
+                : askedToStart
+                  ? "Host has been asked to deal. Hang tight."
+                  : "Waiting for the host to deal the next hand."}
+          </p>
+          {bustedSelf ? (
+            <div className="cta-row" style={{ marginTop: "0.75rem", justifyContent: "center" }}>
+              <button className="btn btn-primary" type="button" onClick={() => void doRebuy()}>
+                Rebuy play-money stack
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {actionMsg ? (
+        <p className="badge" role="status" style={{ marginBottom: "0.75rem" }}>
+          {actionMsg}
+        </p>
+      ) : null}
 
       {isHost && waitingToDeal && startRequestLabel ? (
         <div
@@ -549,6 +652,25 @@ export function TablePage({ user }: { user: User }) {
           {pendingJoins.map((j) => (
             <div key={j.requestId} className="join-request-row">
               <span>{j.displayName} asks to join</span>
+              <label className="muted" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                Seat
+                <select
+                  value={seatPick[j.requestId] ?? ""}
+                  onChange={(e) =>
+                    setSeatPick((m) => ({
+                      ...m,
+                      [j.requestId]: e.target.value === "" ? "" : Number(e.target.value),
+                    }))
+                  }
+                >
+                  <option value="">Auto</option>
+                  {openSeats.map((s) => (
+                    <option key={s} value={s}>
+                      #{s + 1}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <div className="cta-row">
                 <button
                   className="btn btn-primary"
@@ -558,10 +680,17 @@ export function TablePage({ user }: { user: User }) {
                       .decideJoin({
                         requestId: j.requestId,
                         approve: true,
+                        seatIndex:
+                          seatPick[j.requestId] === "" || seatPick[j.requestId] === undefined
+                            ? undefined
+                            : Number(seatPick[j.requestId]),
                         idempotencyKey: crypto.randomUUID(),
                       })
                       .then(() =>
                         setPendingJoins((list) => list.filter((x) => x.requestId !== j.requestId)),
+                      )
+                      .catch((e) =>
+                        setActionMsg(e instanceof Error ? e.message : "Could not approve."),
                       )
                   }
                 >
@@ -617,15 +746,40 @@ export function TablePage({ user }: { user: User }) {
               seat.playerId && winnerIdSet.has(seat.playerId) ? " seat--winner" : ""
             }`}
           >
-            <div className="name">
-              {seat.displayName ?? "Open seat"}
-              {seat.isViewer ? " (you)" : ""}
+            <div className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {seat.displayName ? <PlayerAvatar name={seat.displayName} size={28} /> : null}
+              <span>
+                {seat.displayName ?? "Open seat"}
+                {seat.isViewer ? " (you)" : ""}
+              </span>
             </div>
             <div className="muted">{seat.status.replaceAll("_", " ")}</div>
             {seat.playerId ? (
               <div className="stack">
                 {seat.stack} chips
                 {seat.betThisStreet > 0 ? ` · bet ${seat.betThisStreet}` : ""}
+              </div>
+            ) : null}
+            {seat.playerId && isHost && seat.playerId !== user.id ? (
+              <div className="cta-row" style={{ marginTop: 6 }}>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  style={{ fontSize: "0.8rem", padding: "0.25rem 0.55rem" }}
+                  onClick={() => void kickPlayer(seat.playerId!)}
+                >
+                  Kick
+                </button>
+                {seat.stack === 0 ? (
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    style={{ fontSize: "0.8rem", padding: "0.25rem 0.55rem" }}
+                    onClick={() => void doRebuy(seat.playerId!)}
+                  >
+                    Rebuy
+                  </button>
+                ) : null}
               </div>
             ) : null}
             {seat.holeCards ? (
@@ -768,7 +922,24 @@ export function TablePage({ user }: { user: User }) {
             </button>
           </form>
         </div>
-        <VoicePanel roomId={roomId} />
+        <div className="panel">
+          <div className="cta-row" style={{ justifyContent: "center", marginBottom: "0.5rem" }}>
+            {isSeated && waitingToDeal ? (
+              <button className="btn btn-secondary" type="button" onClick={() => void toggleAway()}>
+                {mySeat?.status === "sitting_out" ? "I am back" : "Sit out / away"}
+              </button>
+            ) : null}
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setShowHistory((v) => !v)}
+            >
+              {showHistory ? "Hide hand history" : "Hand history"}
+            </button>
+          </div>
+          {showHistory && roomId ? <HandHistoryPanel roomId={roomId} /> : null}
+          {roomId ? <VoicePanel roomId={roomId} /> : null}
+        </div>
         {isHost ? (
           <div className="panel">
             <strong>Table rules</strong>

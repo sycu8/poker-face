@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 type Mode = "login" | "register" | "reset";
 
@@ -31,10 +32,20 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const onToken = useCallback((token: string | null) => setTurnstileToken(token), []);
 
   useEffect(() => {
     setMode(modeFromUrl);
   }, [modeFromUrl]);
+
+  useEffect(() => {
+    void api
+      .config()
+      .then((cfg) => setSiteKey(cfg.turnstileSiteKey || null))
+      .catch(() => setSiteKey(null));
+  }, []);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -42,6 +53,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
     setInfo(null);
     setPassword("");
     setConfirmPassword("");
+    setTurnstileToken(null);
     navigate(pathForMode(next), { replace: true });
   }
 
@@ -60,6 +72,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           username,
           email,
           newPassword: password,
+          turnstileToken: turnstileToken ?? undefined,
         });
         setPassword("");
         setConfirmPassword("");
@@ -74,10 +87,15 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           email,
           password,
           displayName: displayName.trim() || undefined,
+          turnstileToken: turnstileToken ?? undefined,
         });
         onAuthed(user);
       } else {
-        const { user } = await api.login({ username, password });
+        const { user } = await api.login({
+          username,
+          password,
+          turnstileToken: turnstileToken ?? undefined,
+        });
         onAuthed(user);
       }
       navigate("/");
@@ -89,7 +107,11 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   }
 
   const title =
-    mode === "register" ? "Create your seat." : mode === "reset" ? "Reset your password." : "Deal everyone in.";
+    mode === "register"
+      ? "Create your seat."
+      : mode === "reset"
+        ? "Reset your password."
+        : "Deal everyone in.";
   const subtitle =
     mode === "register"
       ? "Sign up with a username, email, and password to host or join a private table. Virtual chips only."
@@ -183,9 +205,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            placeholder={
-              mode === "login" ? "Your password" : "At least 8 characters"
-            }
+            placeholder={mode === "login" ? "Your password" : "At least 8 characters"}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
             required
             minLength={8}
@@ -209,6 +229,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             />
           </div>
         ) : null}
+        <TurnstileWidget siteKey={siteKey} onToken={onToken} />
         {error ? (
           <p role="alert" style={{ color: "var(--danger)", textAlign: "center" }}>
             {error}
