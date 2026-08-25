@@ -43,8 +43,7 @@ export function HomePage({
         idempotencyKey: crypto.randomUUID(),
       });
       setMessage(res.message ?? "Waiting for the host");
-      if (res.status === "approved" && res.roomId) navigate(`/table/${res.roomId}`);
-      else if (res.roomId) navigate(`/table/${res.roomId}`);
+      if (res.roomId) navigate(`/table/${res.roomId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not ask to join.");
     }

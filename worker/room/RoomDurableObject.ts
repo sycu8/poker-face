@@ -33,6 +33,8 @@ export class RoomDurableObject extends DurableObject<Env> {
   private game: GameState | null = null;
   private roomId: string | null = null;
   private hostUserId: string | null = null;
+  private roomName: string | null = null;
+  private inviteCode: string | null = null;
   private chat: ChatMessage[] = [];
   private pendingJoins: Array<{
     requestId: string;
@@ -62,6 +64,8 @@ export class RoomDurableObject extends DurableObject<Env> {
         const snap = JSON.parse(row.value) as {
           roomId: string;
           hostUserId: string;
+          roomName?: string;
+          inviteCode?: string;
           game: GameState;
           chat: ChatMessage[];
           pendingJoins: Array<{
@@ -72,6 +76,8 @@ export class RoomDurableObject extends DurableObject<Env> {
         };
         this.roomId = snap.roomId;
         this.hostUserId = snap.hostUserId;
+        this.roomName = snap.roomName ?? null;
+        this.inviteCode = snap.inviteCode ?? null;
         this.game = snap.game;
         this.chat = snap.chat ?? [];
         this.pendingJoins = snap.pendingJoins ?? [];
@@ -84,6 +90,8 @@ export class RoomDurableObject extends DurableObject<Env> {
     const value = JSON.stringify({
       roomId: this.roomId,
       hostUserId: this.hostUserId,
+      roomName: this.roomName,
+      inviteCode: this.inviteCode,
       game: this.game,
       chat: this.chat.slice(-100),
       pendingJoins: this.pendingJoins,
@@ -116,6 +124,12 @@ export class RoomDurableObject extends DurableObject<Env> {
       JSON.stringify({
         type: "snapshot",
         view,
+        meta: {
+          roomId: this.roomId,
+          roomName: this.roomName,
+          inviteCode: this.inviteCode,
+          hostUserId: this.hostUserId,
+        },
         chat: this.chat.slice(-50),
         pendingJoins: att?.userId === this.hostUserId ? this.pendingJoins : undefined,
       }),
@@ -129,10 +143,14 @@ export class RoomDurableObject extends DurableObject<Env> {
         roomId: string;
         hostUserId: string;
         hostDisplayName: string;
+        roomName?: string;
+        inviteCode?: string;
         config: TableConfig;
       };
       this.roomId = body.roomId;
       this.hostUserId = body.hostUserId;
+      this.roomName = body.roomName ?? "Friends table";
+      this.inviteCode = body.inviteCode ?? null;
       this.game = createInitialGameState(body.config);
       seatPlayer(this.game, body.hostUserId, body.hostDisplayName, 0);
       this.persist();
@@ -148,7 +166,58 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.pendingJoins.push(body);
       this.persist();
       this.broadcast({ type: "join_request", ...body });
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
       return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/reject" && request.method === "POST") {
+      const body = (await request.json()) as { requestId: string; userId: string };
+      this.pendingJoins = this.pendingJoins.filter((j) => j.requestId !== body.requestId);
+      this.persist();
+      this.broadcast({ type: "join_rejected", requestId: body.requestId, userId: body.userId });
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/config" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as {
+        smallBlind?: number;
+        startingStack?: number;
+        potCapMultiplier?: number;
+      };
+      const pending = {
+        ...(body.smallBlind !== undefined ? { smallBlind: body.smallBlind } : {}),
+        ...(body.startingStack !== undefined ? { startingStack: body.startingStack } : {}),
+        ...(body.potCapMultiplier !== undefined
+          ? { potCapMultiplier: body.potCapMultiplier }
+          : {}),
+      };
+      if (this.game.street === "waiting") {
+        const next = {
+          ...this.game.config,
+          ...(pending.smallBlind !== undefined
+            ? { smallBlind: pending.smallBlind, bigBlind: pending.smallBlind * 2 }
+            : {}),
+          ...(pending.startingStack !== undefined
+            ? { startingStack: pending.startingStack }
+            : {}),
+          ...(pending.potCapMultiplier !== undefined
+            ? { potCapMultiplier: pending.potCapMultiplier }
+            : {}),
+        };
+        this.game.config = next;
+        this.game.pendingConfig = null;
+        this.game.sequence += 1;
+        this.persist();
+        for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+        return Response.json({ ok: true, pending: false });
+      }
+      this.game.pendingConfig = { ...this.game.pendingConfig, ...pending };
+      this.game.sequence += 1;
+      this.persist();
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true, pending: true });
     }
 
     if (url.pathname === "/approve" && request.method === "POST") {

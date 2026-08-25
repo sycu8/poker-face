@@ -3,11 +3,12 @@ import type { Env } from "../env";
 import {
   clearSessionCookie,
   createSession,
+  readSessionToken,
   requireUser,
   sessionCookieHeader,
 } from "./session";
 import { hashPassword, verifyPassword } from "./password";
-import { errorJson, json, randomId, readJson } from "../lib/http";
+import { errorJson, json, randomId, readJson, sha256Hex } from "../lib/http";
 
 const usernameSchema = z
   .string()
@@ -67,6 +68,15 @@ export async function handleAuth(
   }
 
   if (path === "/api/auth/logout" && request.method === "POST") {
+    const token = readSessionToken(request);
+    if (token && env.SESSION_SECRET) {
+      const tokenHash = await sha256Hex(`${env.SESSION_SECRET}:${token}`);
+      await env.DB.prepare(
+        `UPDATE sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL`,
+      )
+        .bind(Date.now(), tokenHash)
+        .run();
+    }
     return new Response(JSON.stringify({ ok: true }), {
       headers: {
         "content-type": "application/json",

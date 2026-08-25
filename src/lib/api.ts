@@ -18,11 +18,49 @@ async function parse<T>(res: Response): Promise<T> {
   return data as T;
 }
 
+export type RoomAccess =
+  | {
+      access: "member";
+      room: {
+        id: string;
+        name: string;
+        inviteCode: string;
+        hostUserId: string;
+        smallBlind: number;
+        bigBlind: number;
+        startingStack: number;
+        potCapMultiplier: number;
+        status: string;
+      };
+      member: { role: string; seat_index: number | null; display_name: string; status: string };
+    }
+  | {
+      access: "pending";
+      room: {
+        id: string;
+        name: string;
+        inviteCode: string;
+        hostUserId: string;
+        smallBlind: number;
+        bigBlind: number;
+      };
+      requestId: string;
+      message: string;
+    }
+  | {
+      access: "rejected";
+      room: { id: string; name: string };
+      message: string;
+    };
+
 export const api = {
-  config: () => fetch("/api/config").then((r) => parse<{
-    turnstileSiteKey: string;
-    copy: { tagline: string; support: string; chips: string };
-  }>(r)),
+  config: () =>
+    fetch("/api/config").then((r) =>
+      parse<{
+        turnstileSiteKey: string;
+        copy: { tagline: string; support: string; chips: string };
+      }>(r),
+    ),
   me: () =>
     fetch("/api/auth/me", { credentials: "include" }).then(async (r) => {
       if (r.status === 401) return { user: null as User | null };
@@ -62,6 +100,8 @@ export const api = {
         room: { id: string; inviteCode: string; name: string; config: unknown };
       }>(r),
     ),
+  getRoom: (roomId: string) =>
+    fetch(`/api/rooms/${roomId}`, { credentials: "include" }).then((r) => parse<RoomAccess>(r)),
   joinRequest: (body: {
     inviteCode: string;
     idempotencyKey: string;
@@ -72,7 +112,9 @@ export const api = {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    }).then((r) => parse<{ status: string; roomId?: string; requestId?: string; message?: string }>(r)),
+    }).then((r) =>
+      parse<{ status: string; roomId?: string; requestId?: string; message?: string }>(r),
+    ),
   decideJoin: (body: {
     requestId: string;
     approve: boolean;
@@ -85,6 +127,18 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ status: string; message?: string }>(r)),
+  updateRoomConfig: (
+    roomId: string,
+    body: { smallBlind?: number; startingStack?: number; potCapMultiplier?: number },
+  ) =>
+    fetch(`/api/rooms/${roomId}/config`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) =>
+      parse<{ status: string; pending?: boolean; message?: string; config?: unknown }>(r),
+    ),
   voiceToken: (roomId: string) =>
     fetch(`/api/rooms/${roomId}/voice-token`, {
       method: "POST",

@@ -25,6 +25,12 @@ const decideSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
 });
 
+const updateConfigSchema = z.object({
+  smallBlind: z.number().int().positive().optional(),
+  startingStack: z.number().int().min(10).max(1000).optional(),
+  potCapMultiplier: z.number().min(1).max(10).optional(),
+});
+
 export async function handleRooms(
   request: Request,
   env: Env,
@@ -75,6 +81,8 @@ export async function handleRooms(
         roomId,
         hostUserId: auth.user.id,
         hostDisplayName: auth.user.displayName,
+        roomName: parsed.data.name,
+        inviteCode: code,
         config: cfg.config,
       }),
     });
@@ -196,7 +204,13 @@ export async function handleRooms(
       )
         .bind(now, jr.id)
         .run();
-      return json({ status: "rejected" });
+      const stub = env.ROOM.get(env.ROOM.idFromName(jr.room_id));
+      await stub.fetch("https://room/reject", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ requestId: jr.id, userId: jr.user_id }),
+      });
+      return json({ status: "rejected", message: "Join request declined." });
     }
 
     const stub = env.ROOM.get(env.ROOM.idFromName(jr.room_id));
@@ -240,22 +254,164 @@ export async function handleRooms(
     });
   }
 
+  const configMatch = path.match(/^\/api\/rooms\/([^/]+)\/config$/);
+  if (configMatch && request.method === "POST") {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    const roomId = configMatch[1]!;
+    const parsed = await readJson(request, updateConfigSchema);
+    if (!parsed.ok) return parsed.response;
+    const room = await env.DB.prepare(`SELECT * FROM rooms WHERE id = ?`)
+      .bind(roomId)
+      .first<{
+        host_user_id: string;
+        small_blind: number;
+        starting_stack: number;
+        pot_cap_multiplier: number;
+      }>();
+    if (!room) return errorJson(404, "Table not found.");
+    if (room.host_user_id !== auth.user.id) {
+      return errorJson(403, "Only the host can change table rules.");
+    }
+    const nextSmall = parsed.data.smallBlind ?? room.small_blind;
+    const nextStack = parsed.data.startingStack ?? room.starting_stack;
+    const nextCap = parsed.data.potCapMultiplier ?? room.pot_cap_multiplier;
+    const cfg = validateConfigInput({
+      smallBlind: nextSmall,
+      startingStack: nextStack,
+      potCapMultiplier: nextCap,
+    });
+    if (!cfg.ok) return errorJson(400, cfg.error);
+
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const doRes = await stub.fetch("https://room/config", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        smallBlind: parsed.data.smallBlind,
+        startingStack: parsed.data.startingStack,
+        potCapMultiplier: parsed.data.potCapMultiplier,
+      }),
+    });
+    const doBody = (await doRes.json()) as { ok: boolean; error?: string; pending?: boolean };
+    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not update rules.");
+
+    await env.DB.prepare(
+      `UPDATE rooms SET small_blind = ?, big_blind = ?, starting_stack = ?, pot_cap_multiplier = ?, updated_at = ?
+       WHERE id = ?`,
+    )
+      .bind(
+        cfg.config.smallBlind,
+        cfg.config.bigBlind,
+        cfg.config.startingStack,
+        cfg.config.potCapMultiplier,
+        Date.now(),
+        roomId,
+      )
+      .run();
+
+    return json({
+      status: "ok",
+      pending: Boolean(doBody.pending),
+      config: cfg.config,
+      message: doBody.pending
+        ? "Rules update after the next hand starts."
+        : "Table rules updated.",
+    });
+  }
+
   const roomMatch = path.match(/^\/api\/rooms\/([^/]+)$/);
   if (roomMatch && request.method === "GET") {
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
     const roomId = roomMatch[1]!;
-    const room = await env.DB.prepare(`SELECT * FROM rooms WHERE id = ?`)
+    const room = await env.DB.prepare(
+      `SELECT id, host_user_id, name, invite_code, small_blind, big_blind, starting_stack, pot_cap_multiplier, status
+       FROM rooms WHERE id = ?`,
+    )
       .bind(roomId)
-      .first();
+      .first<{
+        id: string;
+        host_user_id: string;
+        name: string;
+        invite_code: string;
+        small_blind: number;
+        big_blind: number;
+        starting_stack: number;
+        pot_cap_multiplier: number;
+        status: string;
+      }>();
     if (!room) return errorJson(404, "Table not found.");
+
     const member = await env.DB.prepare(
-      `SELECT * FROM room_members WHERE room_id = ? AND user_id = ?`,
+      `SELECT role, seat_index, display_name, status FROM room_members WHERE room_id = ? AND user_id = ?`,
+    )
+      .bind(roomId, auth.user.id)
+      .first<{
+        role: string;
+        seat_index: number | null;
+        display_name: string;
+        status: string;
+      }>();
+
+    if (member) {
+      return json({
+        access: "member",
+        room: {
+          id: room.id,
+          name: room.name,
+          inviteCode: room.invite_code,
+          hostUserId: room.host_user_id,
+          smallBlind: room.small_blind,
+          bigBlind: room.big_blind,
+          startingStack: room.starting_stack,
+          potCapMultiplier: room.pot_cap_multiplier,
+          status: room.status,
+        },
+        member,
+      });
+    }
+
+    const pending = await env.DB.prepare(
+      `SELECT id, status FROM join_requests
+       WHERE room_id = ? AND user_id = ? AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 1`,
+    )
+      .bind(roomId, auth.user.id)
+      .first<{ id: string; status: string }>();
+
+    if (pending) {
+      return json({
+        access: "pending",
+        room: {
+          id: room.id,
+          name: room.name,
+          inviteCode: room.invite_code,
+          hostUserId: room.host_user_id,
+          smallBlind: room.small_blind,
+          bigBlind: room.big_blind,
+        },
+        requestId: pending.id,
+        message: "Waiting for the host",
+      });
+    }
+
+    const rejected = await env.DB.prepare(
+      `SELECT id FROM join_requests
+       WHERE room_id = ? AND user_id = ? AND status = 'rejected'
+       ORDER BY created_at DESC LIMIT 1`,
     )
       .bind(roomId, auth.user.id)
       .first();
-    if (!member) return errorJson(403, "Ask to join this table first.");
-    return json({ room, member });
+    if (rejected) {
+      return json({
+        access: "rejected",
+        room: { id: room.id, name: room.name },
+        message: "The host declined this join request.",
+      });
+    }
+
+    return errorJson(403, "Ask to join this table first.");
   }
 
   return null;
