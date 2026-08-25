@@ -14,6 +14,9 @@ const optional = [
   "REALTIMEKIT_APP_ID",
   "REALTIMEKIT_PRESET_NAME",
   "CLOUDFLARE_ACCOUNT_ID",
+  // Optional Calls TURN key (ops / custom WebRTC). RealtimeKit voice does not require these.
+  "TURN_KEY_ID",
+  "TURN_KEY_API_TOKEN",
 ];
 
 const missing = required.filter((k) => !process.env[k]);
