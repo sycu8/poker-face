@@ -51,6 +51,7 @@ See `docs/BRAND_GUIDE.md` and `logo/`.
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Worker / DO / D1 layout
 - [`docs/BRAND_GUIDE.md`](docs/BRAND_GUIDE.md) — brand and copy
 - [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md) — staging/production deploy
+- [`docs/VOICE_SETUP.md`](docs/VOICE_SETUP.md) — RealtimeKit voice + optional TURN secrets
 
 ## Environments
 

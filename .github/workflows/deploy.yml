@@ -92,6 +92,9 @@ jobs:
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY_STAGING }}
           REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
           REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
+          REALTIMEKIT_PRESET_NAME: ${{ secrets.REALTIMEKIT_PRESET_NAME }}
+          TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
+          TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
@@ -170,6 +173,9 @@ jobs:
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY_PRODUCTION }}
           REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
           REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
+          REALTIMEKIT_PRESET_NAME: ${{ secrets.REALTIMEKIT_PRESET_NAME }}
+          TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
+          TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi

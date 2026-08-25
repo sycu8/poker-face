@@ -15,12 +15,16 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | Secret | Purpose |
 | --- | --- |
 | `TURNSTILE_SECRET_KEY` | Turnstile siteverify |
-| `REALTIMEKIT_API_TOKEN` | Voice participant provisioning |
+| `REALTIMEKIT_API_TOKEN` | Voice: Cloudflare API token with **Realtime Admin** (not a Calls TURN key token) |
 | `REALTIMEKIT_APP_ID` | RealtimeKit app id (can also be a variable) |
+| `REALTIMEKIT_PRESET_NAME` | RealtimeKit preset for participants (default `group_call_participant`) |
 | `SESSION_SECRET_STAGING` / `SESSION_SECRET_PRODUCTION` | Per-environment session secrets |
 | `TURNSTILE_SECRET_KEY_STAGING` / `TURNSTILE_SECRET_KEY_PRODUCTION` | Per-environment Turnstile |
 | `D1_DATABASE_ID_STAGING` / `D1_DATABASE_ID_PRODUCTION` | Optional; auto-created if omitted |
 | `KV_NAMESPACE_ID_STAGING` / `KV_NAMESPACE_ID_PRODUCTION` | Optional; auto-created if omitted |
+| `TURN_KEY_ID` / `TURN_KEY_API_TOKEN` | Optional Calls TURN key (ops only; RealtimeKit voice does not need them) |
+
+Voice setup details: [`docs/VOICE_SETUP.md`](VOICE_SETUP.md).
 
 ## Optional repository / environment variables
 
@@ -30,6 +34,7 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | `APP_ORIGIN_PRODUCTION` | `https://poker.orangecloud.vn` |
 | `TURNSTILE_SITE_KEY_STAGING` / `_PRODUCTION` | empty until widgets exist |
 | `REALTIMEKIT_APP_ID` | — |
+| `REALTIMEKIT_PRESET_NAME` | `group_call_participant` |
 
 Create GitHub Environments named `staging` and `production` (workflow references them). Add protection rules on `production` if desired.
 
