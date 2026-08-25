@@ -1,9 +1,19 @@
 export type User = { id: string; displayName: string; username?: string | null };
 
 async function parse<T>(res: Response): Promise<T> {
-  const data = await res.json();
+  const text = await res.text();
+  let data: unknown;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      res.ok
+        ? "Server returned a non-JSON response."
+        : `Request failed (${res.status}). Try refreshing the page.`,
+    );
+  }
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? "Request failed");
+    throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
   }
   return data as T;
 }
