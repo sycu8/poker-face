@@ -40,6 +40,16 @@ Create GitHub Environments named `staging` and `production` (workflow references
 - **Manual:** Actions → Deploy Cloudflare → Run workflow → `all` / `staging` / `production`
 - **Automatic:** push to `main` deploys staging then production
 
+## Vite + Cloudflare environments
+
+This app uses `@cloudflare/vite-plugin`. Cloudflare envs are selected at **build** time:
+
+1. `ci-prepare-wrangler.mjs` patches real D1/KV IDs into `wrangler.jsonc`
+2. `CLOUDFLARE_ENV=staging|production npm run build` flattens that env into `dist/poker_faces/wrangler.json` (including `assets.directory`)
+3. `wrangler deploy` (no `--env`) deploys the generated config
+
+Do not run `wrangler deploy --env staging` against source `wrangler.jsonc` — it lacks `assets.directory` and will fail.
+
 ## Token permissions
 
 The Cloudflare API token needs at least:
