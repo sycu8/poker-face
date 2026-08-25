@@ -102,6 +102,12 @@ export function TablePage({ user }: { user: User }) {
   const [pendingJoins, setPendingJoins] = useState<
     Array<{ requestId: string; userId: string; displayName: string }>
   >([]);
+  const [startRequests, setStartRequests] = useState<{
+    count: number;
+    latestDisplayName: string | null;
+    requesters: Array<{ userId: string; displayName: string }>;
+  }>({ count: 0, latestDisplayName: null, requesters: [] });
+  const [askedToStart, setAskedToStart] = useState(false);
   const [status, setStatus] = useState("Connecting…");
   const [chatText, setChatText] = useState("");
   const [raiseTo, setRaiseTo] = useState(0);
@@ -112,6 +118,7 @@ export function TablePage({ user }: { user: User }) {
   const [editStack, setEditStack] = useState(100);
   const [editCap, setEditCap] = useState(2);
   const wsRef = useRef<WebSocket | null>(null);
+  const lastAskAtRef = useRef(0);
   const turnLeft = useTurnSeconds(view?.turnDeadlineMs ?? null);
 
   const refreshAccess = useCallback(async () => {
@@ -165,6 +172,17 @@ export function TablePage({ user }: { user: User }) {
         meta?: RoomMeta;
         chat?: ChatMessage[];
         pendingJoins?: typeof pendingJoins;
+        startRequests?: {
+          count: number;
+          latestDisplayName: string | null;
+          requesters: Array<{ userId: string; displayName: string }>;
+        };
+        askedToStart?: boolean;
+        count?: number;
+        latestDisplayName?: string | null;
+        requesters?: Array<{ userId: string; displayName: string }>;
+        displayName?: string;
+        userId?: string;
         message?: ChatMessage;
         error?: string;
       };
@@ -176,6 +194,12 @@ export function TablePage({ user }: { user: User }) {
         else if (msg.pendingJoins === undefined && msg.meta?.hostUserId !== user.id) {
           /* keep */
         }
+        if (msg.startRequests) setStartRequests(msg.startRequests);
+        else if (msg.view.street !== "waiting") {
+          setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+        }
+        if (typeof msg.askedToStart === "boolean") setAskedToStart(msg.askedToStart);
+        else if (msg.view.street !== "waiting") setAskedToStart(false);
         setStatus("At the table.");
       }
       if (msg.type === "chat" && msg.message) {
@@ -191,6 +215,24 @@ export function TablePage({ user }: { user: User }) {
           setPendingJoins((list) =>
             list.some((x) => x.requestId === jr.requestId) ? list : [...list, jr],
           );
+        }
+      }
+      if (msg.type === "start_request") {
+        setStartRequests({
+          count: msg.count ?? 0,
+          latestDisplayName: msg.latestDisplayName ?? msg.displayName ?? null,
+          requesters: msg.requesters ?? [],
+        });
+        if (msg.userId === user.id) setAskedToStart(true);
+      }
+      if (msg.type === "start_request_ack") {
+        setAskedToStart(true);
+        if (typeof msg.count === "number") {
+          setStartRequests({
+            count: msg.count,
+            latestDisplayName: msg.latestDisplayName ?? null,
+            requesters: msg.requesters ?? [],
+          });
         }
       }
       if (msg.type === "error" && msg.error) setStatus(msg.error);
@@ -243,6 +285,30 @@ export function TablePage({ user }: { user: User }) {
     () => meta?.hostUserId === user.id || view?.seats.some((s) => s.seatIndex === 0 && s.playerId === user.id),
     [meta, view, user.id],
   );
+
+  const isSeated = useMemo(
+    () => Boolean(view?.seats.some((s) => s.playerId === user.id)),
+    [view, user.id],
+  );
+
+  const waitingToDeal = view?.street === "waiting";
+
+  const startRequestLabel = useMemo(() => {
+    if (startRequests.count <= 0) return null;
+    if (startRequests.count === 1) {
+      return `${startRequests.latestDisplayName ?? "A player"} asks to start`;
+    }
+    const latest = startRequests.latestDisplayName ?? "a player";
+    return `${startRequests.count} players want to start · latest: ${latest}`;
+  }, [startRequests]);
+
+  function askHostToStart() {
+    const now = Date.now();
+    if (now - lastAskAtRef.current < 2_000) return;
+    lastAskAtRef.current = now;
+    setAskedToStart(true);
+    send({ type: "request_start" });
+  }
 
   const winnerNames = useMemo(() => {
     if (!view?.lastHandResult) return null;
@@ -382,15 +448,32 @@ export function TablePage({ user }: { user: User }) {
             <p className="muted">Rule changes pending for the next hand.</p>
           ) : null}
         </div>
-        <div className="cta-row">
+        <div className="cta-row" style={{ justifyContent: "center" }}>
           {meta?.inviteCode ? (
             <button className="btn btn-secondary" type="button" onClick={() => void shareInvite()}>
               {shareMsg ?? "Share table"}
             </button>
           ) : null}
           {isHost ? (
-            <button className="btn btn-primary" type="button" onClick={() => send({ type: "start_hand" })}>
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => {
+                setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+                send({ type: "start_hand" });
+              }}
+            >
               Deal everyone in
+            </button>
+          ) : null}
+          {!isHost && waitingToDeal && isSeated ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={askedToStart}
+              onClick={askHostToStart}
+            >
+              {askedToStart ? "Asked host" : "Ask host to start"}
             </button>
           ) : null}
           <Link className="btn btn-secondary" to="/">
@@ -398,6 +481,38 @@ export function TablePage({ user }: { user: User }) {
           </Link>
         </div>
       </div>
+
+      {isHost && waitingToDeal && startRequestLabel ? (
+        <div
+          className="panel"
+          style={{
+            marginBottom: "1rem",
+            borderColor: "#f4bc5666",
+            display: "grid",
+            gap: "0.75rem",
+            justifyItems: "center",
+            textAlign: "center",
+          }}
+          role="status"
+        >
+          <strong>{startRequestLabel}</strong>
+          <p className="muted" style={{ margin: 0 }}>
+            Ready when you are — deal is still yours to start.
+          </p>
+          <div className="cta-row" style={{ justifyContent: "center" }}>
+            <button
+              className="btn btn-primary"
+              type="button"
+              onClick={() => {
+                setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+                send({ type: "start_hand" });
+              }}
+            >
+              Deal everyone in
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {pendingJoins.length > 0 && isHost ? (
         <div className="panel" style={{ marginBottom: "1rem" }}>
