@@ -44,9 +44,13 @@ npm run dev
 
 See `docs/BRAND_GUIDE.md` and `logo/`.
 
-## Game rules
+## Docs
 
-See `docs/GAME_RULES.md`.
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped state, gaps, and phased product plan
+- [`docs/GAME_RULES.md`](docs/GAME_RULES.md) — play-money rules
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Worker / DO / D1 layout
+- [`docs/BRAND_GUIDE.md`](docs/BRAND_GUIDE.md) — brand and copy
+- [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md) — staging/production deploy
 
 ## Environments
 
