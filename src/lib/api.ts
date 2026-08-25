@@ -1,4 +1,9 @@
-export type User = { id: string; displayName: string; username?: string | null };
+export type User = {
+  id: string;
+  displayName: string;
+  username?: string | null;
+  isGuest?: boolean;
+};
 
 async function parse<T>(res: Response): Promise<T> {
   const text = await res.text();
@@ -53,6 +58,19 @@ export type RoomAccess =
       message: string;
     };
 
+export type LedgerSnapshot = {
+  players: Array<{
+    userId: string;
+    displayName: string;
+    buyIn: number;
+    buyOut: number;
+    currentStack: number;
+    net: number;
+    active: boolean;
+  }>;
+  totals: { buyIn: number; buyOut: number; currentStack: number; net: number };
+};
+
 export const api = {
   config: () =>
     fetch("/api/config").then((r) =>
@@ -93,6 +111,13 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
+  guest: (body: { displayName: string; turnstileToken?: string }) =>
+    fetch("/api/auth/guest", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => parse<{ user: User; privacyNote?: string }>(r)),
   resetPassword: (body: {
     username: string;
     email: string;
@@ -148,7 +173,8 @@ export const api = {
   decideJoin: (body: {
     requestId: string;
     approve: boolean;
-    seatIndex?: number;
+    seatIndex?: number | null;
+    asSpectator?: boolean;
     idempotencyKey: string;
   }) =>
     fetch("/api/rooms/join-decision", {
@@ -156,7 +182,9 @@ export const api = {
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
-    }).then((r) => parse<{ status: string; message?: string; seatIndex?: number }>(r)),
+    }).then((r) =>
+      parse<{ status: string; message?: string; seatIndex?: number; spectator?: boolean }>(r),
+    ),
   openSeats: (roomId: string) =>
     fetch(`/api/rooms/${roomId}/open-seats`, { credentials: "include" }).then((r) =>
       parse<{ openSeats: number[] }>(r),
@@ -187,6 +215,58 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ away }),
     }).then((r) => parse<{ status: string; message?: string }>(r)),
+  pauseRoom: (roomId: string, paused: boolean) =>
+    fetch(`/api/rooms/${roomId}/pause`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ paused }),
+    }).then((r) => parse<{ status: string; paused?: boolean; message?: string }>(r)),
+  transferHost: (roomId: string, targetUserId: string) =>
+    fetch(`/api/rooms/${roomId}/transfer-host`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ targetUserId }),
+    }).then((r) => parse<{ status: string; hostUserId?: string; message?: string }>(r)),
+  closeRoom: (roomId: string) =>
+    fetch(`/api/rooms/${roomId}/close`, {
+      method: "POST",
+      credentials: "include",
+    }).then((r) => parse<{ status: string; message?: string }>(r)),
+  getLedger: (roomId: string) =>
+    fetch(`/api/rooms/${roomId}/ledger`, { credentials: "include" }).then((r) =>
+      parse<{ ledger: LedgerSnapshot }>(r),
+    ),
+  downloadLedgerCsv: async (roomId: string) => {
+    const res = await fetch(`/api/rooms/${roomId}/ledger?format=csv`, {
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      let message = `Request failed (${res.status})`;
+      try {
+        message = (JSON.parse(text) as { error?: string }).error ?? message;
+      } catch {
+        /* keep */
+      }
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ledger-${roomId}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  seatPlayer: (roomId: string, body: { targetUserId: string; seatIndex?: number }) =>
+    fetch(`/api/rooms/${roomId}/seat`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => parse<{ status: string; seatIndex?: number; message?: string }>(r)),
   listHands: (roomId: string) =>
     fetch(`/api/rooms/${roomId}/hands`, { credentials: "include" }).then((r) =>
       parse<{ hands: HandSummaryListItem[] }>(r),
@@ -203,7 +283,12 @@ export const api = {
     ),
   updateRoomConfig: (
     roomId: string,
-    body: { smallBlind?: number; startingStack?: number; potCapMultiplier?: number },
+    body: {
+      smallBlind?: number;
+      startingStack?: number;
+      potCapMultiplier?: number;
+      timeBankSeconds?: number;
+    },
   ) =>
     fetch(`/api/rooms/${roomId}/config`, {
       method: "POST",

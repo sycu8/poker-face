@@ -85,6 +85,7 @@ export function App() {
             <>
               <span className="badge" aria-label={`Signed in as ${user.displayName}`}>
                 {user.displayName}
+                {user.isGuest ? " · guest" : ""}
               </span>
               <button
                 className="btn btn-secondary"
@@ -102,6 +103,9 @@ export function App() {
             <>
               <Link className="btn btn-secondary" to="/auth">
                 Sign in
+              </Link>
+              <Link className="btn btn-secondary" to="/auth?mode=guest">
+                Continue as guest
               </Link>
               <Link className="btn btn-primary" to="/auth?mode=register">
                 Sign up
