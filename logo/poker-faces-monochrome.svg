@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Poker Faces">
+  <title>Poker Faces monochrome mark</title>
+  <!-- Uses currentColor so hosts can theme via CSS color. Default: Night. -->
+  <g fill="currentColor" color="#07100D">
+    <!-- Back card (outline + F) -->
+    <g transform="translate(34 32) rotate(14) translate(-18 -26)">
+      <rect x="1.25" y="1.25" width="33.5" height="49.5" rx="4" fill="none" stroke="currentColor" stroke-width="2.5"/>
+      <path d="M12 15h14.5v4.5H16.8v4.8h8.2v4.3H16.8V38H12V15z"/>
+    </g>
+    <!-- Front card (solid) with P counter punched via mask -->
+    <mask id="monoP">
+      <rect width="64" height="64" fill="#fff"/>
+      <g transform="translate(26 32) rotate(-12) translate(-18 -26)">
+        <path fill="#000" d="M11.5 14.5h6.6c4 0 6.4 2.3 6.4 5.9s-2.4 5.9-6.4 5.9H16v9H11.5v-20.8zm4.5 8.7h1.75c1.9 0 3.05-1.05 3.05-2.85s-1.15-2.85-3.05-2.85H16v5.7z"/>
+        <circle cx="28.5" cy="11.5" r="1.7" fill="#000"/>
+      </g>
+    </mask>
+    <g mask="url(#monoP)">
+      <g transform="translate(26 32) rotate(-12) translate(-18 -26)">
+        <rect x="0" y="0" width="36" height="52" rx="4.5"/>
+      </g>
+    </g>
+  </g>
+</svg>

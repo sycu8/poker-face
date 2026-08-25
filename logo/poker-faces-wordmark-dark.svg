@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 72" role="img" aria-label="Poker Faces">
+  <title>Poker Faces wordmark (dark surfaces)</title>
+  <defs>
+    <filter id="soft" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="1" stdDeviation="0.55" flood-color="#07100D" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+  <!-- Mark -->
+  <g transform="translate(4 4)">
+    <g transform="translate(34 32) rotate(14) translate(-18 -26)" filter="url(#soft)">
+      <rect x="0" y="0" width="36" height="52" rx="4.5" fill="#0F4C35" stroke="#F4BC56" stroke-width="2"/>
+      <path fill="#F6F2E7" d="M11 14h15.5v4.8H16.2v5.2h8.8v4.6H16.2V38H11V14z"/>
+    </g>
+    <g transform="translate(26 32) rotate(-12) translate(-18 -26)" filter="url(#soft)">
+      <rect x="0" y="0" width="36" height="52" rx="4.5" fill="#F6F2E7" stroke="#F4BC56" stroke-width="2"/>
+      <path fill="#0F4C35" d="M11 14h7.2c4.3 0 7 2.5 7 6.4 0 3.9-2.7 6.4-7 6.4H16v9.7H11V14zm5.1 9.5h1.9c2.1 0 3.35-1.15 3.35-3.1S20.1 17.3 18 17.3h-1.9v6.2z"/>
+      <circle cx="28.5" cy="11.5" r="1.6" fill="#F4BC56"/>
+    </g>
+  </g>
+  <!-- Wordmark uses Manrope; outline locally if shipping without webfonts -->
+  <text
+    x="78" y="44"
+    fill="#F6F2E7"
+    font-family="Manrope, 'Segoe UI', system-ui, sans-serif"
+    font-size="28"
+    font-weight="700"
+    letter-spacing="-0.02em"
+  >Poker Faces</text>
+  <rect x="78" y="54" width="168" height="2.5" rx="1.25" fill="#F4BC56"/>
+</svg>
