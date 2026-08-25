@@ -17,7 +17,7 @@ Poker Faces voice uses **Cloudflare RealtimeKit**. The Worker mints a participan
 ## Required for voice to leave `not_configured`
 
 1. `REALTIMEKIT_APP_ID` — shipped as a Wrangler **var** (app `6867ec48-6a1e-43b9-b940-a542afad90d3`)
-2. `REALTIMEKIT_API_TOKEN` — Cloudflare API token with **Realtime Admin** (secret; **not** the TURN key API token)
+2. `REALTIMEKIT_API_TOKEN` — Cloudflare API token with **Realtime Admin** (secret; **not** the TURN key API token). If unset, Deploy Cloudflare falls back to **`CLOUDFLARE_API_TOKEN`** when that token includes Realtime Admin.
 3. `CLOUDFLARE_ACCOUNT_ID` — Worker secret (already uploaded by Deploy Cloudflare CI)
 
 Without (2), `/api/rooms/:id/voice-token` returns `{ available: false, reason: "not_configured", missing: [...] }` and the table still works.
