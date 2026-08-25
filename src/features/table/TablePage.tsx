@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { api, type User } from "../../lib/api";
+import { api, type LedgerSnapshot, type User } from "../../lib/api";
 import { VoicePanel } from "../voice/VoicePanel";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
@@ -19,6 +19,7 @@ interface SeatView {
   stack: number;
   status: string;
   betThisStreet: number;
+  timeBankMs?: number;
   holeCards: [string, string] | null;
   isViewer: boolean;
 }
@@ -46,12 +47,17 @@ interface GameView {
   handNumber: number;
   actionSeat: number | null;
   turnDeadlineMs: number | null;
+  paused?: boolean;
+  timeBankActive?: boolean;
+  rabbitCards?: string[];
+  isSpectator?: boolean;
   seats: SeatView[];
   lastHandResult: HandResult | null;
   pendingConfig: {
     smallBlind?: number;
     startingStack?: number;
     potCapMultiplier?: number;
+    timeBankSeconds?: number;
   } | null;
   legalActions: {
     canFold: boolean;
@@ -71,6 +77,7 @@ interface GameView {
     bigBlind: number;
     startingStack: number;
     potCapMultiplier: number;
+    timeBankSeconds?: number;
   };
 }
 
@@ -140,6 +147,12 @@ export function TablePage({ user }: { user: User }) {
   const [editSb, setEditSb] = useState(1);
   const [editStack, setEditStack] = useState(100);
   const [editCap, setEditCap] = useState(2);
+  const [editTimeBank, setEditTimeBank] = useState(60);
+  const [ledger, setLedger] = useState<LedgerSnapshot | null>(null);
+  const [showLedger, setShowLedger] = useState(false);
+  const [spectators, setSpectators] = useState<Array<{ userId: string; displayName: string }>>(
+    [],
+  );
   const wsRef = useRef<WebSocket | null>(null);
   const lastAskAtRef = useRef(0);
   const turnLeft = useTurnSeconds(view?.turnDeadlineMs ?? null);
@@ -201,12 +214,14 @@ export function TablePage({ user }: { user: User }) {
           requesters: Array<{ userId: string; displayName: string }>;
         };
         askedToStart?: boolean;
+        ledger?: LedgerSnapshot;
+        spectators?: Array<{ userId: string; displayName: string }>;
         count?: number;
         latestDisplayName?: string | null;
         requesters?: Array<{ userId: string; displayName: string }>;
         displayName?: string;
         userId?: string;
-        message?: ChatMessage;
+        message?: ChatMessage | string;
         error?: string;
       };
       if (msg.type === "snapshot" && msg.view) {
@@ -223,10 +238,23 @@ export function TablePage({ user }: { user: User }) {
         }
         if (typeof msg.askedToStart === "boolean") setAskedToStart(msg.askedToStart);
         else if (msg.view.street !== "waiting") setAskedToStart(false);
-        setStatus("At the table.");
+        if (msg.ledger) setLedger(msg.ledger);
+        if (msg.spectators) setSpectators(msg.spectators);
+        setStatus(msg.view.paused ? "Table paused." : "At the table.");
+      }
+      if (msg.type === "table_closed") {
+        setStatus(typeof msg.message === "string" ? msg.message : "Table closed.");
+        setAccess("rejected");
+        ws.close();
+        return;
       }
       if (msg.type === "chat" && msg.message) {
-        setChat((c) => [...c, msg.message!]);
+        const raw = msg.message;
+        const entry: ChatMessage =
+          typeof raw === "string"
+            ? { id: crypto.randomUUID(), displayName: "Table", text: raw }
+            : raw;
+        setChat((c) => [...c, entry]);
       }
       if (msg.type === "join_request" && msg) {
         const jr = msg as unknown as {
@@ -446,7 +474,7 @@ export function TablePage({ user }: { user: User }) {
   function shareText() {
     const code = meta?.inviteCode ?? "";
     const table = meta?.roomName ?? "Poker Faces table";
-    return `Join my Poker Faces table “${table}”. Invite code: ${code}. Open ${location.origin}, sign in, and ask to join. Virtual chips only.`;
+    return `Join my Poker Faces table “${table}”. Invite code: ${code}. Open ${location.origin} and continue as guest or sign in. Virtual chips only.`;
   }
 
   async function shareInvite() {
@@ -484,10 +512,46 @@ export function TablePage({ user }: { user: User }) {
         smallBlind: editSb,
         startingStack: editStack,
         potCapMultiplier: editCap,
+        timeBankSeconds: editTimeBank,
       });
       setConfigMsg(res.message ?? "Updated.");
     } catch (e) {
       setConfigMsg(e instanceof Error ? e.message : "Could not update rules.");
+    }
+  }
+
+  async function togglePause() {
+    if (!roomId || !view) return;
+    setActionMsg(null);
+    try {
+      const next = !view.paused;
+      const res = await api.pauseRoom(roomId, next);
+      setActionMsg(res.message ?? (next ? "Paused." : "Resumed."));
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not pause.");
+    }
+  }
+
+  async function transferHostTo(targetUserId: string) {
+    if (!roomId) return;
+    setActionMsg(null);
+    try {
+      const res = await api.transferHost(roomId, targetUserId);
+      setActionMsg(res.message ?? "Host transferred.");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not transfer host.");
+    }
+  }
+
+  async function closeTable() {
+    if (!roomId) return;
+    if (!window.confirm("Close this table for everyone?")) return;
+    setActionMsg(null);
+    try {
+      await api.closeRoom(roomId);
+      navigate("/");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not close table.");
     }
   }
 
@@ -539,8 +603,11 @@ export function TablePage({ user }: { user: User }) {
             {status} · {STREET_LABEL[view?.street ?? "waiting"] ?? view?.street} · Hand{" "}
             {view?.handNumber ?? 0} · Blinds {view?.config.smallBlind ?? "–"}/
             {view?.config.bigBlind ?? "–"}
-            {turnLeft !== null ? ` · ${turnLeft}s` : ""} ·{" "}
+            {view?.paused ? " · PAUSED" : ""}
+            {turnLeft !== null ? ` · ${turnLeft}s` : ""}
+            {view?.timeBankActive ? " (time bank)" : ""} ·{" "}
             <span className="badge">Virtual chips only</span>
+            {view?.isSpectator ? <span className="badge"> Spectating</span> : null}
           </p>
           {meta?.inviteCode ? (
             <div className="table-invite-row">
@@ -575,6 +642,7 @@ export function TablePage({ user }: { user: User }) {
               <button
                 className="btn btn-primary"
                 type="button"
+                disabled={Boolean(view?.paused)}
                 onClick={() => {
                   setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
                   send({ type: "start_hand" });
@@ -583,19 +651,38 @@ export function TablePage({ user }: { user: User }) {
                 Deal everyone in
               </button>
             ) : null}
+            {isHost ? (
+              <button className="btn btn-secondary" type="button" onClick={() => void togglePause()}>
+                {view?.paused ? "Resume" : "Pause"}
+              </button>
+            ) : null}
             {!isHost && waitingToDeal && isSeated ? (
               <button
                 className="btn btn-primary"
                 type="button"
-                disabled={askedToStart}
+                disabled={askedToStart || Boolean(view?.paused)}
                 onClick={askHostToStart}
               >
                 {askedToStart ? "Asked host" : "Ask host to start"}
               </button>
             ) : null}
+            {waitingToDeal && view?.lastHandResult && (view.board?.length ?? 0) < 5 ? (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => send({ type: "rabbit" })}
+              >
+                Rabbit hunt
+              </button>
+            ) : null}
             <button className="btn btn-secondary" type="button" onClick={() => void leaveTable()}>
               {isHost ? "Back to lobby" : "Leave table"}
             </button>
+            {isHost ? (
+              <button className="btn btn-danger" type="button" onClick={() => void closeTable()}>
+                Close table
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
@@ -719,6 +806,28 @@ export function TablePage({ user }: { user: User }) {
                     void api
                       .decideJoin({
                         requestId: j.requestId,
+                        approve: true,
+                        asSpectator: true,
+                        seatIndex: null,
+                        idempotencyKey: crypto.randomUUID(),
+                      })
+                      .then(() =>
+                        setPendingJoins((list) => list.filter((x) => x.requestId !== j.requestId)),
+                      )
+                      .catch((e) =>
+                        setActionMsg(e instanceof Error ? e.message : "Could not approve."),
+                      )
+                  }
+                >
+                  Spectate
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() =>
+                    void api
+                      .decideJoin({
+                        requestId: j.requestId,
                         approve: false,
                         idempotencyKey: crypto.randomUUID(),
                       })
@@ -755,9 +864,20 @@ export function TablePage({ user }: { user: User }) {
                 />
               ))}
             </div>
+            {view?.rabbitCards && view.rabbitCards.length > 0 ? (
+              <div className="board" aria-label="Rabbit hunt cards" style={{ marginTop: "0.35rem" }}>
+                {view.rabbitCards.map((c, i) => (
+                  <PlayingCard key={`rabbit-${c}-${i}`} code={c} size="sm" />
+                ))}
+                <span className="muted" style={{ alignSelf: "center" }}>
+                  Rabbit
+                </span>
+              </div>
+            ) : null}
             <div className="pot">
               Pot {view?.pot ?? 0}
               {view?.street ? ` · ${STREET_LABEL[view.street] ?? view.street}` : ""}
+              {view?.paused ? " · paused" : ""}
             </div>
           </div>
           <div className="seats" role="list">
@@ -797,6 +917,9 @@ export function TablePage({ user }: { user: User }) {
                       <div className="stack">
                         {seat.stack}
                         {seat.betThisStreet > 0 ? ` · ${seat.betThisStreet}` : ""}
+                        {typeof seat.timeBankMs === "number" && seat.timeBankMs > 0
+                          ? ` · bank ${Math.ceil(seat.timeBankMs / 1000)}s`
+                          : ""}
                       </div>
                     ) : null}
                     {seat.playerId && isHost && seat.playerId !== user.id ? (
@@ -807,6 +930,13 @@ export function TablePage({ user }: { user: User }) {
                           onClick={() => void kickPlayer(seat.playerId!)}
                         >
                           Kick
+                        </button>
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => void transferHostTo(seat.playerId!)}
+                        >
+                          Make host
                         </button>
                         {seat.stack === 0 ? (
                           <button
@@ -982,14 +1112,79 @@ export function TablePage({ user }: { user: User }) {
             >
               {showHistory ? "Hide hand history" : "Hand history"}
             </button>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => setShowLedger((v) => !v)}
+            >
+              {showLedger ? "Hide ledger" : "Session ledger"}
+            </button>
           </div>
+          {showLedger && ledger ? (
+            <div style={{ marginBottom: "0.75rem" }}>
+              <strong>Session ledger</strong>
+              <table style={{ width: "100%", fontSize: "0.85rem", marginTop: "0.5rem" }}>
+                <thead>
+                  <tr>
+                    <th align="left">Player</th>
+                    <th align="right">In</th>
+                    <th align="right">Out</th>
+                    <th align="right">Stack</th>
+                    <th align="right">Net</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ledger.players.map((p) => (
+                    <tr key={p.userId}>
+                      <td>
+                        {p.displayName}
+                        {!p.active ? " (left)" : ""}
+                      </td>
+                      <td align="right">{p.buyIn}</td>
+                      <td align="right">{p.buyOut}</td>
+                      <td align="right">{p.currentStack}</td>
+                      <td align="right">{p.net}</td>
+                    </tr>
+                  ))}
+                  <tr>
+                    <td>
+                      <strong>Totals</strong>
+                    </td>
+                    <td align="right">{ledger.totals.buyIn}</td>
+                    <td align="right">{ledger.totals.buyOut}</td>
+                    <td align="right">{ledger.totals.currentStack}</td>
+                    <td align="right">{ledger.totals.net}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <button
+                className="btn btn-secondary"
+                type="button"
+                style={{ marginTop: "0.5rem" }}
+                onClick={() =>
+                  void api
+                    .downloadLedgerCsv(roomId)
+                    .catch((e) =>
+                      setActionMsg(e instanceof Error ? e.message : "Could not download CSV."),
+                    )
+                }
+              >
+                Download CSV
+              </button>
+            </div>
+          ) : null}
+          {spectators.length > 0 ? (
+            <p className="muted" style={{ marginBottom: "0.5rem" }}>
+              Watching: {spectators.map((s) => s.displayName).join(", ")}
+            </p>
+          ) : null}
           {showHistory && roomId ? <HandHistoryPanel roomId={roomId} /> : null}
           {roomId ? <VoicePanel roomId={roomId} /> : null}
         </div>
         {isHost ? (
           <div className="panel">
             <strong>Table rules</strong>
-            <p className="muted">Mid-hand changes apply on the next deal.</p>
+            <p className="muted">Mid-hand changes apply on the next deal. Max 10 seats · Hold&apos;em only.</p>
             <div className="field">
               <label htmlFor="editSb">Small blind</label>
               <input
@@ -1022,6 +1217,17 @@ export function TablePage({ user }: { user: User }) {
                 step={0.5}
                 value={editCap}
                 onChange={(e) => setEditCap(Number(e.target.value))}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="editTimeBank">Time bank (seconds)</label>
+              <input
+                id="editTimeBank"
+                type="number"
+                min={0}
+                max={600}
+                value={editTimeBank}
+                onChange={(e) => setEditTimeBank(Number(e.target.value))}
               />
             </div>
             <div className="panel-actions">

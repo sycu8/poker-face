@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type MyRoom, type User } from "../../lib/api";
 import { TurnstileWidget } from "../auth/TurnstileWidget";
 import { PlayingCard } from "../table/PlayingCard";
@@ -13,18 +13,25 @@ export function HomePage({
   copy: { tagline: string; support: string; chips: string };
   onAuthed: (user: User) => void;
 }) {
-  void onAuthed;
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [name, setName] = useState("Friends table");
   const [smallBlind, setSmallBlind] = useState(1);
   const [startingStack, setStartingStack] = useState(100);
   const [invite, setInvite] = useState("");
+  const [guestName, setGuestName] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [myRooms, setMyRooms] = useState<MyRoom[]>([]);
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [guestBusy, setGuestBusy] = useState(false);
   const onToken = useCallback((token: string | null) => setTurnstileToken(token), []);
+
+  useEffect(() => {
+    const fromUrl = searchParams.get("invite");
+    if (fromUrl) setInvite(fromUrl.trim().toUpperCase());
+  }, [searchParams]);
 
   useEffect(() => {
     void api
@@ -65,12 +72,37 @@ export function HomePage({
       const res = await api.joinRequest({
         inviteCode: invite.trim().toUpperCase(),
         idempotencyKey: crypto.randomUUID(),
+        displayName: user?.isGuest ? user.displayName : undefined,
         turnstileToken: turnstileToken ?? undefined,
       });
       setMessage(res.message ?? "Waiting for the host");
       if (res.roomId) navigate(`/table/${res.roomId}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not ask to join.");
+    }
+  }
+
+  async function continueAsGuestAndJoin() {
+    setError(null);
+    setGuestBusy(true);
+    try {
+      const result = await api.guest({
+        displayName: guestName.trim(),
+        turnstileToken: turnstileToken ?? undefined,
+      });
+      onAuthed(result.user);
+      const res = await api.joinRequest({
+        inviteCode: invite.trim().toUpperCase(),
+        idempotencyKey: crypto.randomUUID(),
+        displayName: result.user.displayName,
+        turnstileToken: turnstileToken ?? undefined,
+      });
+      setMessage(res.message ?? result.privacyNote ?? "Waiting for the host");
+      if (res.roomId) navigate(`/table/${res.roomId}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not join as guest.");
+    } finally {
+      setGuestBusy(false);
     }
   }
 
@@ -93,12 +125,17 @@ export function HomePage({
               <Link className="btn btn-secondary" to="/auth">
                 Sign in
               </Link>
+              <a className="btn btn-secondary" href="#guest-join">
+                Continue as guest
+              </a>
             </div>
           ) : (
             <div className="cta-row">
-              <a className="btn btn-primary" href="#take-a-seat">
-                Create your table
-              </a>
+              {!user.isGuest ? (
+                <a className="btn btn-primary" href="#take-a-seat">
+                  Create your table
+                </a>
+              ) : null}
               <a className="btn btn-secondary" href="#take-a-seat">
                 Ask to join
               </a>
@@ -117,47 +154,122 @@ export function HomePage({
         </div>
       </section>
 
+      {!user ? (
+        <section className="home-section home-section--action" id="guest-join">
+          <div className="home-section-intro">
+            <h2>Join with an invite</h2>
+            <p className="muted">
+              Friends can sit down with a display name only. Guest names are not accounts.
+            </p>
+          </div>
+          <div className="panel" style={{ maxWidth: 420, marginInline: "auto" }}>
+            <h3 className="home-panel-title">Continue as guest</h3>
+            <div className="field">
+              <label htmlFor="guestInvite">Invite code</label>
+              <input
+                id="guestInvite"
+                value={invite}
+                onChange={(e) => setInvite(e.target.value.toUpperCase())}
+                placeholder="ABC123"
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="guestName">Display name</label>
+              <input
+                id="guestName"
+                value={guestName}
+                onChange={(e) => setGuestName(e.target.value)}
+                placeholder="What friends call you"
+                maxLength={32}
+              />
+            </div>
+            <TurnstileWidget siteKey={siteKey} onToken={onToken} />
+            <div className="home-panel-actions">
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={guestBusy || guestName.trim().length < 2 || invite.trim().length < 4}
+                onClick={() => void continueAsGuestAndJoin()}
+              >
+                {guestBusy ? "Joining…" : "Continue as guest"}
+              </button>
+            </div>
+            <p className="muted" style={{ marginTop: "0.75rem" }}>
+              Prefer a lasting handle?{" "}
+              <Link to={`/auth?mode=register${invite ? `&invite=${invite}` : ""}`}>Sign up</Link>
+              {" · "}
+              <Link to={`/auth${invite ? `?invite=${invite}` : ""}`}>Sign in</Link>
+            </p>
+          </div>
+          {message || error ? (
+            <div className="home-status">
+              {message ? <p className="badge">{message}</p> : null}
+              {error ? (
+                <p role="alert" style={{ color: "var(--danger)", margin: 0 }}>
+                  {error}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
+
       {user ? (
         <section className="home-section home-section--action" id="take-a-seat">
           <div className="home-section-intro">
             <h2>Take a seat</h2>
-            <p className="muted">Host a private table or join one with an invite code.</p>
+            <p className="muted">
+              {user.isGuest
+                ? "Ask to join with your guest name. Register to host a table."
+                : "Host a private table or join one with an invite code."}
+            </p>
           </div>
           <div className="home-action-grid">
-            <div className="panel">
-              <h3 className="home-panel-title">Create your table</h3>
-              <div className="field">
-                <label htmlFor="roomName">Table name</label>
-                <input id="roomName" value={name} onChange={(e) => setName(e.target.value)} />
+            {!user.isGuest ? (
+              <div className="panel">
+                <h3 className="home-panel-title">Create your table</h3>
+                <div className="field">
+                  <label htmlFor="roomName">Table name</label>
+                  <input id="roomName" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label htmlFor="sb">Small blind</label>
+                  <input
+                    id="sb"
+                    type="number"
+                    min={1}
+                    value={smallBlind}
+                    onChange={(e) => setSmallBlind(Number(e.target.value))}
+                  />
+                  <span className="muted">Big blind is always {smallBlind * 2} (read-only).</span>
+                </div>
+                <div className="field">
+                  <label htmlFor="stack">Starting stack (10–1000)</label>
+                  <input
+                    id="stack"
+                    type="number"
+                    min={10}
+                    max={1000}
+                    value={startingStack}
+                    onChange={(e) => setStartingStack(Number(e.target.value))}
+                  />
+                </div>
+                <div className="home-panel-actions">
+                  <button className="btn btn-primary" type="button" onClick={() => void createRoom()}>
+                    Create a room
+                  </button>
+                </div>
               </div>
-              <div className="field">
-                <label htmlFor="sb">Small blind</label>
-                <input
-                  id="sb"
-                  type="number"
-                  min={1}
-                  value={smallBlind}
-                  onChange={(e) => setSmallBlind(Number(e.target.value))}
-                />
-                <span className="muted">Big blind is always {smallBlind * 2} (read-only).</span>
+            ) : (
+              <div className="panel">
+                <h3 className="home-panel-title">Guest session</h3>
+                <p className="muted">
+                  Signed in as <strong>{user.displayName}</strong> (guest). Guest names are not
+                  accounts.{" "}
+                  <Link to="/auth?mode=register">Create an account</Link> to host tables.
+                </p>
               </div>
-              <div className="field">
-                <label htmlFor="stack">Starting stack (10–1000)</label>
-                <input
-                  id="stack"
-                  type="number"
-                  min={10}
-                  max={1000}
-                  value={startingStack}
-                  onChange={(e) => setStartingStack(Number(e.target.value))}
-                />
-              </div>
-              <div className="home-panel-actions">
-                <button className="btn btn-primary" type="button" onClick={() => void createRoom()}>
-                  Create a room
-                </button>
-              </div>
-            </div>
+            )}
             <div className="panel">
               <h3 className="home-panel-title">Ask to join</h3>
               <div className="field">

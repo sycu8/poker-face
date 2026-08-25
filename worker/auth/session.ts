@@ -3,11 +3,17 @@ import { sha256Hex } from "../lib/http";
 
 const SESSION_COOKIE = "pf_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+/** Short-lived guest sessions (24h). */
+export const GUEST_SESSION_TTL_MS = 1000 * 60 * 60 * 24;
 
-export function sessionCookieHeader(token: string, origin: string): string {
+export function sessionCookieHeader(
+  token: string,
+  origin: string,
+  maxAgeSeconds = SESSION_TTL_MS / 1000,
+): string {
   const url = new URL(origin);
   const secure = url.protocol === "https:" ? "; Secure" : "";
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_TTL_MS / 1000}${secure}`;
+  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAgeSeconds)}${secure}`;
 }
 
 export function clearSessionCookie(origin: string): string {
@@ -27,6 +33,7 @@ export interface SessionUser {
   displayName: string;
   username: string | null;
   sessionId: string;
+  isGuest: boolean;
 }
 
 export async function requireUser(
@@ -37,7 +44,8 @@ export async function requireUser(
   if (!token) return { ok: false, status: 401, error: "Sign in required." };
   const tokenHash = await sha256Hex(`${env.SESSION_SECRET}:${token}`);
   const row = await env.DB.prepare(
-    `SELECT s.id as session_id, s.expires_at, s.revoked_at, u.id as user_id, u.display_name, u.username
+    `SELECT s.id as session_id, s.expires_at, s.revoked_at,
+            u.id as user_id, u.display_name, u.username, u.is_guest
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ?`,
   )
@@ -49,6 +57,7 @@ export async function requireUser(
       user_id: string;
       display_name: string;
       username: string | null;
+      is_guest: number | null;
     }>();
   if (!row || row.revoked_at || row.expires_at < Date.now()) {
     return { ok: false, status: 401, error: "Session expired." };
@@ -60,6 +69,7 @@ export async function requireUser(
       displayName: row.display_name,
       username: row.username,
       sessionId: row.session_id,
+      isGuest: Boolean(row.is_guest),
     },
   };
 }
@@ -67,10 +77,11 @@ export async function requireUser(
 export async function createSession(
   env: Env,
   userId: string,
+  ttlMs: number = SESSION_TTL_MS,
 ): Promise<{ token: string; expiresAt: number }> {
   const token = crypto.randomUUID() + crypto.randomUUID();
   const tokenHash = await sha256Hex(`${env.SESSION_SECRET}:${token}`);
-  const expiresAt = Date.now() + SESSION_TTL_MS;
+  const expiresAt = Date.now() + ttlMs;
   await env.DB.prepare(
     `INSERT INTO sessions (id, user_id, token_hash, expires_at, created_at)
      VALUES (?, ?, ?, ?, ?)`,
