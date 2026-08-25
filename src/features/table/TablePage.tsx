@@ -449,39 +449,7 @@ export function TablePage({ user }: { user: User }) {
             <p className="muted">Rule changes pending for the next hand.</p>
           ) : null}
         </div>
-<<<<<<< HEAD
-        <div className="cta-row" style={{ justifyContent: "center" }}>
-          {meta?.inviteCode ? (
-            <button className="btn btn-secondary" type="button" onClick={() => void shareInvite()}>
-              {shareMsg ?? "Share table"}
-            </button>
-          ) : null}
-          {isHost ? (
-            <button
-              className="btn btn-primary"
-              type="button"
-              onClick={() => {
-                setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
-                send({ type: "start_hand" });
-              }}
-            >
-              Deal everyone in
-            </button>
-          ) : null}
-          {!isHost && waitingToDeal && isSeated ? (
-            <button
-              className="btn btn-primary"
-              type="button"
-              disabled={askedToStart}
-              onClick={askHostToStart}
-            >
-              {askedToStart ? "Asked host" : "Ask host to start"}
-            </button>
-          ) : null}
-          <Link className="btn btn-secondary" to="/">
-            Leave table
-          </Link>
-=======
+
         <div className="table-top-actions">
           <div className="cta-row">
             {meta?.inviteCode ? (
@@ -490,15 +458,32 @@ export function TablePage({ user }: { user: User }) {
               </button>
             ) : null}
             {isHost ? (
-              <button className="btn btn-primary" type="button" onClick={() => send({ type: "start_hand" })}>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={() => {
+                  setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+                  send({ type: "start_hand" });
+                }}
+              >
                 Deal everyone in
+              </button>
+            ) : null}
+            {!isHost && waitingToDeal && isSeated ? (
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={askedToStart}
+                onClick={askHostToStart}
+              >
+                {askedToStart ? "Asked host" : "Ask host to start"}
               </button>
             ) : null}
             <Link className="btn btn-secondary" to="/">
               Leave table
             </Link>
           </div>
->>>>>>> origin/cursor/fix-ui-ux-buttons-cb85
+        </div>
         </div>
       </div>
 

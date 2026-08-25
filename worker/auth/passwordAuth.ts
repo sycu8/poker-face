@@ -20,8 +20,16 @@ const usernameSchema = z
 
 const passwordSchema = z.string().min(8).max(128);
 
+const emailSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .email("Enter a valid email address.")
+  .max(254);
+
 const registerSchema = z.object({
   username: usernameSchema,
+  email: emailSchema,
   password: passwordSchema,
   displayName: z.string().trim().min(2).max(32).optional(),
   turnstileToken: z.string().min(1).optional(),
@@ -30,6 +38,13 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   username: usernameSchema,
   password: passwordSchema,
+  turnstileToken: z.string().min(1).optional(),
+});
+
+const resetPasswordSchema = z.object({
+  username: usernameSchema,
+  email: emailSchema,
+  newPassword: passwordSchema,
   turnstileToken: z.string().min(1).optional(),
 });
 
@@ -105,20 +120,33 @@ export async function handleAuth(
       );
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
-      const existing = await env.DB.prepare(`SELECT id FROM users WHERE username = ?`)
+      const existingUsername = await env.DB.prepare(`SELECT id FROM users WHERE username = ?`)
         .bind(parsed.data.username)
         .first();
-      if (existing) return errorJson(409, "That username is taken.");
+      if (existingUsername) return errorJson(409, "That username is taken.");
+
+      const existingEmail = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`)
+        .bind(parsed.data.email)
+        .first();
+      if (existingEmail) return errorJson(409, "That email is already registered.");
 
       const userId = randomId("usr");
       const displayName = parsed.data.displayName ?? parsed.data.username;
       const passwordHash = await hashPassword(parsed.data.password);
       const now = Date.now();
       await env.DB.prepare(
-        `INSERT INTO users (id, display_name, username, password_hash, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, display_name, username, email, password_hash, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-        .bind(userId, displayName, parsed.data.username, passwordHash, now, now)
+        .bind(
+          userId,
+          displayName,
+          parsed.data.username,
+          parsed.data.email,
+          passwordHash,
+          now,
+          now,
+        )
         .run();
 
       const session = await createSession(env, userId);
@@ -197,6 +225,60 @@ export async function handleAuth(
     } catch (err) {
       const message = err instanceof Error ? err.message : "Login failed.";
       console.error("login failed", message);
+      return errorJson(500, message);
+    }
+  }
+
+  if (path === "/api/auth/reset-password" && request.method === "POST") {
+    try {
+      if (!env.SESSION_SECRET) {
+        return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
+      }
+      const limited = await env.AUTH_RATE_LIMIT.limit({
+        key: request.headers.get("cf-connecting-ip") ?? "anon",
+      });
+      if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
+
+      const parsed = await readJson(request, resetPasswordSchema);
+      if (!parsed.ok) return parsed.response;
+
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
+
+      // Require username + email to match the same row; single error for any miss.
+      const row = await env.DB.prepare(
+        `SELECT id FROM users WHERE username = ? AND email = ?`,
+      )
+        .bind(parsed.data.username, parsed.data.email)
+        .first<{ id: string }>();
+
+      if (!row) {
+        return errorJson(400, "Username and email do not match our records.");
+      }
+
+      const passwordHash = await hashPassword(parsed.data.newPassword);
+      const now = Date.now();
+      await env.DB.prepare(
+        `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`,
+      )
+        .bind(passwordHash, now, row.id)
+        .run();
+
+      // Force re-login after reset.
+      await env.DB.prepare(
+        `UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
+      )
+        .bind(now, row.id)
+        .run();
+
+      return json({ ok: true, message: "Password updated. You can sign in with your new password." });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Password reset failed.";
+      console.error("reset-password failed", message);
       return errorJson(500, message);
     }
   }
