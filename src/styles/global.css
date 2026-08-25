@@ -517,9 +517,9 @@ button {
   box-shadow: inset 0 0 40px #0008, 0 20px 50px #0006;
   width: 100%;
   aspect-ratio: 1.55 / 1;
-  min-height: min(58vw, 420px);
-  max-height: 560px;
-  margin: 0 0 5.5rem;
+  min-height: min(62vw, 460px);
+  max-height: 620px;
+  margin: 0 0 6.5rem;
   padding: 0;
   overflow: visible;
 }
@@ -532,21 +532,22 @@ button {
   z-index: 2;
   display: grid;
   justify-items: center;
-  gap: 0.55rem;
+  gap: 0.65rem;
+  width: min(92%, 36rem);
   pointer-events: none;
 }
 
 .board {
   display: flex;
   justify-content: center;
-  gap: 0.45rem;
+  gap: clamp(0.28rem, 0.9vw, 0.55rem);
   margin-top: 0;
 }
 
 .playing-card {
   position: relative;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: clamp(6px, 1vw, 10px);
   overflow: hidden;
   box-shadow: 0 6px 14px #0005;
   animation: deal 200ms ease-out;
@@ -554,9 +555,10 @@ button {
   line-height: 0;
 }
 
+/* Board / community — dominant center presence (~15–20% taller than before) */
 .playing-card--board {
-  width: 52px;
-  height: 74px;
+  width: clamp(52px, 8.2vw, 88px);
+  height: clamp(74px, 11.6vw, 124px);
 }
 
 .playing-card--hole {
@@ -564,9 +566,10 @@ button {
   height: 52px;
 }
 
+/* Rail / other-seat hole cards — readable, not postage-stamp */
 .playing-card--sm {
-  width: 28px;
-  height: 40px;
+  width: clamp(36px, 4.6vw, 48px);
+  height: clamp(52px, 6.5vw, 68px);
 }
 
 .playing-card--md {
@@ -574,10 +577,11 @@ button {
   height: 60px;
 }
 
+/* Hero hole cards — most prominent cards on the felt */
 .playing-card--hero {
-  width: 76px;
-  height: 108px;
-  box-shadow: 0 10px 22px #0007;
+  width: clamp(72px, 10.5vw, 112px);
+  height: clamp(102px, 14.9vw, 158px);
+  box-shadow: 0 12px 26px #0008;
 }
 
 .playing-card-face {
@@ -607,39 +611,6 @@ button {
   border-radius: 4px;
   border: 1px solid #fffef833;
   pointer-events: none;
-}
-
-@media (max-width: 720px) {
-  .playing-card--board {
-    width: 40px;
-    height: 57px;
-  }
-
-  .playing-card--hero {
-    width: 58px;
-    height: 82px;
-  }
-
-  .playing-card--sm {
-    width: 22px;
-    height: 32px;
-  }
-
-  .board {
-    gap: 0.28rem;
-  }
-}
-
-@media (max-width: 480px) {
-  .playing-card--board {
-    width: 34px;
-    height: 48px;
-  }
-
-  .playing-card--hero {
-    width: 52px;
-    height: 74px;
-  }
 }
 
 /* Legacy class kept for any residual references */
@@ -698,7 +669,7 @@ button {
   padding: 0.4rem 0.55rem;
   min-width: 0;
   min-height: 0;
-  max-width: 148px;
+  max-width: 168px;
   display: grid;
   gap: 0.2rem;
   justify-items: center;
@@ -706,8 +677,8 @@ button {
 }
 
 .seat--rail {
-  max-width: 118px;
-  padding: 0.3rem 0.4rem;
+  max-width: 140px;
+  padding: 0.35rem 0.45rem;
 }
 
 .seat--open {
@@ -718,8 +689,8 @@ button {
 
 .seat--hero {
   z-index: 5;
-  max-width: 220px;
-  padding: 0.55rem 0.75rem 0.65rem;
+  max-width: min(280px, 88vw);
+  padding: 0.6rem 0.85rem 0.7rem;
   background: linear-gradient(165deg, #0c2418f2 0%, #07140ff5 100%);
   border-color: #f4bc5633;
   box-shadow: 0 10px 28px #0006;
@@ -804,14 +775,14 @@ button {
 
 .seat-holes {
   display: flex;
-  gap: 3px;
-  margin-top: 0.15rem;
+  gap: 4px;
+  margin-top: 0.2rem;
   justify-content: center;
 }
 
 .seat-holes--hero {
-  gap: 0.45rem;
-  margin-top: 0.35rem;
+  gap: 0.55rem;
+  margin-top: 0.4rem;
 }
 
 .seat-host-actions {
@@ -831,18 +802,18 @@ button {
 @media (max-width: 720px) {
   .table-felt {
     aspect-ratio: 1.2 / 1;
-    min-height: min(72vw, 380px);
+    min-height: min(78vw, 420px);
     border-width: 8px;
-    margin-bottom: 4.25rem;
+    margin-bottom: 5.25rem;
   }
 
   .seat--rail {
-    max-width: 96px;
-    padding: 0.22rem 0.3rem;
+    max-width: 118px;
+    padding: 0.28rem 0.35rem;
   }
 
   .seat--hero {
-    max-width: 180px;
+    max-width: min(240px, 90vw);
   }
 
   .seat--rail .stack {
@@ -857,7 +828,12 @@ button {
 @media (max-width: 480px) {
   .table-felt {
     aspect-ratio: 1.05 / 1;
-    min-height: 320px;
+    min-height: 360px;
+    margin-bottom: 5.75rem;
+  }
+
+  .seat--rail {
+    max-width: 112px;
   }
 
   .seat--rail .name {
@@ -1037,7 +1013,7 @@ button {
 }
 
 .actions--hero {
-  margin-top: -3.75rem;
+  margin-top: -4.5rem;
   padding: 0.75rem 0.5rem 1rem;
   border-radius: 16px;
   background: linear-gradient(180deg, #0a1a14aa 0%, transparent 100%);
