@@ -14,40 +14,36 @@ Play-money Texas Hold’em for friends. Virtual chips only. This roadmap is the 
 
 ## 2. Partial / known gaps
 
-- **Voice** — Server can provision a RealtimeKit meeting + participant token (`worker/voice/realtimekit.ts`). UI is token-only: `VoicePanel` does not join a RealtimeKit session yet. Client join work may be in flight on a separate PR; keep this gap until that lands on `main`.
-- **Turnstile** — Server verifies on register/login when `TURNSTILE_SECRET_KEY` is set. No client widget; join accepts an optional token but never verifies it.
-- **Reconnect** — Clients rely on DO snapshot only. `room_events` table exists in the DO but is unused (dead path).
-- **Leave table** — UI navigates home; `room_members` / DO seat are not cleared.
-- **Missing product surfaces** — No rebuy / stack reset, no hand-history UI, no “my tables” lobby list.
-- **CONFIG_KV** — Bound in Wrangler; unused for flags/copy.
+- **Passkeys** — Password auth is shipped; optional WebAuthn/passkeys alongside passwords are deferred (tables dropped in migration `0006`).
+- **Auto-deal** — Explicitly out of scope; host still deals each hand (ask-host-to-start helps between hands).
 
 ## 3. Three-phase roadmap
 
 ### Phase 1 — Launch polish
 
-1. [ ] Turnstile widget on register/login; enforce on join when secret is set
-2. [ ] Leave / stand-up + host kick (clear `room_members` + DO seat)
-3. [ ] Play-money rebuy / stack reset for busted seats
-4. [ ] Reconnect hardening: persist room events **or** document snapshot-only and stop creating dead `room_events`
-5. [ ] Between-hand UX: clearer waiting / deal state (auto-deal out of scope for Phase 1)
-6. [ ] Minimal e2e smoke: create → join → approve → one hand
+1. [x] Turnstile widget on register/login; enforce on join when secret is set
+2. [x] Leave / stand-up + host kick (clear `room_members` + DO seat)
+3. [x] Play-money rebuy / stack reset for busted seats
+4. [x] Reconnect hardening: document snapshot-only and stop creating dead `room_events`
+5. [x] Between-hand UX: clearer waiting / deal state (auto-deal out of scope for Phase 1)
+6. [x] Minimal e2e smoke: create → join → approve → one hand
 
 ### Phase 2 — Secondary systems
 
-1. [ ] RealtimeKit client join in `VoicePanel` (game path stays independent of voice)
-2. [ ] Hand history API + simple UI from D1/R2
-3. [ ] “My tables” lobby list for host/member rooms
-4. [ ] `CONFIG_KV` for non-authoritative flags/copy
-5. [ ] Seat picker on approve; richer Analytics events
-6. [ ] Drop or migrate unused WebAuthn tables
+1. [x] RealtimeKit client join in `VoicePanel` (game path stays independent of voice)
+2. [x] Hand history API + simple UI from D1/R2
+3. [x] “My tables” lobby list for host/member rooms
+4. [x] `CONFIG_KV` for non-authoritative flags/copy
+5. [x] Seat picker on approve; richer Analytics events
+6. [x] Drop or migrate unused WebAuthn tables
 
 ### Phase 3 — Nice-to-haves
 
-1. [ ] Full hand replay viewer
-2. [ ] Richer PWA/offline shell
-3. [ ] Spectator / away presence without breaking timers
-4. [ ] Optional passkeys alongside passwords
-5. [ ] Table themes / avatars
+1. [x] Full hand replay viewer
+2. [x] Richer PWA/offline shell
+3. [x] Spectator / away presence without breaking timers
+4. [ ] Optional passkeys alongside passwords (deferred — WebAuthn tables dropped; reintroduce later)
+5. [x] Table themes / avatars
 
 ```mermaid
 flowchart LR

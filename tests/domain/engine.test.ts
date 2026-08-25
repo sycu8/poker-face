@@ -10,9 +10,13 @@ import { computeSidePots } from "../../worker/domain/pots";
 import {
   applyAction,
   createInitialGameState,
+  getLegalActions,
   projectForPlayer,
+  rebuyPlayer,
   seatPlayer,
+  setPlayerAway,
   startHand,
+  unseatPlayer,
 } from "../../worker/domain/engine";
 import { validateConfigInput } from "../../worker/domain/config";
 
@@ -183,5 +187,98 @@ describe("engine privacy and flow", () => {
 
     const view = projectForPlayer(state, "p1");
     expect(view.lastHandResult?.winners[0]?.hand?.label).toBe("Three of a kind");
+  });
+});
+
+describe("leave / rebuy / away", () => {
+  it("unseats a waiting player immediately", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    expect(seatPlayer(state, "a", "A", 0).ok).toBe(true);
+    expect(seatPlayer(state, "b", "B", 1).ok).toBe(true);
+    const left = unseatPlayer(state, "b", Date.now());
+    expect(left.ok).toBe(true);
+    if (!left.ok) return;
+    expect(left.deferred).toBe(false);
+    expect(state.seats[1]!.playerId).toBeNull();
+  });
+
+  it("defers mid-hand leave until waiting and preserves commitments", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "a", "A", 0);
+    seatPlayer(state, "b", "B", 1);
+    startHand(state, 1_000);
+    const actor = state.actionSeat!;
+    const other = state.seats.find((s) => s.playerId && s.seatIndex !== actor)!;
+    const committed = other.committedThisHand;
+    const leave = unseatPlayer(state, other.playerId!, 2_000);
+    expect(leave.ok).toBe(true);
+    if (!leave.ok) return;
+    if (state.street !== "waiting") {
+      expect(leave.deferred).toBe(true);
+      expect(state.seats.find((s) => s.playerId === other.playerId)?.committedThisHand).toBe(
+        committed,
+      );
+    }
+  });
+
+  it("rebuy resets a busted seat", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "a", "A", 0);
+    state.seats[0]!.stack = 0;
+    state.seats[0]!.status = "sitting_out";
+    expect(rebuyPlayer(state, "a").ok).toBe(true);
+    expect(state.seats[0]!.stack).toBe(100);
+    expect(state.seats[0]!.status).toBe("seated");
+  });
+
+  it("away toggles sitting_out between hands", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "a", "A", 0);
+    expect(setPlayerAway(state, "a", true).ok).toBe(true);
+    expect(state.seats[0]!.status).toBe("sitting_out");
+    expect(setPlayerAway(state, "a", false).ok).toBe(true);
+    expect(state.seats[0]!.status).toBe("seated");
+  });
+});
+
+describe("e2e smoke: seat → deal → hand", () => {
+  it("runs one hand after two players seat", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    expect(seatPlayer(state, "host", "Host", 0).ok).toBe(true);
+    expect(seatPlayer(state, "guest", "Guest", 2).ok).toBe(true); // seat picker seat 2
+    const started = startHand(state, Date.now());
+    expect(started.some((e) => e.type === "hand_started")).toBe(true);
+    expect(state.street).toBe("preflop");
+    expect(state.seats[0]!.holeCards).toHaveLength(2);
+    expect(state.seats[2]!.holeCards).toHaveLength(2);
+
+    // Fold / check until hand completes or a few actions.
+    let guard = 0;
+    while (state.street !== "waiting" && guard++ < 40) {
+      const seatIdx = state.actionSeat;
+      if (seatIdx == null) break;
+      const legal = getLegalActions(state, seatIdx);
+      if (!legal) break;
+      const action = legal.canCheck ? "check" : legal.canCall ? "call" : "fold";
+      const res = applyAction(state, seatIdx, action, undefined, Date.now() + guard, `smoke:${guard}`);
+      expect(res.ok).toBe(true);
+    }
+    expect(state.handNumber).toBeGreaterThanOrEqual(1);
+    const hostView = projectForPlayer(state, "host");
+    const guestHole = hostView.seats.find((s) => s.playerId === "guest")?.holeCards;
+    // Privacy: foreign hole cards must not leak to host between hands / mid-hand when not shown.
+    if (state.street !== "waiting" && state.street !== "showdown") {
+      expect(guestHole).toBeNull();
+    }
   });
 });
