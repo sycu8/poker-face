@@ -35,7 +35,7 @@ export function VoicePanel({ roomId }: { roomId: string }) {
     <div className="panel">
       <strong>Voice</strong>
       <p className="muted">{message}</p>
-      <div className="cta-row">
+      <div className="panel-actions">
         <button
           className="btn btn-secondary"
           type="button"

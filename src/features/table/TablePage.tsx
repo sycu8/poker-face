@@ -386,7 +386,7 @@ export function TablePage({ user }: { user: User }) {
 
   if (access === "pending") {
     return (
-      <section className="hero">
+      <section className="hero" style={{ justifyItems: "center", textAlign: "center" }}>
         <h1>{meta?.roomName ?? "Private table"}</h1>
         <p>Waiting for the host to approve your seat. Virtual chips only.</p>
         <p className="badge">{status}</p>
@@ -402,24 +402,24 @@ export function TablePage({ user }: { user: User }) {
 
   if (access === "rejected") {
     return (
-      <section className="hero">
+      <section className="hero" style={{ justifyItems: "center", textAlign: "center" }}>
         <h1>No seat this time</h1>
         <p>{status}</p>
-        <Link className="btn btn-primary" to="/">
-          Back to lobby
-        </Link>
+        <div className="cta-row">
+          <Link className="btn btn-primary" to="/">
+            Back to lobby
+          </Link>
+        </div>
       </section>
     );
   }
 
   return (
     <section>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-        <div>
-          <h1 style={{ fontFamily: "var(--font-display)", marginBottom: 0 }}>
-            {meta?.roomName ?? "Private table"}
-          </h1>
-          <p className="muted" style={{ marginTop: 0 }}>
+      <div className="table-top">
+        <div className="table-top-meta">
+          <h1>{meta?.roomName ?? "Private table"}</h1>
+          <p className="muted">
             {status} · {STREET_LABEL[view?.street ?? "waiting"] ?? view?.street} · Hand{" "}
             {view?.handNumber ?? 0} · Blinds {view?.config.smallBlind ?? "–"}/
             {view?.config.bigBlind ?? "–"}
@@ -427,16 +427,17 @@ export function TablePage({ user }: { user: User }) {
             <span className="badge">Virtual chips only</span>
           </p>
           {meta?.inviteCode ? (
-            <p style={{ marginTop: "0.35rem", display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
-              Invite{" "}
-              <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>
+            <div className="table-invite-row">
+              <span>
+                Invite <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>
+              </span>
               <button className="btn btn-primary" type="button" onClick={() => void shareInvite()}>
                 {shareMsg ?? "Share"}
               </button>
               <button className="btn btn-secondary" type="button" onClick={() => void copyInvite()}>
                 {copied ? "Copied" : "Copy code"}
               </button>
-            </p>
+            </div>
           ) : null}
           {winnerNames ? (
             <p className="badge" style={{ marginTop: "0.5rem" }}>
@@ -447,6 +448,7 @@ export function TablePage({ user }: { user: User }) {
             <p className="muted">Rule changes pending for the next hand.</p>
           ) : null}
         </div>
+<<<<<<< HEAD
         <div className="cta-row" style={{ justifyContent: "center" }}>
           {meta?.inviteCode ? (
             <button className="btn btn-secondary" type="button" onClick={() => void shareInvite()}>
@@ -478,6 +480,24 @@ export function TablePage({ user }: { user: User }) {
           <Link className="btn btn-secondary" to="/">
             Leave table
           </Link>
+=======
+        <div className="table-top-actions">
+          <div className="cta-row">
+            {meta?.inviteCode ? (
+              <button className="btn btn-secondary" type="button" onClick={() => void shareInvite()}>
+                {shareMsg ?? "Share table"}
+              </button>
+            ) : null}
+            {isHost ? (
+              <button className="btn btn-primary" type="button" onClick={() => send({ type: "start_hand" })}>
+                Deal everyone in
+              </button>
+            ) : null}
+            <Link className="btn btn-secondary" to="/">
+              Leave table
+            </Link>
+          </div>
+>>>>>>> origin/cursor/fix-ui-ux-buttons-cb85
         </div>
       </div>
 
@@ -514,20 +534,10 @@ export function TablePage({ user }: { user: User }) {
       ) : null}
 
       {pendingJoins.length > 0 && isHost ? (
-        <div className="panel" style={{ marginBottom: "1rem" }}>
+        <div className="panel" style={{ marginBottom: "1rem", textAlign: "center" }}>
           <strong>Join requests</strong>
           {pendingJoins.map((j) => (
-            <div
-              key={j.requestId}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                gap: "0.5rem",
-                marginTop: "0.6rem",
-                alignItems: "center",
-                flexWrap: "wrap",
-              }}
-            >
+            <div key={j.requestId} className="join-request-row">
               <span>{j.displayName} asks to join</span>
               <div className="cta-row">
                 <button
@@ -680,15 +690,6 @@ export function TablePage({ user }: { user: User }) {
                 max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
                 value={raiseTo}
                 onChange={(e) => setRaiseTo(Number(e.target.value))}
-                style={{
-                  minHeight: 44,
-                  borderRadius: 12,
-                  border: "1px solid #ffffff22",
-                  background: "#06140f",
-                  color: "var(--ivory)",
-                  padding: "0.5rem 0.75rem",
-                  width: 110,
-                }}
               />
               <button
                 className="btn btn-primary"
@@ -726,14 +727,7 @@ export function TablePage({ user }: { user: User }) {
         </div>
       ) : null}
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-          gap: "1rem",
-          marginTop: "1.25rem",
-        }}
-      >
+      <div className="table-side-grid">
         <div className="panel">
           <strong>Table chat</strong>
           <div className="chat" style={{ marginTop: "0.6rem" }}>
@@ -744,7 +738,7 @@ export function TablePage({ user }: { user: User }) {
             ))}
           </div>
           <form
-            style={{ display: "flex", gap: "0.5rem", marginTop: "0.75rem" }}
+            className="chat-form"
             onSubmit={(e) => {
               e.preventDefault();
               if (!chatText.trim()) return;
@@ -757,15 +751,6 @@ export function TablePage({ user }: { user: User }) {
               onChange={(e) => setChatText(e.target.value)}
               placeholder="Say something"
               aria-label="Chat message"
-              style={{
-                flex: 1,
-                minHeight: 44,
-                borderRadius: 12,
-                border: "1px solid #ffffff22",
-                background: "#06140f",
-                color: "var(--ivory)",
-                padding: "0.5rem 0.75rem",
-              }}
             />
             <button className="btn btn-secondary" type="submit">
               Send
@@ -811,10 +796,12 @@ export function TablePage({ user }: { user: User }) {
                 onChange={(e) => setEditCap(Number(e.target.value))}
               />
             </div>
-            <button className="btn btn-secondary" type="button" onClick={() => void saveRules()}>
-              Save rules
-            </button>
-            {configMsg ? <p className="muted">{configMsg}</p> : null}
+            <div className="panel-actions">
+              <button className="btn btn-secondary" type="button" onClick={() => void saveRules()}>
+                Save rules
+              </button>
+            </div>
+            {configMsg ? <p className="muted" style={{ textAlign: "center" }}>{configMsg}</p> : null}
           </div>
         ) : null}
       </div>

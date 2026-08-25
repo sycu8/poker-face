@@ -40,15 +40,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "1rem",
-          marginBottom: "0.5rem",
-        }}
-      >
+      <header className="app-header">
         <Link to="/" className="brand-lockup" style={{ textDecoration: "none", color: "inherit" }}>
           <img src="/logo/poker-faces-mark.svg" alt="" width={48} height={48} />
           <div>
@@ -58,7 +50,7 @@ export function App() {
             </div>
           </div>
         </Link>
-        <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+        <div className="app-header-actions">
           {user ? (
             <>
               <span className="badge" aria-label={`Signed in as ${user.displayName}`}>
