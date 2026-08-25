@@ -14,9 +14,12 @@ import {
   projectForPlayer,
   rebuyPlayer,
   seatPlayer,
+  setPaused,
   setPlayerAway,
   startHand,
   unseatPlayer,
+  onTurnTimerExpired,
+  rabbitHunt,
 } from "../../worker/domain/engine";
 import { validateConfigInput } from "../../worker/domain/config";
 
@@ -299,5 +302,77 @@ describe("e2e smoke: seat → deal → hand", () => {
     if (state.street !== "waiting" && state.street !== "showdown") {
       expect(guestHole).toBeNull();
     }
+  });
+});
+
+describe("pokernow parity engine", () => {
+  it("defaults to 10 max seats and time bank", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    expect(cfg.ok).toBe(true);
+    if (!cfg.ok) return;
+    expect(cfg.config.maxSeats).toBe(10);
+    expect(cfg.config.timeBankSeconds).toBe(60);
+    const state = createInitialGameState(cfg.config);
+    expect(state.seats).toHaveLength(10);
+    seatPlayer(state, "a", "A", 0);
+    expect(state.seats[0]!.timeBankMs).toBe(60_000);
+  });
+
+  it("blocks deal while paused and freezes turn timer", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "a", "A", 0);
+    seatPlayer(state, "b", "B", 1);
+    expect(setPaused(state, true, 1_000).ok).toBe(true);
+    expect(startHand(state, 1_100)).toHaveLength(0);
+    expect(setPaused(state, false, 1_200).ok).toBe(true);
+    startHand(state, 1_300);
+    expect(state.street).toBe("preflop");
+    const before = state.turnDeadlineMs;
+    expect(setPaused(state, true, 1_400).ok).toBe(true);
+    expect(state.paused).toBe(true);
+    expect(state.turnDeadlineMs).toBeNull();
+    expect(state.pausedTurnRemainingMs).toBe(before! - 1_400);
+    expect(applyAction(state, state.actionSeat!, "fold", undefined, 1_500, "p").ok).toBe(false);
+  });
+
+  it("consumes time bank before timeout fold/check", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100, timeBankSeconds: 30 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "a", "A", 0);
+    seatPlayer(state, "b", "B", 1);
+    startHand(state, 1_000);
+    const seat = state.seats[state.actionSeat!]!;
+    expect(seat.timeBankMs).toBe(30_000);
+    const bank = onTurnTimerExpired(state, 2_000);
+    expect(bank.kind).toBe("bank");
+    expect(state.timeBankStartedMs).toBe(2_000);
+    expect(seat.timeBankMs).toBe(0);
+    const timeout = onTurnTimerExpired(state, 40_000);
+    expect(timeout.kind).toBe("timeout");
+  });
+
+  it("rabbit hunts remaining undealt board cards between hands", () => {
+    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100 });
+    if (!cfg.ok) throw new Error(cfg.error);
+    const state = createInitialGameState(cfg.config);
+    seatPlayer(state, "a", "A", 0);
+    seatPlayer(state, "b", "B", 1);
+    startHand(state, 1_000);
+    const actor = state.actionSeat!;
+    applyAction(state, actor, "fold", undefined, 1_100, "f1");
+    expect(state.street).toBe("waiting");
+    expect(state.board.length).toBeLessThan(5);
+    const need = 5 - state.board.length;
+    const rabbit = rabbitHunt(state);
+    expect(rabbit.ok).toBe(true);
+    if (!rabbit.ok) return;
+    expect(rabbit.cards).toHaveLength(need);
+    expect(state.rabbitCards).toHaveLength(need);
+    const view = projectForPlayer(state, "spectator-user");
+    expect(view.isSpectator).toBe(true);
+    expect(view.rabbitCards).toHaveLength(need);
   });
 });

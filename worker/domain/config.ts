@@ -2,8 +2,11 @@ export const MIN_STACK = 10;
 export const MAX_STACK = 1000;
 export const DEFAULT_POT_CAP_MULTIPLIER = 2;
 export const DEFAULT_TURN_MS = 30_000;
-export const MAX_SEATS = 9;
+/** Poker Now–style max ring size (Hold'em). */
+export const MAX_SEATS = 10;
 export const MIN_SEATS_TO_DEAL = 2;
+/** Default time-bank pool per seated player (seconds). */
+export const DEFAULT_TIME_BANK_SECONDS = 60;
 
 export type Street = "waiting" | "preflop" | "flop" | "turn" | "river" | "showdown";
 
@@ -23,6 +26,8 @@ export interface TableConfig {
   potCapMultiplier: number;
   turnTimeoutMs: number;
   maxSeats: number;
+  /** Per-player time-bank pool in seconds (host-configurable). */
+  timeBankSeconds: number;
 }
 
 export interface PendingConfig {
@@ -30,12 +35,14 @@ export interface PendingConfig {
   startingStack?: number;
   potCapMultiplier?: number;
   turnTimeoutMs?: number;
+  timeBankSeconds?: number;
 }
 
 export function validateConfigInput(input: {
   smallBlind: number;
   startingStack: number;
   potCapMultiplier?: number;
+  timeBankSeconds?: number;
 }): { ok: true; config: TableConfig } | { ok: false; error: string } {
   if (!Number.isInteger(input.smallBlind) || input.smallBlind < 1) {
     return { ok: false, error: "Small blind must be a positive integer." };
@@ -54,6 +61,14 @@ export function validateConfigInput(input: {
   if (!Number.isFinite(potCapMultiplier) || potCapMultiplier < 1) {
     return { ok: false, error: "Pot-cap multiplier must be at least 1." };
   }
+  const timeBankSeconds = input.timeBankSeconds ?? DEFAULT_TIME_BANK_SECONDS;
+  if (
+    !Number.isInteger(timeBankSeconds) ||
+    timeBankSeconds < 0 ||
+    timeBankSeconds > 600
+  ) {
+    return { ok: false, error: "Time bank must be between 0 and 600 seconds." };
+  }
   return {
     ok: true,
     config: {
@@ -63,6 +78,7 @@ export function validateConfigInput(input: {
       potCapMultiplier,
       turnTimeoutMs: DEFAULT_TURN_MS,
       maxSeats: MAX_SEATS,
+      timeBankSeconds,
     },
   };
 }
@@ -73,6 +89,7 @@ export function promoteConfig(current: TableConfig, pending: PendingConfig | nul
   const startingStack = pending.startingStack ?? current.startingStack;
   const potCapMultiplier = pending.potCapMultiplier ?? current.potCapMultiplier;
   const turnTimeoutMs = pending.turnTimeoutMs ?? current.turnTimeoutMs;
+  const timeBankSeconds = pending.timeBankSeconds ?? current.timeBankSeconds;
   return {
     ...current,
     smallBlind,
@@ -80,6 +97,7 @@ export function promoteConfig(current: TableConfig, pending: PendingConfig | nul
     startingStack,
     potCapMultiplier,
     turnTimeoutMs,
+    timeBankSeconds,
   };
 }
 

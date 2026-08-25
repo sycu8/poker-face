@@ -3,9 +3,13 @@ import type { Env } from "../env";
 import {
   applyAction,
   createInitialGameState,
+  normalizeGameState,
+  onTurnTimerExpired,
   projectForPlayer,
+  rabbitHunt,
   rebuyPlayer,
   seatPlayer,
+  setPaused,
   setPlayerAway,
   startHand,
   flushDeferredLeaves,
@@ -14,6 +18,14 @@ import {
   type GameState,
 } from "../domain/engine";
 import type { TableConfig } from "../domain/config";
+import {
+  buildLedgerSnapshot,
+  emptyLedger,
+  ledgerToCsv,
+  recordBuyIn,
+  recordBuyOut,
+  type LedgerPlayer,
+} from "../domain/ledger";
 import { writeAnalytics } from "../lib/analytics";
 
 interface ChatMessage {
@@ -50,6 +62,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   private hostUserId: string | null = null;
   private roomName: string | null = null;
   private inviteCode: string | null = null;
+  private closed = false;
   private chat: ChatMessage[] = [];
   private pendingJoins: Array<{
     requestId: string;
@@ -61,6 +74,10 @@ export class RoomDurableObject extends DurableObject<Env> {
   /** Players who left/kicked mid-hand — cleared when street returns to waiting. */
   private pendingLeaves = new Set<string>();
   private actionIdempotency = new Map<string, string>();
+  /** Session chip ledger keyed by userId. */
+  private ledger: Record<string, LedgerPlayer> = emptyLedger();
+  /** Unseated members watching the table (true spectators). */
+  private spectators = new Map<string, string>();
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -71,7 +88,6 @@ export class RoomDurableObject extends DurableObject<Env> {
           value TEXT NOT NULL
         );
       `);
-      // Snapshot-only reconnect — drop unused event log if an older DO created it.
       try {
         this.ctx.storage.sql.exec(`DROP TABLE IF EXISTS room_events`);
       } catch {
@@ -86,6 +102,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           hostUserId: string;
           roomName?: string;
           inviteCode?: string;
+          closed?: boolean;
           game: GameState;
           chat: ChatMessage[];
           pendingJoins: Array<{
@@ -95,16 +112,23 @@ export class RoomDurableObject extends DurableObject<Env> {
           }>;
           startRequests?: StartRequest[];
           pendingLeaves?: string[];
+          ledger?: Record<string, LedgerPlayer>;
+          spectators?: Array<{ userId: string; displayName: string }>;
         };
         this.roomId = snap.roomId;
         this.hostUserId = snap.hostUserId;
         this.roomName = snap.roomName ?? null;
         this.inviteCode = snap.inviteCode ?? null;
-        this.game = snap.game;
+        this.closed = Boolean(snap.closed);
+        this.game = snap.game ? normalizeGameState(snap.game) : null;
         this.chat = snap.chat ?? [];
         this.pendingJoins = snap.pendingJoins ?? [];
         this.startRequests = snap.startRequests ?? [];
         this.pendingLeaves = new Set(snap.pendingLeaves ?? []);
+        this.ledger = snap.ledger ?? emptyLedger();
+        this.spectators = new Map(
+          (snap.spectators ?? []).map((s) => [s.userId, s.displayName]),
+        );
       }
     });
   }
@@ -116,17 +140,33 @@ export class RoomDurableObject extends DurableObject<Env> {
       hostUserId: this.hostUserId,
       roomName: this.roomName,
       inviteCode: this.inviteCode,
+      closed: this.closed,
       game: this.game,
       chat: this.chat.slice(-100),
       pendingJoins: this.pendingJoins,
       startRequests: this.startRequests,
       pendingLeaves: [...this.pendingLeaves],
+      ledger: this.ledger,
+      spectators: [...this.spectators.entries()].map(([userId, displayName]) => ({
+        userId,
+        displayName,
+      })),
     });
     this.ctx.storage.sql.exec(
       `INSERT INTO room_meta (key, value) VALUES ('snapshot', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       value,
     );
+  }
+
+  private ledgerSnapshot() {
+    const stacks = new Map<string, number>();
+    if (this.game) {
+      for (const s of this.game.seats) {
+        if (s.playerId) stacks.set(s.playerId, s.stack);
+      }
+    }
+    return buildLedgerSnapshot(this.ledger, stacks);
   }
 
   private flushLeavesIfWaiting(): void {
@@ -174,6 +214,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           roomName: this.roomName,
           inviteCode: this.inviteCode,
           hostUserId: this.hostUserId,
+          closed: this.closed,
         },
         chat: this.chat.slice(-50),
         pendingJoins: isHost ? this.pendingJoins : undefined,
@@ -182,8 +223,21 @@ export class RoomDurableObject extends DurableObject<Env> {
           !isHost && att?.userId
             ? this.startRequests.some((r) => r.userId === att.userId)
             : undefined,
+        ledger: this.ledgerSnapshot(),
+        spectators: [...this.spectators.entries()].map(([userId, displayName]) => ({
+          userId,
+          displayName,
+        })),
       }),
     );
+  }
+
+  private async syncAlarms(): Promise<void> {
+    if (!this.game || this.closed || this.game.paused || !this.game.turnDeadlineMs) {
+      await this.ctx.storage.deleteAlarm();
+      return;
+    }
+    await this.ctx.storage.setAlarm(this.game.turnDeadlineMs);
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -201,8 +255,15 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.hostUserId = body.hostUserId;
       this.roomName = body.roomName ?? "Friends table";
       this.inviteCode = body.inviteCode ?? null;
+      this.closed = false;
       this.game = createInitialGameState(body.config);
       seatPlayer(this.game, body.hostUserId, body.hostDisplayName, 0);
+      recordBuyIn(
+        this.ledger,
+        body.hostUserId,
+        body.hostDisplayName,
+        this.game.config.startingStack,
+      );
       this.persist();
       return Response.json({ ok: true });
     }
@@ -235,12 +296,16 @@ export class RoomDurableObject extends DurableObject<Env> {
         smallBlind?: number;
         startingStack?: number;
         potCapMultiplier?: number;
+        timeBankSeconds?: number;
       };
       const pending = {
         ...(body.smallBlind !== undefined ? { smallBlind: body.smallBlind } : {}),
         ...(body.startingStack !== undefined ? { startingStack: body.startingStack } : {}),
         ...(body.potCapMultiplier !== undefined
           ? { potCapMultiplier: body.potCapMultiplier }
+          : {}),
+        ...(body.timeBankSeconds !== undefined
+          ? { timeBankSeconds: body.timeBankSeconds }
           : {}),
       };
       if (this.game.street === "waiting") {
@@ -254,6 +319,9 @@ export class RoomDurableObject extends DurableObject<Env> {
             : {}),
           ...(pending.potCapMultiplier !== undefined
             ? { potCapMultiplier: pending.potCapMultiplier }
+            : {}),
+          ...(pending.timeBankSeconds !== undefined
+            ? { timeBankSeconds: pending.timeBankSeconds }
             : {}),
         };
         this.game.config = next;
@@ -272,12 +340,30 @@ export class RoomDurableObject extends DurableObject<Env> {
 
     if (url.pathname === "/approve" && request.method === "POST") {
       if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      if (this.closed) return Response.json({ ok: false, error: "This table is closed." });
       const body = (await request.json()) as {
         userId: string;
         displayName: string;
-        seatIndex?: number;
+        seatIndex?: number | null;
+        asSpectator?: boolean;
         requestId: string;
       };
+      this.pendingJoins = this.pendingJoins.filter(
+        (j) => j.requestId !== body.requestId && j.userId !== body.userId,
+      );
+
+      if (body.asSpectator || body.seatIndex === null) {
+        this.spectators.set(body.userId, body.displayName);
+        this.persist();
+        this.broadcast({
+          type: "spectator_joined",
+          userId: body.userId,
+          displayName: body.displayName,
+        });
+        for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+        return Response.json({ ok: true, spectator: true });
+      }
+
       let seatIndex = body.seatIndex;
       if (seatIndex === undefined) {
         seatIndex = this.game.seats.findIndex((s) => !s.playerId);
@@ -291,6 +377,13 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (!result.ok) return Response.json(result);
       this.pendingJoins = this.pendingJoins.filter(
         (j) => j.requestId !== body.requestId && j.userId !== body.userId,
+      );
+      this.spectators.delete(body.userId);
+      recordBuyIn(
+        this.ledger,
+        body.userId,
+        body.displayName,
+        this.game.config.startingStack,
       );
       this.persist();
       this.broadcast({
@@ -307,6 +400,36 @@ export class RoomDurableObject extends DurableObject<Env> {
       return Response.json({ ok: true, seatIndex });
     }
 
+    if (url.pathname === "/seat-spectator" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as {
+        userId: string;
+        displayName: string;
+        seatIndex?: number;
+      };
+      let seatIndex = body.seatIndex;
+      if (seatIndex === undefined) {
+        seatIndex = this.game.seats.findIndex((s) => !s.playerId);
+      } else if (this.game.seats[seatIndex]?.playerId) {
+        return Response.json({ ok: false, error: "That seat is taken." });
+      }
+      if (seatIndex < 0) {
+        return Response.json({ ok: false, error: "This table is full." });
+      }
+      const result = seatPlayer(this.game, body.userId, body.displayName, seatIndex);
+      if (!result.ok) return Response.json(result);
+      this.spectators.delete(body.userId);
+      recordBuyIn(
+        this.ledger,
+        body.userId,
+        body.displayName,
+        this.game.config.startingStack,
+      );
+      this.persist();
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true, seatIndex });
+    }
+
     if (url.pathname === "/leave" && request.method === "POST") {
       if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
       const body = (await request.json()) as { userId: string };
@@ -316,12 +439,28 @@ export class RoomDurableObject extends DurableObject<Env> {
           error: "Host cannot leave while hosting. Transfer host or close the table.",
         });
       }
+      this.spectators.delete(body.userId);
+      const seated = this.game.seats.find((s) => s.playerId === body.userId);
+      if (!seated) {
+        this.persist();
+        this.broadcast({ type: "player_left", userId: body.userId });
+        for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+        return Response.json({ ok: true });
+      }
+      const stackAtLeave = seated.stack;
       const result = unseatPlayer(this.game, body.userId, Date.now());
       if (!result.ok) return Response.json(result);
+      if (!result.deferred) {
+        recordBuyOut(this.ledger, body.userId, stackAtLeave);
+      }
       this.startRequests = this.startRequests.filter((r) => r.userId !== body.userId);
       if (result.deferred) this.pendingLeaves.add(body.userId);
       else this.pendingLeaves.delete(body.userId);
       this.flushLeavesIfWaiting();
+      // After deferred flush, buy out at 0 if hand already settled stack into leave label.
+      if (!result.deferred) {
+        /* already recorded */
+      }
       this.persist();
       this.broadcast({ type: "player_left", userId: body.userId });
       writeAnalytics(this.env, "player_left", this.roomId ?? "unknown");
@@ -339,8 +478,18 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (body.targetUserId === this.hostUserId) {
         return Response.json({ ok: false, error: "Host cannot kick themselves." });
       }
+      this.spectators.delete(body.targetUserId);
+      const seated = this.game.seats.find((s) => s.playerId === body.targetUserId);
+      const stackAtLeave = seated?.stack ?? 0;
+      if (!seated) {
+        this.persist();
+        this.broadcast({ type: "player_kicked", userId: body.targetUserId });
+        for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+        return Response.json({ ok: true });
+      }
       const result = unseatPlayer(this.game, body.targetUserId, Date.now());
       if (!result.ok) return Response.json(result);
+      if (!result.deferred) recordBuyOut(this.ledger, body.targetUserId, stackAtLeave);
       this.startRequests = this.startRequests.filter((r) => r.userId !== body.targetUserId);
       if (result.deferred) this.pendingLeaves.add(body.targetUserId);
       else this.pendingLeaves.delete(body.targetUserId);
@@ -365,8 +514,16 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (!isHost && !isSelf) {
         return Response.json({ ok: false, error: "Only the host or the player can rebuy." });
       }
+      const seat = this.game.seats.find((s) => s.playerId === body.targetUserId);
       const result = rebuyPlayer(this.game, body.targetUserId, body.chips);
       if (!result.ok) return Response.json(result);
+      const amount = body.chips ?? this.game.config.startingStack;
+      recordBuyIn(
+        this.ledger,
+        body.targetUserId,
+        seat?.displayName ?? "Player",
+        amount,
+      );
       this.persist();
       this.broadcast({ type: "rebuy", userId: body.targetUserId });
       writeAnalytics(this.env, "rebuy", this.roomId ?? "unknown", [body.chips ?? 0]);
@@ -385,6 +542,99 @@ export class RoomDurableObject extends DurableObject<Env> {
       return Response.json({ ok: true });
     }
 
+    if (url.pathname === "/pause" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as { hostUserId: string; paused: boolean };
+      if (body.hostUserId !== this.hostUserId) {
+        return Response.json({ ok: false, error: "Only the host can pause." });
+      }
+      const result = setPaused(this.game, body.paused, Date.now());
+      if (!result.ok) return Response.json(result);
+      this.persist();
+      await this.syncAlarms();
+      this.broadcast({ type: "events", events: result.events });
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true, paused: this.game.paused });
+    }
+
+    if (url.pathname === "/transfer-host" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as {
+        hostUserId: string;
+        targetUserId: string;
+        targetDisplayName: string;
+      };
+      if (body.hostUserId !== this.hostUserId) {
+        return Response.json({ ok: false, error: "Only the host can transfer." });
+      }
+      if (body.targetUserId === this.hostUserId) {
+        return Response.json({ ok: false, error: "Already the host." });
+      }
+      const seatedOrSpec =
+        this.game.seats.some((s) => s.playerId === body.targetUserId) ||
+        this.spectators.has(body.targetUserId);
+      if (!seatedOrSpec) {
+        return Response.json({ ok: false, error: "Target must be at this table." });
+      }
+      this.hostUserId = body.targetUserId;
+      this.persist();
+      this.broadcast({
+        type: "host_transferred",
+        hostUserId: body.targetUserId,
+        displayName: body.targetDisplayName,
+      });
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true, hostUserId: this.hostUserId });
+    }
+
+    if (url.pathname === "/close" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const body = (await request.json()) as { hostUserId: string };
+      if (body.hostUserId !== this.hostUserId) {
+        return Response.json({ ok: false, error: "Only the host can close the table." });
+      }
+      // Cash out seated stacks into ledger.
+      for (const seat of this.game.seats) {
+        if (seat.playerId) {
+          recordBuyOut(this.ledger, seat.playerId, seat.stack);
+          unseatPlayer(this.game, seat.playerId, Date.now());
+        }
+      }
+      this.spectators.clear();
+      this.pendingJoins = [];
+      this.startRequests = [];
+      this.pendingLeaves.clear();
+      this.closed = true;
+      this.game.paused = true;
+      this.game.turnDeadlineMs = null;
+      this.persist();
+      await this.ctx.storage.deleteAlarm();
+      this.broadcast({ type: "table_closed", message: "The host closed this table." });
+      for (const ws of this.ctx.getWebSockets()) {
+        try {
+          ws.close(1000, "Table closed");
+        } catch {
+          /* ignore */
+        }
+      }
+      return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/ledger" && request.method === "GET") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      const snap = this.ledgerSnapshot();
+      const format = url.searchParams.get("format");
+      if (format === "csv") {
+        return new Response(ledgerToCsv(snap), {
+          headers: {
+            "content-type": "text/csv; charset=utf-8",
+            "content-disposition": `attachment; filename="ledger-${this.roomId ?? "table"}.csv"`,
+          },
+        });
+      }
+      return Response.json({ ok: true, ledger: snap });
+    }
+
     if (url.pathname === "/open-seats" && request.method === "GET") {
       if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
       const open = this.game.seats
@@ -394,6 +644,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
 
     if (url.pathname === "/ws") {
+      if (this.closed) return new Response("Table closed", { status: 410 });
       const userId = url.searchParams.get("userId");
       const displayName = url.searchParams.get("displayName") ?? "Player";
       if (!userId) return new Response("userId required", { status: 400 });
@@ -405,6 +656,10 @@ export class RoomDurableObject extends DurableObject<Env> {
         displayName,
         lastAckSequence: 0,
       } satisfies ClientAttachment);
+      // Track as spectator if not seated.
+      if (this.game && !this.game.seats.some((s) => s.playerId === userId)) {
+        this.spectators.set(userId, displayName);
+      }
       this.sendProjection(server);
       return new Response(null, { status: 101, webSocket: client });
     }
@@ -413,7 +668,7 @@ export class RoomDurableObject extends DurableObject<Env> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    if (!this.game) return;
+    if (!this.game || this.closed) return;
     const att = ws.deserializeAttachment() as ClientAttachment;
     let data: {
       type: string;
@@ -422,6 +677,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       text?: string;
       expectedVersion?: number;
       idempotencyKey?: string;
+      paused?: boolean;
     };
     try {
       data = JSON.parse(typeof message === "string" ? message : new TextDecoder().decode(message));
@@ -451,9 +707,42 @@ export class RoomDurableObject extends DurableObject<Env> {
       return;
     }
 
+    if (data.type === "pause") {
+      if (att.userId !== this.hostUserId) {
+        ws.send(JSON.stringify({ type: "error", error: "Only the host can pause." }));
+        return;
+      }
+      const result = setPaused(this.game, Boolean(data.paused), Date.now());
+      if (!result.ok) {
+        ws.send(JSON.stringify({ type: "error", error: result.error }));
+        return;
+      }
+      this.persist();
+      await this.syncAlarms();
+      this.broadcast({ type: "events", events: result.events });
+      for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
+      return;
+    }
+
+    if (data.type === "rabbit") {
+      const result = rabbitHunt(this.game);
+      if (!result.ok) {
+        ws.send(JSON.stringify({ type: "error", error: result.error }));
+        return;
+      }
+      this.persist();
+      this.broadcast({ type: "events", events: result.events });
+      for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
+      return;
+    }
+
     if (data.type === "request_start") {
       if (att.userId === this.hostUserId) {
         ws.send(JSON.stringify({ type: "error", error: "You can deal whenever you are ready." }));
+        return;
+      }
+      if (this.game.paused) {
+        ws.send(JSON.stringify({ type: "error", error: "The table is paused." }));
         return;
       }
       if (this.game.street !== "waiting") {
@@ -469,7 +758,6 @@ export class RoomDurableObject extends DurableObject<Env> {
       const now = Date.now();
       const existing = this.startRequests.find((r) => r.userId === att.userId);
       if (existing) {
-        // Idempotent: same player clicking again does not spam the host.
         if (now - existing.at < 5_000) {
           ws.send(
             JSON.stringify({
@@ -482,7 +770,6 @@ export class RoomDurableObject extends DurableObject<Env> {
         }
         existing.displayName = att.displayName;
         existing.at = now;
-        // Move to end so they are the latest requester.
         this.startRequests = [
           ...this.startRequests.filter((r) => r.userId !== att.userId),
           existing,
@@ -517,10 +804,14 @@ export class RoomDurableObject extends DurableObject<Env> {
         this.sendProjection(ws);
         return;
       }
+      if (this.game.paused) {
+        ws.send(JSON.stringify({ type: "error", error: "Resume the table before dealing." }));
+        return;
+      }
       this.startRequests = [];
       const events = startHand(this.game, Date.now());
       this.persist();
-      await this.ctx.storage.setAlarm(this.game.turnDeadlineMs ?? Date.now() + 1000);
+      await this.syncAlarms();
       writeAnalytics(this.env, "hand_started", this.roomId ?? "unknown", [this.game.handNumber]);
       for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
       this.broadcast({ type: "events", events });
@@ -528,6 +819,10 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
 
     if (data.type === "action" && data.action) {
+      if (this.game.paused) {
+        ws.send(JSON.stringify({ type: "error", error: "The table is paused." }));
+        return;
+      }
       const seat = this.game.seats.find((s) => s.playerId === att.userId);
       if (!seat) {
         ws.send(JSON.stringify({ type: "error", error: "No seat." }));
@@ -566,12 +861,17 @@ export class RoomDurableObject extends DurableObject<Env> {
       }
       this.actionIdempotency.set(idem, "ok");
       this.persist();
-      if (this.game.turnDeadlineMs) {
-        await this.ctx.storage.setAlarm(this.game.turnDeadlineMs);
-      } else {
-        await this.ctx.storage.deleteAlarm();
-      }
+      await this.syncAlarms();
       this.flushLeavesIfWaiting();
+      // Buy-out deferred leavers once street is waiting.
+      if (this.game.street === "waiting") {
+        for (const id of [...this.pendingLeaves]) {
+          const gone = !this.game.seats.some((s) => s.playerId === id);
+          if (gone && this.ledger[id]?.active) {
+            recordBuyOut(this.ledger, id, 0);
+          }
+        }
+      }
       for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
       this.broadcast({ type: "events", events: result.events });
 
@@ -605,9 +905,20 @@ export class RoomDurableObject extends DurableObject<Env> {
   }
 
   async alarm(): Promise<void> {
-    if (!this.game || this.game.actionSeat === null) return;
+    if (!this.game || this.closed || this.game.paused || this.game.actionSeat === null) return;
     const seat = this.game.seats[this.game.actionSeat];
     if (!seat || seat.status !== "active") return;
+
+    const bankOrTimeout = onTurnTimerExpired(this.game, Date.now());
+    if (bankOrTimeout.kind === "noop") return;
+    if (bankOrTimeout.kind === "bank") {
+      this.persist();
+      await this.syncAlarms();
+      for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
+      this.broadcast({ type: "events", events: bankOrTimeout.events, reason: "time_bank" });
+      return;
+    }
+
     const legal =
       seat.betThisStreet < this.game.currentBet
         ? ("fold" as const)
@@ -623,9 +934,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (!result.ok) return;
     this.flushLeavesIfWaiting();
     this.persist();
-    if (this.game.turnDeadlineMs) {
-      await this.ctx.storage.setAlarm(this.game.turnDeadlineMs);
-    }
+    await this.syncAlarms();
     for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
     this.broadcast({ type: "events", events: result.events, reason: "timeout" });
   }

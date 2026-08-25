@@ -249,7 +249,12 @@ export function TablePage({ user }: { user: User }) {
         return;
       }
       if (msg.type === "chat" && msg.message) {
-        setChat((c) => [...c, msg.message!]);
+        const raw = msg.message;
+        const entry: ChatMessage =
+          typeof raw === "string"
+            ? { id: crypto.randomUUID(), displayName: "Table", text: raw }
+            : raw;
+        setChat((c) => [...c, entry]);
       }
       if (msg.type === "join_request" && msg) {
         const jr = msg as unknown as {
