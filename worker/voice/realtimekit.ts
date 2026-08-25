@@ -34,12 +34,16 @@ export async function handleVoice(
     return errorJson(403, "You need an approved seat before joining voice.");
   }
 
-  if (!env.REALTIMEKIT_APP_ID || !env.REALTIMEKIT_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
+  const missing: string[] = [];
+  if (!env.REALTIMEKIT_APP_ID) missing.push("REALTIMEKIT_APP_ID");
+  if (!env.REALTIMEKIT_API_TOKEN) missing.push("REALTIMEKIT_API_TOKEN");
+  if (!env.CLOUDFLARE_ACCOUNT_ID) missing.push("CLOUDFLARE_ACCOUNT_ID");
+  if (missing.length) {
     return json({
       available: false,
       reason: "not_configured",
-      message:
-        "Voice isn’t configured on this deployment. Add REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN, and CLOUDFLARE_ACCOUNT_ID Worker secrets, then redeploy. The game stays connected.",
+      missing,
+      message: `Voice isn’t configured on this deployment. Missing: ${missing.join(", ")}. Use a Cloudflare API token with Realtime Admin for REALTIMEKIT_API_TOKEN (not a TURN key token), then redeploy. The game stays connected.`,
     });
   }
 

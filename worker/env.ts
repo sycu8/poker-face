@@ -17,4 +17,9 @@ export interface Env {
   REALTIMEKIT_PRESET_NAME?: string;
   REALTIMEKIT_API_TOKEN?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
+  /** Optional Calls TURN key id (dashboard). Not required for RealtimeKit voice. */
+  TURN_KEY_ID?: string;
+  /** Optional Calls TURN key display name. */
+  TURN_KEY_NAME?: string;
+  TURN_KEY_API_TOKEN?: string;
 }
