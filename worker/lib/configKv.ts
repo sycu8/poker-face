@@ -23,7 +23,7 @@ export async function readPublicConfig(env: Env): Promise<{
   flags: { handHistoryEnabled: boolean; themesEnabled: boolean; passkeysEnabled: boolean };
   copy: PublicCopy;
 }> {
-  let copy = { ...DEFAULT_COPY };
+  const copy = { ...DEFAULT_COPY };
   let handHistoryEnabled = true;
   let themesEnabled = true;
   let passkeysEnabled = false;

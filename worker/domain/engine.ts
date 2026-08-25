@@ -418,6 +418,7 @@ function advanceStreet(state: GameState, nowMs: number): EngineEvent[] {
 }
 
 function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
+  void _nowMs;
   state.street = "showdown";
   state.actionSeat = null;
   state.turnDeadlineMs = null;

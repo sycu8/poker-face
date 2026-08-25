@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /** Stable avatar color from a display name. */
 export function avatarColor(name: string): string {
   let hash = 0;
