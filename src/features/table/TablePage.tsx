@@ -5,6 +5,7 @@ import { VoicePanel } from "../voice/VoicePanel";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
+import { seatRingStyle, visualSeatIndex } from "./seatLayout";
 import { WinCelebration, winningPlayerIds } from "./WinCelebration";
 
 interface SeatView {
@@ -418,6 +419,14 @@ export function TablePage({ user }: { user: User }) {
     [view],
   );
 
+  const seats = view?.seats ?? [];
+  const seatCount = seats.length;
+  const anchorSeatIndex = useMemo(() => {
+    const viewer = view?.seats.find((s) => s.isViewer);
+    if (viewer) return viewer.seatIndex;
+    return 0;
+  }, [view?.seats]);
+
   async function copyInvite() {
     if (!meta?.inviteCode) return;
     await navigator.clipboard.writeText(meta.inviteCode);
@@ -718,178 +727,202 @@ export function TablePage({ user }: { user: User }) {
         </div>
       ) : null}
 
-      <div className="table-felt" aria-label="Poker table">
-        {celebrationWinners && celebrationWinners.length > 0 ? (
-          <WinCelebration
-            winners={celebrationWinners}
-            displayNameFor={displayNameFor}
-            handNumber={view?.handNumber ?? 0}
-          />
-        ) : null}
-        <div className="board">
-          {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map((c, i) => (
-            <PlayingCard key={`${c}-${i}`} code={c} size="board" />
-          ))}
-        </div>
-        <div className="pot">
-          Pot {view?.pot ?? 0}
-          {view?.street ? ` · ${STREET_LABEL[view.street] ?? view.street}` : ""}
-        </div>
-      </div>
-
-      <div className="seats">
-        {(view?.seats ?? []).map((seat) => (
-          <div
-            key={seat.seatIndex}
-            className={`seat${view?.actionSeat === seat.seatIndex ? " active-turn" : ""}${
-              seat.playerId && winnerIdSet.has(seat.playerId) ? " seat--winner" : ""
-            }`}
-          >
-            <div className="name" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {seat.displayName ? <PlayerAvatar name={seat.displayName} size={28} /> : null}
-              <span>
-                {seat.displayName ?? "Open seat"}
-                {seat.isViewer ? " (you)" : ""}
-              </span>
+      <div className="table-stage">
+        <div className="table-felt" aria-label="Poker table">
+          {celebrationWinners && celebrationWinners.length > 0 ? (
+            <WinCelebration
+              winners={celebrationWinners}
+              displayNameFor={displayNameFor}
+              handNumber={view?.handNumber ?? 0}
+            />
+          ) : null}
+          <div className="table-center">
+            <div className="board">
+              {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map((c, i) => (
+                <PlayingCard key={`${c}-${i}`} code={c} size="board" />
+              ))}
             </div>
-            <div className="muted">{seat.status.replaceAll("_", " ")}</div>
-            {seat.playerId ? (
-              <div className="stack">
-                {seat.stack} chips
-                {seat.betThisStreet > 0 ? ` · bet ${seat.betThisStreet}` : ""}
-              </div>
-            ) : null}
-            {seat.playerId && isHost && seat.playerId !== user.id ? (
-              <div className="cta-row" style={{ marginTop: 6 }}>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  style={{ fontSize: "0.8rem", padding: "0.25rem 0.55rem" }}
-                  onClick={() => void kickPlayer(seat.playerId!)}
-                >
-                  Kick
-                </button>
-                {seat.stack === 0 ? (
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    style={{ fontSize: "0.8rem", padding: "0.25rem 0.55rem" }}
-                    onClick={() => void doRebuy(seat.playerId!)}
-                  >
-                    Rebuy
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-            {seat.holeCards ? (
-              <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
-                {seat.holeCards.map((c, i) => (
-                  <PlayingCard key={`${c}-${i}`} code={c} size="hole" />
-                ))}
-              </div>
-            ) : null}
+            <div className="pot">
+              Pot {view?.pot ?? 0}
+              {view?.street ? ` · ${STREET_LABEL[view.street] ?? view.street}` : ""}
+            </div>
           </div>
-        ))}
-      </div>
+          <div className="seats" role="list">
+            {seats.map((seat) => {
+              const visual = visualSeatIndex(seat.seatIndex, seatCount, anchorSeatIndex);
+              const isHero = seat.isViewer;
+              return (
+                <div
+                  key={seat.seatIndex}
+                  role="listitem"
+                  className={[
+                    "seat",
+                    isHero ? "seat--hero" : "seat--rail",
+                    !seat.playerId ? "seat--open" : "",
+                    view?.actionSeat === seat.seatIndex ? "active-turn" : "",
+                    seat.playerId && winnerIdSet.has(seat.playerId) ? "seat--winner" : "",
+                    seat.status === "sitting_out" ? "seat--away" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  style={seatRingStyle(visual, seatCount)}
+                >
+                  <div className="seat-info">
+                    <div className="name">
+                      {seat.displayName ? (
+                        <PlayerAvatar name={seat.displayName} size={isHero ? 32 : 22} />
+                      ) : null}
+                      <span className="seat-name-text">
+                        {seat.displayName ?? "Open"}
+                        {isHero ? " (you)" : ""}
+                      </span>
+                    </div>
+                    <div className="seat-status muted">
+                      {seat.playerId ? seat.status.replaceAll("_", " ") : "Open seat"}
+                    </div>
+                    {seat.playerId ? (
+                      <div className="stack">
+                        {seat.stack}
+                        {seat.betThisStreet > 0 ? ` · ${seat.betThisStreet}` : ""}
+                      </div>
+                    ) : null}
+                    {seat.playerId && isHost && seat.playerId !== user.id ? (
+                      <div className="seat-host-actions">
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => void kickPlayer(seat.playerId!)}
+                        >
+                          Kick
+                        </button>
+                        {seat.stack === 0 ? (
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => void doRebuy(seat.playerId!)}
+                          >
+                            Rebuy
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  {seat.holeCards ? (
+                    <div className={`seat-holes${isHero ? " seat-holes--hero" : ""}`}>
+                      {seat.holeCards.map((c, i) => (
+                        <PlayingCard
+                          key={`${c}-${i}`}
+                          code={c}
+                          size={isHero ? "hero" : "sm"}
+                        />
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
 
-      {legal ? (
-        <div className="actions" aria-label="Your actions">
-          {legal.canFold ? (
-            <button
-              className="btn btn-danger"
-              type="button"
-              onClick={() =>
-                send({
-                  type: "action",
-                  action: "fold",
-                  expectedVersion: view?.sequence,
-                  idempotencyKey: crypto.randomUUID(),
-                })
-              }
-            >
-              Fold
-            </button>
-          ) : null}
-          {legal.canCheck ? (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() =>
-                send({
-                  type: "action",
-                  action: "check",
-                  expectedVersion: view?.sequence,
-                  idempotencyKey: crypto.randomUUID(),
-                })
-              }
-            >
-              Check
-            </button>
-          ) : null}
-          {legal.canCall ? (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() =>
-                send({
-                  type: "action",
-                  action: "call",
-                  expectedVersion: view?.sequence,
-                  idempotencyKey: crypto.randomUUID(),
-                })
-              }
-            >
-              Call {legal.callAmount}
-            </button>
-          ) : null}
-          {legal.canBet || legal.canRaise ? (
-            <>
-              <label className="sr-only" htmlFor="raiseTo">
-                Raise to
-              </label>
-              <input
-                id="raiseTo"
-                type="number"
-                min={legal.canBet ? legal.minBet : legal.minRaiseTo}
-                max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
-                value={raiseTo}
-                onChange={(e) => setRaiseTo(Number(e.target.value))}
-              />
+        {legal ? (
+          <div className="actions actions--hero" aria-label="Your actions">
+            {legal.canFold ? (
               <button
-                className="btn btn-primary"
+                className="btn btn-danger"
                 type="button"
                 onClick={() =>
                   send({
                     type: "action",
-                    action: legal.canBet ? "bet" : "raise",
-                    amount: raiseTo,
+                    action: "fold",
                     expectedVersion: view?.sequence,
                     idempotencyKey: crypto.randomUUID(),
                   })
                 }
               >
-                {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
+                Fold
               </button>
-            </>
-          ) : null}
-          {legal.canAllIn ? (
-            <button
-              className="btn btn-secondary"
-              type="button"
-              onClick={() =>
-                send({
-                  type: "action",
-                  action: "all_in",
-                  expectedVersion: view?.sequence,
-                  idempotencyKey: crypto.randomUUID(),
-                })
-              }
-            >
-              All-in
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+            ) : null}
+            {legal.canCheck ? (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() =>
+                  send({
+                    type: "action",
+                    action: "check",
+                    expectedVersion: view?.sequence,
+                    idempotencyKey: crypto.randomUUID(),
+                  })
+                }
+              >
+                Check
+              </button>
+            ) : null}
+            {legal.canCall ? (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() =>
+                  send({
+                    type: "action",
+                    action: "call",
+                    expectedVersion: view?.sequence,
+                    idempotencyKey: crypto.randomUUID(),
+                  })
+                }
+              >
+                Call {legal.callAmount}
+              </button>
+            ) : null}
+            {legal.canBet || legal.canRaise ? (
+              <>
+                <label className="sr-only" htmlFor="raiseTo">
+                  Raise to
+                </label>
+                <input
+                  id="raiseTo"
+                  type="number"
+                  min={legal.canBet ? legal.minBet : legal.minRaiseTo}
+                  max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
+                  value={raiseTo}
+                  onChange={(e) => setRaiseTo(Number(e.target.value))}
+                />
+                <button
+                  className="btn btn-primary"
+                  type="button"
+                  onClick={() =>
+                    send({
+                      type: "action",
+                      action: legal.canBet ? "bet" : "raise",
+                      amount: raiseTo,
+                      expectedVersion: view?.sequence,
+                      idempotencyKey: crypto.randomUUID(),
+                    })
+                  }
+                >
+                  {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
+                </button>
+              </>
+            ) : null}
+            {legal.canAllIn ? (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() =>
+                  send({
+                    type: "action",
+                    action: "all_in",
+                    expectedVersion: view?.sequence,
+                    idempotencyKey: crypto.randomUUID(),
+                  })
+                }
+              >
+                All-in
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
 
       <div className="table-side-grid">
         <div className="panel">

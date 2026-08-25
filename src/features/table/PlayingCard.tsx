@@ -3,7 +3,7 @@ import type { CSSProperties } from "react";
 
 type Suit = "c" | "d" | "h" | "s";
 type Rank = "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "T" | "J" | "Q" | "K" | "A";
-type Size = "board" | "hole" | "hero";
+type Size = "board" | "hole" | "hero" | "sm" | "md";
 
 const RANK_LABEL: Record<Rank, string> = {
   A: "A",
@@ -297,6 +297,8 @@ const SIZE_CLASS: Record<Size, string> = {
   board: "playing-card--board",
   hole: "playing-card--hole",
   hero: "playing-card--hero",
+  sm: "playing-card--sm",
+  md: "playing-card--md",
 };
 
 export function PlayingCard({ code, size = "board", className = "", style }: PlayingCardProps) {
