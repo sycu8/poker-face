@@ -8,6 +8,10 @@ export const DEFAULT_REALTIMEKIT_PRESET = "group_call_participant";
 /**
  * RealtimeKit voice provisioning. Degraded mode: if credentials are missing,
  * return a structured unavailable payload so the game continues.
+ *
+ * Requires Worker secrets: REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN (Realtime Admin
+ * Cloudflare token), CLOUDFLARE_ACCOUNT_ID. Calls TURN keys are separate — the client
+ * gets media connectivity via the participant token; see docs/VOICE_SETUP.md.
  */
 export async function handleVoice(
   request: Request,
