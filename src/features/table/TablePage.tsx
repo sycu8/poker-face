@@ -571,7 +571,7 @@ export function TablePage({ user }: { user: User }) {
                 {shareMsg ?? "Share table"}
               </button>
             ) : null}
-            {isHost ? (
+            {isHost && waitingToDeal ? (
               <button
                 className="btn btn-primary"
                 type="button"

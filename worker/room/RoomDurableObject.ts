@@ -289,7 +289,9 @@ export class RoomDurableObject extends DurableObject<Env> {
       }
       const result = seatPlayer(this.game, body.userId, body.displayName, seatIndex);
       if (!result.ok) return Response.json(result);
-      this.pendingJoins = this.pendingJoins.filter((j) => j.requestId !== body.requestId);
+      this.pendingJoins = this.pendingJoins.filter(
+        (j) => j.requestId !== body.requestId && j.userId !== body.userId,
+      );
       this.persist();
       this.broadcast({
         type: "player_seated",
@@ -508,6 +510,11 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (data.type === "start_hand") {
       if (att.userId !== this.hostUserId) {
         ws.send(JSON.stringify({ type: "error", error: "Only the host can deal." }));
+        return;
+      }
+      if (!this.game || this.game.street !== "waiting") {
+        ws.send(JSON.stringify({ type: "error", error: "Finish the current hand before dealing again." }));
+        this.sendProjection(ws);
         return;
       }
       this.startRequests = [];
