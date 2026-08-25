@@ -2,7 +2,7 @@
 /**
  * CI helper: ensure Cloudflare resources exist and patch wrangler.jsonc IDs.
  * Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.
- * Optional: D1_DATABASE_ID, KV_NAMESPACE_ID, TURNSTILE_SITE_KEY, APP_ORIGIN, WEBAUTHN_RP_ID
+ * Optional: D1_DATABASE_ID, KV_NAMESPACE_ID, TURNSTILE_SITE_KEY, APP_ORIGIN
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -208,7 +208,6 @@ configText = configText.replaceAll(names.placeholderD1, d1Id).replaceAll(names.p
 
 const turnstileSiteKey = process.env.TURNSTILE_SITE_KEY ?? "";
 const appOrigin = process.env.APP_ORIGIN;
-const rpId = process.env.WEBAUTHN_RP_ID;
 
 if (appOrigin) {
   configText = configText.replace(
@@ -216,14 +215,6 @@ if (appOrigin) {
       `("ENVIRONMENT": "${envName}"[\\s\\S]*?"APP_ORIGIN": ")([^"]*)(")`,
     ),
     `$1${appOrigin}$3`,
-  );
-}
-if (rpId) {
-  configText = configText.replace(
-    new RegExp(
-      `("ENVIRONMENT": "${envName}"[\\s\\S]*?"WEBAUTHN_RP_ID": ")([^"]*)(")`,
-    ),
-    `$1${rpId}$3`,
   );
 }
 if (turnstileSiteKey) {

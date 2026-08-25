@@ -1,4 +1,4 @@
-export type User = { id: string; displayName: string };
+export type User = { id: string; displayName: string; username?: string | null };
 
 async function parse<T>(res: Response): Promise<T> {
   const data = await res.json();
@@ -18,34 +18,25 @@ export const api = {
       if (r.status === 401) return { user: null as User | null };
       return parse<{ user: User }>(r);
     }),
-  registerOptions: (displayName: string) =>
-    fetch("/api/auth/register/options", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ displayName }),
-    }).then((r) => parse<{ challengeId: string; options: PublicKeyCredentialCreationOptionsJSON; displayName: string }>(r)),
-  registerVerify: (body: unknown) =>
-    fetch("/api/auth/register/verify", {
+  register: (body: { username: string; password: string; displayName?: string }) =>
+    fetch("/api/auth/register", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
-  loginOptions: () =>
-    fetch("/api/auth/login/options", {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
-    }).then((r) => parse<{ challengeId: string; options: PublicKeyCredentialRequestOptionsJSON }>(r)),
-  loginVerify: (body: unknown) =>
-    fetch("/api/auth/login/verify", {
+  login: (body: { username: string; password: string }) =>
+    fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
+  logout: () =>
+    fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    }).then((r) => parse<{ ok: boolean }>(r)),
   createRoom: (body: {
     name: string;
     smallBlind: number;
@@ -92,6 +83,3 @@ export const api = {
       parse<{ available: boolean; token?: string; message?: string }>(r),
     ),
 };
-
-type PublicKeyCredentialCreationOptionsJSON = Record<string, unknown>;
-type PublicKeyCredentialRequestOptionsJSON = Record<string, unknown>;

@@ -11,9 +11,9 @@ Virtual chips only. No purchases, cash-out, wallets, or real-money language.
 - React SPA/PWA + Vite + `@cloudflare/vite-plugin`
 - Single Worker for static assets + HTTP APIs
 - SQLite-backed Durable Object per room (hibernatable WebSockets)
-- D1 (users, passkeys, sessions, rooms, hand summaries)
+- D1 (users, sessions, rooms, hand summaries)
 - KV / R2 / Queues / Analytics Engine / Rate Limiting / Turnstile
-- Passkeys via `@simplewebauthn/*`
+- Username + password auth (PBKDF2) with cookie sessions
 - Voice via Cloudflare RealtimeKit (degraded-safe)
 
 ## Quick start
