@@ -58,11 +58,11 @@ export function HomePage({
       </p>
       {!user ? (
         <div className="cta-row">
-          <Link className="btn btn-primary" to="/auth">
-            Create a room
+          <Link className="btn btn-primary" to="/auth?mode=register">
+            Sign up
           </Link>
           <Link className="btn btn-secondary" to="/auth">
-            Ask to join
+            Sign in
           </Link>
         </div>
       ) : (
