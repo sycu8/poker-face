@@ -16,7 +16,10 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | --- | --- |
 | `TURNSTILE_SECRET_KEY` | Turnstile siteverify |
 | `REALTIMEKIT_API_TOKEN` | Voice: Cloudflare API token with **Realtime Admin** (not a Calls TURN key token) |
-| `REALTIMEKIT_APP_ID` | RealtimeKit app id (can also be a variable) |
+
+**Voice secret must be visible to Deploy jobs:** name it exactly `REALTIMEKIT_API_TOKEN` under **Settings → Secrets and variables → Actions → Repository secrets**, or under Environments **`staging`** and **`production`** (deploy jobs use those environments). A Variable is not enough — it must be a **Secret**. After saving, re-run **Deploy Cloudflare** (or push to `main`). Deploy logs should say `REALTIMEKIT_API_TOKEN is present for … secret bulk` and upload more than 2 Worker secrets.
+
+| `REALTIMEKIT_APP_ID` | RealtimeKit app id (can also be a variable; also set as Wrangler var) |
 | `REALTIMEKIT_PRESET_NAME` | RealtimeKit preset for participants (default `group_call_participant`) |
 | `SESSION_SECRET_STAGING` / `SESSION_SECRET_PRODUCTION` | Per-environment session secrets |
 | `TURNSTILE_SECRET_KEY_STAGING` / `TURNSTILE_SECRET_KEY_PRODUCTION` | Per-environment Turnstile |
