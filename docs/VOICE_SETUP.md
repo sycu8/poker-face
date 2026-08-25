@@ -16,11 +16,15 @@ Poker Faces voice uses **Cloudflare RealtimeKit**. The Worker mints a participan
 
 ## Required for voice to leave `not_configured`
 
-1. `REALTIMEKIT_APP_ID`
-2. `REALTIMEKIT_API_TOKEN` (Realtime Admin Cloudflare token — **not** the TURN key API token)
-3. `CLOUDFLARE_ACCOUNT_ID`
+1. `REALTIMEKIT_APP_ID` — shipped as a Wrangler **var** (app `6867ec48-6a1e-43b9-b940-a542afad90d3`)
+2. `REALTIMEKIT_API_TOKEN` — Cloudflare API token with **Realtime Admin** (secret; **not** the TURN key API token)
+3. `CLOUDFLARE_ACCOUNT_ID` — Worker secret (already uploaded by Deploy Cloudflare CI)
 
-Without (2), `/api/rooms/:id/voice-token` returns `{ available: false, reason: "not_configured" }` and the table still works.
+Without (2), `/api/rooms/:id/voice-token` returns `{ available: false, reason: "not_configured", missing: [...] }` and the table still works.
+
+### Cursor Cloudflare MCP
+
+Interactive MCP login for Cloudflare bindings/observability only works in the **Cursor desktop IDE** (Settings → MCP → Cloudflare → Connect). Cloud agents cannot complete that OAuth flow.
 
 ## Upload secrets (never commit values)
 
