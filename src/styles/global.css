@@ -505,6 +505,7 @@ button {
 
 .table-stage {
   margin: 1rem 0 0.5rem;
+  padding-bottom: 0.25rem;
 }
 
 .table-felt {
@@ -518,7 +519,7 @@ button {
   aspect-ratio: 1.55 / 1;
   min-height: min(58vw, 420px);
   max-height: 560px;
-  margin: 0;
+  margin: 0 0 5.5rem;
   padding: 0;
   overflow: visible;
 }
@@ -832,6 +833,7 @@ button {
     aspect-ratio: 1.2 / 1;
     min-height: min(72vw, 380px);
     border-width: 8px;
+    margin-bottom: 4.25rem;
   }
 
   .seat--rail {
@@ -1023,10 +1025,12 @@ button {
 }
 
 .actions--hero {
-  margin-top: 0.85rem;
+  margin-top: -3.75rem;
   padding: 0.75rem 0.5rem 1rem;
   border-radius: 16px;
   background: linear-gradient(180deg, #0a1a14aa 0%, transparent 100%);
+  position: relative;
+  z-index: 6;
 }
 
 .actions .btn {

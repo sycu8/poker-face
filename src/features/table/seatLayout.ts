@@ -20,8 +20,8 @@ export function visualSeatIndex(
 export function seatRingStyle(visualIndex: number, seatCount: number): CSSProperties {
   const n = Math.max(seatCount, 1);
   const angle = Math.PI / 2 + (visualIndex * 2 * Math.PI) / n;
-  const rx = 44;
-  const ry = 42;
+  const rx = 42;
+  const ry = 38;
   const left = 50 + rx * Math.cos(angle);
   const top = 50 + ry * Math.sin(angle);
   return {

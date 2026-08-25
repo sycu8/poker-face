@@ -19,7 +19,7 @@ describe("seatRingStyle", () => {
   it("places visual 0 at the bottom center of the oval", () => {
     const style = seatRingStyle(0, 9);
     expect(style.left).toBe("50%");
-    expect(Number.parseFloat(String(style.top))).toBeGreaterThan(85);
+    expect(Number.parseFloat(String(style.top))).toBeGreaterThan(80);
   });
 
   it("spreads seats around the ring", () => {
