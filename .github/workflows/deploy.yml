@@ -92,13 +92,10 @@ jobs:
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY_STAGING }}
           REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
           REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
-          REALTIMEKIT_PRESET_NAME: ${{ secrets.REALTIMEKIT_PRESET_NAME }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
-          if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
           if [ -z "$SESSION_SECRET" ]; then
             echo "::warning::SESSION_SECRET not set in GitHub Actions secrets; generating ephemeral value for this deploy. Set repository secret SESSION_SECRET for stable auth."
             export SESSION_SECRET="$(openssl rand -hex 32)"
@@ -172,13 +169,10 @@ jobs:
           TURNSTILE_SECRET_KEY: ${{ secrets.TURNSTILE_SECRET_KEY_PRODUCTION }}
           REALTIMEKIT_API_TOKEN: ${{ secrets.REALTIMEKIT_API_TOKEN }}
           REALTIMEKIT_APP_ID: ${{ secrets.REALTIMEKIT_APP_ID }}
-          REALTIMEKIT_PRESET_NAME: ${{ secrets.REALTIMEKIT_PRESET_NAME }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$TURNSTILE_SECRET_KEY" ]; then export TURNSTILE_SECRET_KEY="${{ secrets.TURNSTILE_SECRET_KEY }}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
-          if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
           if [ -z "$SESSION_SECRET" ]; then
             echo "::warning::SESSION_SECRET not set in GitHub Actions secrets; generating ephemeral value for this deploy. Set repository secret SESSION_SECRET for stable auth."
             export SESSION_SECRET="$(openssl rand -hex 32)"

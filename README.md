@@ -58,6 +58,4 @@ Keep local, staging, and production resources separate. Fill IDs in `wrangler.js
 
 **GitHub Actions deploy:** see [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md). Set `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, and `SESSION_SECRET`, then run **Deploy Cloudflare** (`all`).
 
-For optional table voice, also set `REALTIMEKIT_APP_ID`, `REALTIMEKIT_API_TOKEN`, and ensure `CLOUDFLARE_ACCOUNT_ID` is uploaded as a Worker secret (the deploy workflow does this). Optionally set `REALTIMEKIT_PRESET_NAME` (default `group_call_participant`).
-
 Production deploy requires an explicit gate report and approval for manual ops; the Actions workflow is the supported path when secrets are configured.

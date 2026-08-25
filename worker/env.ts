@@ -15,6 +15,5 @@ export interface Env {
   TURNSTILE_SECRET_KEY?: string;
   REALTIMEKIT_APP_ID?: string;
   REALTIMEKIT_API_TOKEN?: string;
-  REALTIMEKIT_PRESET_NAME?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
 }

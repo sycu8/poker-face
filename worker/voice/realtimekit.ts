@@ -2,9 +2,6 @@ import type { Env } from "../env";
 import { errorJson, json } from "../lib/http";
 import { requireUser } from "../auth/session";
 
-/** Default RealtimeKit preset — must exist on the app (override with REALTIMEKIT_PRESET_NAME). */
-export const DEFAULT_REALTIMEKIT_PRESET = "group_call_participant";
-
 /**
  * RealtimeKit voice provisioning. Degraded mode: if credentials are missing,
  * return a structured unavailable payload so the game continues.
@@ -26,16 +23,12 @@ export async function handleVoice(
   )
     .bind(roomId, auth.user.id)
     .first();
-  if (!member) {
-    return errorJson(403, "You need an approved seat before joining voice.");
-  }
+  if (!member) return errorJson(403, "You need a seat before joining voice.");
 
   if (!env.REALTIMEKIT_APP_ID || !env.REALTIMEKIT_API_TOKEN || !env.CLOUDFLARE_ACCOUNT_ID) {
     return json({
       available: false,
-      reason: "not_configured",
-      message:
-        "Voice isn’t configured on this deployment. Add REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN, and CLOUDFLARE_ACCOUNT_ID Worker secrets, then redeploy. The game stays connected.",
+      message: "Voice is unavailable. The game is still connected.",
     });
   }
 
@@ -46,7 +39,6 @@ export async function handleVoice(
 
   let meetingId = room.realtimekit_meeting_id;
   const base = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/realtime/kit/${env.REALTIMEKIT_APP_ID}`;
-  const presetName = env.REALTIMEKIT_PRESET_NAME || DEFAULT_REALTIMEKIT_PRESET;
 
   try {
     if (!meetingId) {
@@ -60,16 +52,13 @@ export async function handleVoice(
       });
       const body = (await created.json()) as {
         success?: boolean;
-        errors?: Array<{ message?: string }>;
         result?: { id?: string; data?: { id?: string } };
       };
       meetingId = body.result?.id ?? body.result?.data?.id ?? null;
       if (!meetingId) {
-        const detail = body.errors?.[0]?.message ?? `HTTP ${created.status}`;
         return json({
           available: false,
-          reason: "meeting_create_failed",
-          message: `Could not create a voice room (${detail}). The game is still connected.`,
+          message: "Voice is unavailable. The game is still connected.",
         });
       }
       await env.DB.prepare(
@@ -97,32 +86,27 @@ export async function handleVoice(
       },
       body: JSON.stringify({
         name: auth.user.displayName,
-        preset_name: presetName,
+        preset_name: "voice",
         custom_participant_id: customParticipantId,
       }),
     });
     const participantBody = (await participantRes.json()) as {
       success?: boolean;
-      errors?: Array<{ message?: string }>;
       result?: { token?: string; data?: { token?: string } };
     };
     const token =
       participantBody.result?.token ?? participantBody.result?.data?.token ?? null;
     if (!token) {
-      const detail = participantBody.errors?.[0]?.message ?? `HTTP ${participantRes.status}`;
       return json({
         available: false,
-        reason: "participant_failed",
-        message: `Could not join voice (${detail}). Check RealtimeKit preset “${presetName}”. The game is still connected.`,
+        message: "Voice is unavailable. The game is still connected.",
       });
     }
     return json({ available: true, token, meetingId });
-  } catch (err) {
-    const detail = err instanceof Error ? err.message : "unknown error";
+  } catch {
     return json({
       available: false,
-      reason: "exception",
-      message: `Voice failed (${detail}). The game is still connected.`,
+      message: "Voice is unavailable. The game is still connected.",
     });
   }
 }
