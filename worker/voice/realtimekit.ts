@@ -144,15 +144,8 @@ export async function handleVoice(
         .run();
     }
 
-    // Opaque participant id — do not put PII in custom_participant_id
-    const customParticipantId = await crypto.subtle
-      .digest("SHA-256", new TextEncoder().encode(`${roomId}:${auth.user.id}`))
-      .then((buf) =>
-        [...new Uint8Array(buf)]
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("")
-          .slice(0, 32),
-      );
+    // App user id maps seats → mute/speaking indicators (not PII).
+    const customParticipantId = auth.user.id;
 
     const participantRes = await fetch(`${base}/meetings/${meetingId}/participants`, {
       method: "POST",

@@ -2,7 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type LedgerSnapshot, type User } from "../../lib/api";
 import { isBotUserId } from "../../lib/bots";
+import { SeatMicIndicator } from "../voice/SeatMicIndicator";
 import { VoicePanel } from "../voice/VoicePanel";
+import { VoiceSessionProvider } from "../voice/VoiceSession";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
@@ -618,6 +620,7 @@ export function TablePage({ user }: { user: User }) {
   }
 
   return (
+    <VoiceSessionProvider roomId={roomId!}>
     <section>
       <div className="table-top">
         <div className="table-top-meta">
@@ -942,6 +945,7 @@ export function TablePage({ user }: { user: User }) {
                         {isHero ? " (you)" : ""}
                         {seat.playerId && isBotUserId(seat.playerId) ? " · bot" : ""}
                       </span>
+                      {seat.playerId ? <SeatMicIndicator playerId={seat.playerId} /> : null}
                     </div>
                     <div className="seat-status muted">
                       {seat.playerId ? seat.status.replaceAll("_", " ") : "Open seat"}
@@ -1225,7 +1229,7 @@ export function TablePage({ user }: { user: User }) {
             </p>
           ) : null}
           {showHistory && roomId ? <HandHistoryPanel roomId={roomId} /> : null}
-          {roomId ? <VoicePanel roomId={roomId} /> : null}
+          <VoicePanel />
         </div>
         {isHost ? (
           <div className="panel">
@@ -1286,5 +1290,6 @@ export function TablePage({ user }: { user: User }) {
         ) : null}
       </div>
     </section>
+    </VoiceSessionProvider>
   );
 }

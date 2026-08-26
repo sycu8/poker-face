@@ -747,6 +747,101 @@ button {
   max-width: 7.5rem;
 }
 
+.seat-mic {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.12rem;
+  flex-shrink: 0;
+  color: var(--ivory);
+  line-height: 1;
+}
+
+.seat-mic-icon {
+  width: 0.85rem;
+  height: 0.85rem;
+  display: block;
+}
+
+.seat--hero .seat-mic-icon {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.seat-mic--muted {
+  color: #9aa3ad;
+  opacity: 0.9;
+}
+
+.seat-mic--live {
+  color: var(--emerald, #1f8a5b);
+}
+
+.seat-mic--speaking {
+  color: var(--gold);
+}
+
+.seat-mic-bars {
+  display: none;
+  align-items: flex-end;
+  gap: 1px;
+  height: 0.7rem;
+}
+
+.seat-mic--speaking .seat-mic-bars {
+  display: inline-flex;
+}
+
+.seat-mic-bars i {
+  display: block;
+  width: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  animation: seat-mic-bounce 0.55s ease-in-out infinite;
+  height: 35%;
+}
+
+.seat-mic-bars i:nth-child(1) {
+  animation-delay: 0ms;
+}
+
+.seat-mic-bars i:nth-child(2) {
+  height: 70%;
+  animation-delay: 120ms;
+}
+
+.seat-mic-bars i:nth-child(3) {
+  height: 50%;
+  animation-delay: 240ms;
+}
+
+@keyframes seat-mic-bounce {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+    opacity: 0.65;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.seat-mic--speaking .seat-mic-icon {
+  animation: seat-mic-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes seat-mic-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+  }
+  50% {
+    transform: scale(1.08);
+    filter: drop-shadow(0 0 4px #f4bc5688);
+  }
+}
+
 .seat--rail .seat-name-text {
   max-width: 5.5rem;
   font-size: 0.78rem;
