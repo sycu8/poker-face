@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type LedgerSnapshot, type User } from "../../lib/api";
+import { isBotUserId } from "../../lib/bots";
 import { VoicePanel } from "../voice/VoicePanel";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
@@ -405,6 +406,28 @@ export function TablePage({ user }: { user: User }) {
     }
   }
 
+  async function addBot(seatIndex?: number) {
+    if (!roomId) return;
+    setActionMsg(null);
+    try {
+      const res = await api.addBots(roomId, seatIndex === undefined ? {} : { seatIndex });
+      setActionMsg(res.message ?? "Bot seated.");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not add bot.");
+    }
+  }
+
+  async function fillOpenSeatsWithBots() {
+    if (!roomId) return;
+    setActionMsg(null);
+    try {
+      const res = await api.addBots(roomId, { fillOpen: true });
+      setActionMsg(res.message ?? "Open seats filled with bots.");
+    } catch (e) {
+      setActionMsg(e instanceof Error ? e.message : "Could not add bots.");
+    }
+  }
+
   async function doRebuy(targetUserId?: string) {
     if (!roomId) return;
     setActionMsg(null);
@@ -649,6 +672,15 @@ export function TablePage({ user }: { user: User }) {
                 }}
               >
                 Deal everyone in
+              </button>
+            ) : null}
+            {isHost && seats.some((s) => !s.playerId) ? (
+              <button
+                className="btn btn-secondary"
+                type="button"
+                onClick={() => void fillOpenSeatsWithBots()}
+              >
+                Fill open seats with bots
               </button>
             ) : null}
             {isHost ? (
@@ -908,6 +940,7 @@ export function TablePage({ user }: { user: User }) {
                       <span className="seat-name-text">
                         {seat.displayName ?? "Open"}
                         {isHero ? " (you)" : ""}
+                        {seat.playerId && isBotUserId(seat.playerId) ? " · bot" : ""}
                       </span>
                     </div>
                     <div className="seat-status muted">
@@ -922,6 +955,17 @@ export function TablePage({ user }: { user: User }) {
                           : ""}
                       </div>
                     ) : null}
+                    {!seat.playerId && isHost ? (
+                      <div className="seat-host-actions">
+                        <button
+                          className="btn btn-secondary"
+                          type="button"
+                          onClick={() => void addBot(seat.seatIndex)}
+                        >
+                          Add bot
+                        </button>
+                      </div>
+                    ) : null}
                     {seat.playerId && isHost && seat.playerId !== user.id ? (
                       <div className="seat-host-actions">
                         <button
@@ -931,13 +975,15 @@ export function TablePage({ user }: { user: User }) {
                         >
                           Kick
                         </button>
-                        <button
-                          className="btn btn-secondary"
-                          type="button"
-                          onClick={() => void transferHostTo(seat.playerId!)}
-                        >
-                          Make host
-                        </button>
+                        {!isBotUserId(seat.playerId) ? (
+                          <button
+                            className="btn btn-secondary"
+                            type="button"
+                            onClick={() => void transferHostTo(seat.playerId!)}
+                          >
+                            Make host
+                          </button>
+                        ) : null}
                         {seat.stack === 0 ? (
                           <button
                             className="btn btn-secondary"
