@@ -41,6 +41,12 @@ const rebuySchema = z.object({
   chips: z.number().int().min(10).max(1000).optional(),
 });
 
+const addBotsSchema = z.object({
+  seatIndex: z.number().int().min(0).max(9).optional(),
+  /** Seat a bot in every empty seat (ignores seatIndex). */
+  fillOpen: z.boolean().optional(),
+});
+
 const kickSchema = z.object({
   targetUserId: z.string().min(1),
 });
@@ -753,6 +759,104 @@ export async function handleRooms(
       .run();
 
     return json({ status: "seated", seatIndex: doBody.seatIndex, message: "Seated." });
+  }
+
+  const botsMatch = path.match(/^\/api\/rooms\/([^/]+)\/bots$/);
+  if (botsMatch && request.method === "POST") {
+    const auth = await requireUser(env, request);
+    if (!auth.ok) return errorJson(auth.status, auth.error);
+    const roomId = botsMatch[1]!;
+    const parsed = await readJson(request, addBotsSchema);
+    if (!parsed.ok) return parsed.response;
+
+    const room = await env.DB.prepare(`SELECT host_user_id FROM rooms WHERE id = ?`)
+      .bind(roomId)
+      .first<{ host_user_id: string }>();
+    if (!room) return errorJson(404, "Table not found.");
+    if (room.host_user_id !== auth.user.id) {
+      return errorJson(403, "Only the host can add bots.");
+    }
+
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const openRes = await stub.fetch("https://room/open-seats");
+    const openBody = (await openRes.json()) as { ok?: boolean; openSeats?: number[]; error?: string };
+    if (!openBody.ok || !openBody.openSeats) {
+      return errorJson(400, openBody.error ?? "Could not read open seats.");
+    }
+
+    let targets: number[];
+    if (parsed.data.fillOpen) {
+      targets = openBody.openSeats;
+    } else if (parsed.data.seatIndex !== undefined) {
+      if (!openBody.openSeats.includes(parsed.data.seatIndex)) {
+        return errorJson(409, "That seat is taken.");
+      }
+      targets = [parsed.data.seatIndex];
+    } else if (openBody.openSeats.length > 0) {
+      targets = [openBody.openSeats[0]!];
+    } else {
+      return errorJson(409, "This table is full.");
+    }
+
+    if (targets.length === 0) {
+      return errorJson(409, "No open seats to fill.");
+    }
+
+    const seated: Array<{ botUserId: string; displayName: string; seatIndex: number }> = [];
+    const now = Date.now();
+
+    for (const seatIndex of targets) {
+      const botUserId = randomId("bot");
+      const doRes = await stub.fetch("https://room/seat-bot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ botUserId, seatIndex }),
+      });
+      const doBody = (await doRes.json()) as {
+        ok: boolean;
+        seatIndex?: number;
+        displayName?: string;
+        botUserId?: string;
+        error?: string;
+      };
+      if (!doBody.ok || doBody.seatIndex === undefined || !doBody.displayName) {
+        if (seated.length === 0) {
+          return errorJson(409, doBody.error ?? "Could not seat bot.");
+        }
+        break;
+      }
+
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO users (id, display_name, username, email, password_hash, is_guest, created_at, updated_at)
+           VALUES (?, ?, NULL, NULL, NULL, 1, ?, ?)`,
+        ).bind(botUserId, doBody.displayName, now, now),
+        env.DB.prepare(
+          `INSERT INTO room_members
+           (room_id, user_id, role, seat_index, display_name, status, created_at, updated_at)
+           VALUES (?, ?, 'player', ?, ?, 'seated', ?, ?)
+           ON CONFLICT(room_id, user_id) DO UPDATE SET
+             status = 'seated', seat_index = excluded.seat_index,
+             display_name = excluded.display_name, updated_at = excluded.updated_at`,
+        ).bind(roomId, botUserId, doBody.seatIndex, doBody.displayName, now, now),
+      ]);
+
+      seated.push({
+        botUserId,
+        displayName: doBody.displayName,
+        seatIndex: doBody.seatIndex,
+      });
+      writeAnalytics(env, "bot_seated", roomId, [doBody.seatIndex], [botUserId.slice(0, 8)]);
+    }
+
+    return json({
+      status: "ok",
+      bots: seated,
+      message:
+        seated.length === 1
+          ? `${seated[0]!.displayName} took an open seat.`
+          : `Seated ${seated.length} bots in open seats.`,
+    });
   }
 
   const handsMatch = path.match(/^\/api\/rooms\/([^/]+)\/hands$/);

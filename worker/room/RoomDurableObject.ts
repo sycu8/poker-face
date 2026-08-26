@@ -3,6 +3,7 @@ import type { Env } from "../env";
 import {
   applyAction,
   createInitialGameState,
+  getLegalActions,
   normalizeGameState,
   onTurnTimerExpired,
   projectForPlayer,
@@ -17,6 +18,7 @@ import {
   type ActionType,
   type GameState,
 } from "../domain/engine";
+import { chooseBotAction, isBotUserId, nextBotDisplayName } from "../domain/bots";
 import type { TableConfig } from "../domain/config";
 import {
   buildLedgerSnapshot,
@@ -173,6 +175,77 @@ export class RoomDurableObject extends DurableObject<Env> {
     if (!this.game || this.game.street !== "waiting" || this.pendingLeaves.size === 0) return;
     flushDeferredLeaves(this.game, [...this.pendingLeaves]);
     this.pendingLeaves.clear();
+  }
+
+  /** Apply bot actions while the action seat belongs to a bot (instant practice play). */
+  private async runBotTurns(): Promise<void> {
+    if (!this.game || this.closed || this.game.paused) return;
+    let guard = 0;
+    while (guard++ < 48) {
+      if (!this.game || this.game.street === "waiting" || this.game.actionSeat === null) break;
+      const seat = this.game.seats[this.game.actionSeat];
+      if (!seat?.playerId || !isBotUserId(seat.playerId) || seat.status !== "active") break;
+
+      const legal = getLegalActions(this.game, seat.seatIndex);
+      if (!legal) break;
+      const decision = chooseBotAction(legal);
+      const idem = `bot:${this.game.handNumber}:${this.game.sequence}:${seat.seatIndex}`;
+      if (this.actionIdempotency.has(idem)) break;
+      const result = applyAction(
+        this.game,
+        seat.seatIndex,
+        decision.action,
+        decision.amount,
+        Date.now(),
+        idem,
+      );
+      if (!result.ok) break;
+      this.actionIdempotency.set(idem, "ok");
+      await this.afterSuccessfulAction(result.events);
+    }
+  }
+
+  private async afterSuccessfulAction(
+    events: Array<{ type: string }>,
+    reason?: string,
+  ): Promise<void> {
+    if (!this.game) return;
+    this.flushLeavesIfWaiting();
+    this.persist();
+    await this.syncAlarms();
+    if (this.game.street === "waiting") {
+      for (const id of [...this.pendingLeaves]) {
+        const gone = !this.game.seats.some((s) => s.playerId === id);
+        if (gone && this.ledger[id]?.active) {
+          recordBuyOut(this.ledger, id, 0);
+        }
+      }
+    }
+    for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
+    this.broadcast(
+      reason
+        ? { type: "events", events, reason }
+        : { type: "events", events },
+    );
+
+    if (events.some((e) => e.type === "hand_complete") && this.roomId) {
+      try {
+        await this.env.ARCHIVE_QUEUE.send({
+          type: "hand_complete",
+          roomId: this.roomId,
+          handNumber: this.game.handNumber,
+          summary: this.game.lastHandResult,
+          idempotencyKey: `hand:${this.roomId}:${this.game.handNumber}`,
+        });
+      } catch {
+        /* queue optional in some local setups */
+      }
+      try {
+        writeAnalytics(this.env, "hand_complete", this.roomId, [this.game.handNumber]);
+      } catch {
+        /* analytics best-effort */
+      }
+    }
   }
 
   private broadcast(message: unknown, exceptUserId?: string): void {
@@ -428,6 +501,53 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.persist();
       for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
       return Response.json({ ok: true, seatIndex });
+    }
+
+    if (url.pathname === "/seat-bot" && request.method === "POST") {
+      if (!this.game) return Response.json({ ok: false, error: "Room not ready." });
+      if (this.closed) return Response.json({ ok: false, error: "This table is closed." });
+      const body = (await request.json()) as {
+        botUserId: string;
+        displayName?: string;
+        seatIndex?: number;
+      };
+      if (!isBotUserId(body.botUserId)) {
+        return Response.json({ ok: false, error: "Invalid bot id." });
+      }
+      let seatIndex = body.seatIndex;
+      if (seatIndex === undefined) {
+        seatIndex = this.game.seats.findIndex((s) => !s.playerId);
+      } else if (this.game.seats[seatIndex]?.playerId) {
+        return Response.json({ ok: false, error: "That seat is taken." });
+      }
+      if (seatIndex === undefined || seatIndex < 0) {
+        return Response.json({ ok: false, error: "This table is full." });
+      }
+      const displayName =
+        body.displayName?.trim() ||
+        nextBotDisplayName(this.game.seats.map((s) => s.displayName));
+      const result = seatPlayer(this.game, body.botUserId, displayName, seatIndex);
+      if (!result.ok) return Response.json(result);
+      recordBuyIn(
+        this.ledger,
+        body.botUserId,
+        displayName,
+        this.game.config.startingStack,
+      );
+      this.persist();
+      this.broadcast({
+        type: "player_seated",
+        userId: body.botUserId,
+        displayName,
+        seatIndex,
+        bot: true,
+        message: `${displayName} joined an open seat.`,
+      });
+      writeAnalytics(this.env, "bot_seated", this.roomId ?? "unknown", [seatIndex], [
+        body.botUserId.slice(0, 8),
+      ]);
+      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+      return Response.json({ ok: true, seatIndex, displayName, botUserId: body.botUserId });
     }
 
     if (url.pathname === "/leave" && request.method === "POST") {
@@ -815,6 +935,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       writeAnalytics(this.env, "hand_started", this.roomId ?? "unknown", [this.game.handNumber]);
       for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
       this.broadcast({ type: "events", events });
+      await this.runBotTurns();
       return;
     }
 
@@ -860,39 +981,8 @@ export class RoomDurableObject extends DurableObject<Env> {
         return;
       }
       this.actionIdempotency.set(idem, "ok");
-      this.persist();
-      await this.syncAlarms();
-      this.flushLeavesIfWaiting();
-      // Buy-out deferred leavers once street is waiting.
-      if (this.game.street === "waiting") {
-        for (const id of [...this.pendingLeaves]) {
-          const gone = !this.game.seats.some((s) => s.playerId === id);
-          if (gone && this.ledger[id]?.active) {
-            recordBuyOut(this.ledger, id, 0);
-          }
-        }
-      }
-      for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
-      this.broadcast({ type: "events", events: result.events });
-
-      if (result.events.some((e) => e.type === "hand_complete") && this.roomId) {
-        try {
-          await this.env.ARCHIVE_QUEUE.send({
-            type: "hand_complete",
-            roomId: this.roomId,
-            handNumber: this.game.handNumber,
-            summary: this.game.lastHandResult,
-            idempotencyKey: `hand:${this.roomId}:${this.game.handNumber}`,
-          });
-        } catch {
-          /* queue optional in some local setups */
-        }
-        try {
-          writeAnalytics(this.env, "hand_complete", this.roomId, [this.game.handNumber]);
-        } catch {
-          /* analytics best-effort */
-        }
-      }
+      await this.afterSuccessfulAction(result.events);
+      await this.runBotTurns();
     }
   }
 
@@ -932,10 +1022,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       `timeout:${this.game.sequence}`,
     );
     if (!result.ok) return;
-    this.flushLeavesIfWaiting();
-    this.persist();
-    await this.syncAlarms();
-    for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
-    this.broadcast({ type: "events", events: result.events, reason: "timeout" });
+    await this.afterSuccessfulAction(result.events, "timeout");
+    await this.runBotTurns();
   }
 }

@@ -267,6 +267,22 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ status: string; seatIndex?: number; message?: string }>(r)),
+  addBots: (
+    roomId: string,
+    body: { seatIndex?: number; fillOpen?: boolean } = {},
+  ) =>
+    fetch(`/api/rooms/${roomId}/bots`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) =>
+      parse<{
+        status: string;
+        message?: string;
+        bots?: Array<{ botUserId: string; displayName: string; seatIndex: number }>;
+      }>(r),
+    ),
   listHands: (roomId: string) =>
     fetch(`/api/rooms/${roomId}/hands`, { credentials: "include" }).then((r) =>
       parse<{ hands: HandSummaryListItem[] }>(r),

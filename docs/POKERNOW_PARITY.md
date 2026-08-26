@@ -27,6 +27,7 @@ Durable Object tracks per-player buy-in, buy-out, current stack, and net. Expose
 - **Time bank** — host-configurable pool (default 60s); consumed after the primary turn timer before auto fold/check.
 - **Transfer host** — to a registered (non-guest) member.
 - **Close table** — kicks everyone, marks room closed, disconnects WS.
+- **Practice bots** — host can **Add bot** on an open seat or **Fill open seats with bots**. Bots use starting stacks and auto-act in the Durable Object (not RealtimeKit voice). Kick removes them.
 
 ## Spectators
 

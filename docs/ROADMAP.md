@@ -11,6 +11,7 @@ Play-money Texas Hold’em for friends. Virtual chips only. This roadmap is the 
 - [x] Archive write path (Queue → D1 + R2)
 - [x] PWA shell + branded home guidance
 - [x] Staging/production Cloudflare deploy via GitHub Actions
+- [x] Host can seat practice bots in open seats (DO auto-acts)
 
 ## 2. Partial / known gaps
 
