@@ -33,7 +33,6 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -58,7 +57,6 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
     setError(null);
     setInfo(null);
     setPassword("");
-    setConfirmPassword("");
     setTurnstileToken(null);
     navigate(pathForMode(next, inviteFromUrl), { replace: true });
   }
@@ -80,21 +78,9 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
         return;
       }
       if (mode === "reset") {
-        if (password !== confirmPassword) {
-          setError("Passwords do not match.");
-          return;
-        }
-        const result = await api.resetPassword({
-          username,
-          email,
-          newPassword: password,
-          turnstileToken: turnstileToken ?? undefined,
-        });
-        setPassword("");
-        setConfirmPassword("");
-        setMode("login");
-        navigate(pathForMode("login", inviteFromUrl), { replace: true });
-        setInfo(result.message ?? "Password updated. You can sign in with your new password.");
+        setError(
+          "Password reset by username and email is disabled for security. Sign in and change your password, or create a new account.",
+        );
         return;
       }
       if (mode === "register") {
@@ -134,7 +120,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
     mode === "register"
       ? "Sign up with a username, email, and password to host or join a private table. Virtual chips only."
       : mode === "reset"
-        ? "Confirm your username and email, then choose a new password. No email is sent — both must match your account."
+        ? "Unauthenticated reset is disabled. Sign in to change your password, or create a new account if you lost access."
         : mode === "guest"
           ? "Join with a display name only. Guest names are not accounts — you cannot host until you register."
           : "Sign in with a username and password to host or join a private table. Virtual chips only.";
@@ -185,6 +171,11 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             />
             <span className="muted">Guest names are not accounts. Session lasts 24 hours.</span>
           </div>
+        ) : mode === "reset" ? (
+          <p className="muted" role="status">
+            For security, passwords can no longer be changed with only a username and email.
+            Sign in with your current password, or create a new account if you lost access.
+          </p>
         ) : (
           <>
             <div className="field">
@@ -204,7 +195,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
                 pattern="[A-Za-z0-9_]+"
               />
             </div>
-            {mode === "register" || mode === "reset" ? (
+            {mode === "register" ? (
               <div className="field">
                 <label htmlFor="email">Email</label>
                 <input
@@ -237,7 +228,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
               </div>
             ) : null}
             <div className="field">
-              <label htmlFor="password">{mode === "reset" ? "New password" : "Password"}</label>
+              <label htmlFor="password">Password</label>
               <input
                 id="password"
                 name="password"
@@ -251,26 +242,9 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
                 maxLength={128}
               />
             </div>
-            {mode === "reset" ? (
-              <div className="field">
-                <label htmlFor="confirmPassword">Confirm new password</label>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Repeat new password"
-                  autoComplete="new-password"
-                  required
-                  minLength={8}
-                  maxLength={128}
-                />
-              </div>
-            ) : null}
           </>
         )}
-        <TurnstileWidget siteKey={siteKey} onToken={onToken} />
+        {mode !== "reset" ? <TurnstileWidget siteKey={siteKey} onToken={onToken} /> : null}
         {error ? (
           <p role="alert" style={{ color: "var(--danger)", textAlign: "center" }}>
             {error}
@@ -282,17 +256,26 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           </p>
         ) : null}
         <div className="cta-row auth-submit-row">
-          <button className="btn btn-primary" type="submit" disabled={busy}>
-            {busy
-              ? "Working…"
-              : mode === "register"
-                ? "Sign up"
-                : mode === "reset"
-                  ? "Update password"
+          {mode === "reset" ? (
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={busy}
+              onClick={() => switchMode("login")}
+            >
+              Back to sign in
+            </button>
+          ) : (
+            <button className="btn btn-primary" type="submit" disabled={busy}>
+              {busy
+                ? "Working…"
+                : mode === "register"
+                  ? "Sign up"
                   : mode === "guest"
                     ? "Continue as guest"
                     : "Sign in"}
-          </button>
+            </button>
+          )}
         </div>
         {mode === "login" ? (
           <>

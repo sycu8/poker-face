@@ -3,6 +3,7 @@ import type { Env } from "../env";
 import { requireUser } from "../auth/session";
 import { validateConfigInput } from "../domain/config";
 import { writeAnalytics } from "../lib/analytics";
+import { requireActiveMember } from "../lib/membership";
 import { verifyTurnstile } from "../lib/turnstile";
 import { coalesceJoinRequest } from "../lib/joinCoalesce";
 import { errorJson, inviteCode, json, randomId, readJson } from "../lib/http";
@@ -690,12 +691,8 @@ export async function handleRooms(
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
     const roomId = ledgerMatch[1]!;
-    const member = await env.DB.prepare(
-      `SELECT 1 AS ok FROM room_members WHERE room_id = ? AND user_id = ?`,
-    )
-      .bind(roomId, auth.user.id)
-      .first();
-    if (!member) return errorJson(403, "Ask to join this table first.");
+    const member = await requireActiveMember(env, roomId, auth.user.id);
+    if (!member.ok) return errorJson(403, "Ask to join this table first.");
 
     const url = new URL(request.url);
     const format = url.searchParams.get("format");
@@ -727,8 +724,9 @@ export async function handleRooms(
       .bind(roomId)
       .first<{ host_user_id: string }>();
     if (!room) return errorJson(404, "Table not found.");
-    if (room.host_user_id !== auth.user.id && parsed.data.targetUserId !== auth.user.id) {
-      return errorJson(403, "Only the host can seat another player.");
+    // Host-only: spectators / kicked / left must not self-seat for chips.
+    if (room.host_user_id !== auth.user.id) {
+      return errorJson(403, "Only the host can seat a player.");
     }
     const target = await env.DB.prepare(
       `SELECT user_id, display_name, status FROM room_members WHERE room_id = ? AND user_id = ?`,
@@ -736,6 +734,12 @@ export async function handleRooms(
       .bind(roomId, parsed.data.targetUserId)
       .first<{ user_id: string; display_name: string; status: string }>();
     if (!target) return errorJson(404, "Player not at this table.");
+    if (target.status === "kicked" || target.status === "left") {
+      return errorJson(403, "That player left or was removed. They must ask to join again.");
+    }
+    if (target.status !== "spectator" && target.status !== "seated" && target.status !== "away") {
+      return errorJson(403, "That player cannot be seated from their current status.");
+    }
 
     const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
     const doRes = await stub.fetch("https://room/seat-spectator", {
@@ -864,12 +868,8 @@ export async function handleRooms(
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
     const roomId = handsMatch[1]!;
-    const member = await env.DB.prepare(
-      `SELECT 1 AS ok FROM room_members WHERE room_id = ? AND user_id = ?`,
-    )
-      .bind(roomId, auth.user.id)
-      .first();
-    if (!member) return errorJson(403, "Ask to join this table first.");
+    const member = await requireActiveMember(env, roomId, auth.user.id);
+    if (!member.ok) return errorJson(403, "Ask to join this table first.");
 
     const rows = await env.DB.prepare(
       `SELECT id, hand_number, summary_json, created_at
@@ -903,12 +903,8 @@ export async function handleRooms(
     if (!auth.ok) return errorJson(auth.status, auth.error);
     const roomId = handMatch[1]!;
     const handNumber = Number(handMatch[2]);
-    const member = await env.DB.prepare(
-      `SELECT 1 AS ok FROM room_members WHERE room_id = ? AND user_id = ?`,
-    )
-      .bind(roomId, auth.user.id)
-      .first();
-    if (!member) return errorJson(403, "Ask to join this table first.");
+    const member = await requireActiveMember(env, roomId, auth.user.id);
+    if (!member.ok) return errorJson(403, "Ask to join this table first.");
 
     const row = await env.DB.prepare(
       `SELECT id, hand_number, summary_json, created_at
@@ -1064,7 +1060,8 @@ export async function handleRooms(
         status: string;
       }>();
 
-    if (member) {
+    // Kicked / left rows must not retain invite codes or table access.
+    if (member && (member.status === "seated" || member.status === "away" || member.status === "spectator")) {
       return json({
         access: "member",
         room: {

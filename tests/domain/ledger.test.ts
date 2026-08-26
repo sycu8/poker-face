@@ -45,4 +45,12 @@ describe("session ledger", () => {
     expect(csv).toContain("TOTALS");
     expect(csv.split("\n").length).toBeGreaterThanOrEqual(3);
   });
+
+  it("neutralizes spreadsheet formula injection in display names", () => {
+    const ledger = emptyLedger();
+    recordBuyIn(ledger, "x", "=cmd|'/C calc'!A0", 100);
+    const csv = ledgerToCsv(buildLedgerSnapshot(ledger, new Map([["x", 100]])));
+    expect(csv).toContain("'=cmd|'/C calc'!A0");
+    expect(csv.split("\n")[1]!.startsWith("=")).toBe(false);
+  });
 });

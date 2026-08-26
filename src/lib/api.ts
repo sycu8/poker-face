@@ -118,13 +118,20 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User; privacyNote?: string }>(r)),
-  resetPassword: (body: {
+  resetPassword: (_body: {
     username: string;
     email: string;
     newPassword: string;
     turnstileToken?: string;
   }) =>
     fetch("/api/auth/reset-password", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(_body),
+    }).then((r) => parse<{ ok: boolean; message?: string }>(r)),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    fetch("/api/auth/change-password", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },

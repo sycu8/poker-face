@@ -100,11 +100,12 @@ export async function handleVoice(
   if (!env.REALTIMEKIT_API_TOKEN) missing.push("REALTIMEKIT_API_TOKEN");
   if (!env.CLOUDFLARE_ACCOUNT_ID) missing.push("CLOUDFLARE_ACCOUNT_ID");
   if (missing.length) {
+    console.error("voice not configured", missing.join(","));
     return json({
       available: false,
       reason: "not_configured",
-      missing,
-      message: `Voice isn’t configured on this deployment. Missing: ${missing.join(", ")}. Use a Cloudflare API token with Realtime Admin for REALTIMEKIT_API_TOKEN (not a TURN key token), then redeploy. The game stays connected.`,
+      message:
+        "Voice isn’t configured on this deployment. The game stays connected.",
     });
   }
 
@@ -130,11 +131,11 @@ export async function handleVoice(
       const body: unknown = await created.json();
       meetingId = extractRealtimeId(body);
       if (!meetingId) {
-        const detail = apiErrorDetail(body, created.status);
+        console.error("voice meeting create failed", apiErrorDetail(body, created.status));
         return json({
           available: false,
           reason: "meeting_create_failed",
-          message: `Could not create a voice room (${detail}). The game is still connected.`,
+          message: "Could not create a voice room. The game is still connected.",
         });
       }
       await env.DB.prepare(
@@ -162,20 +163,20 @@ export async function handleVoice(
     const participantBody: unknown = await participantRes.json();
     const token = extractRealtimeToken(participantBody);
     if (!token) {
-      const detail = apiErrorDetail(participantBody, participantRes.status);
       return json({
         available: false,
         reason: "participant_failed",
-        message: `Could not join voice (${detail}). Check RealtimeKit preset “${presetName}”. The game is still connected.`,
+        message:
+          "Could not join voice. Check RealtimeKit configuration. The game is still connected.",
       });
     }
     return json({ available: true, token, meetingId });
   } catch (err) {
-    const detail = err instanceof Error ? err.message : "unknown error";
+    console.error("voice-token failed", err instanceof Error ? err.message : err);
     return json({
       available: false,
       reason: "exception",
-      message: `Voice failed (${detail}). The game is still connected.`,
+      message: "Voice failed. The game is still connected.",
     });
   }
 }

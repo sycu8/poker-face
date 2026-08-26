@@ -40,6 +40,22 @@ export async function hashPassword(password: string): Promise<string> {
   return `pbkdf2$${PBKDF2_ITERS}$${bytesToBase64(salt)}$${bytesToBase64(new Uint8Array(derived))}`;
 }
 
+/** Fixed dummy hash so unknown-user login still pays PBKDF2 cost (timing). */
+const DUMMY_PASSWORD_HASH =
+  "pbkdf2$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+/** Run verify work even when no user row exists (mitigate timing oracles). */
+export async function verifyPasswordOrDummy(
+  password: string,
+  stored: string | null | undefined,
+): Promise<boolean> {
+  if (!stored) {
+    await verifyPassword(password, DUMMY_PASSWORD_HASH);
+    return false;
+  }
+  return verifyPassword(password, stored);
+}
+
 export async function verifyPassword(password: string, stored: string): Promise<boolean> {
   const parts = stored.split("$");
   if (parts.length !== 4 || parts[0] !== "pbkdf2") return false;

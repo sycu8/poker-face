@@ -8,7 +8,7 @@ import {
   requireUser,
   sessionCookieHeader,
 } from "./session";
-import { hashPassword, verifyPassword } from "./password";
+import { hashPassword, verifyPasswordOrDummy } from "./password";
 import { verifyTurnstile } from "../lib/turnstile";
 import { writeAnalytics } from "../lib/analytics";
 import { errorJson, json, randomId, readJson, sha256Hex } from "../lib/http";
@@ -44,17 +44,19 @@ const loginSchema = z.object({
   turnstileToken: z.string().min(1).optional(),
 });
 
-const resetPasswordSchema = z.object({
-  username: usernameSchema,
-  email: emailSchema,
+const changePasswordSchema = z.object({
+  currentPassword: passwordSchema,
   newPassword: passwordSchema,
-  turnstileToken: z.string().min(1).optional(),
 });
 
 const guestSchema = z.object({
   displayName: z.string().trim().min(2).max(32),
   turnstileToken: z.string().min(1).optional(),
 });
+
+function genericAuthFailure(action: string): Response {
+  return errorJson(500, `${action} failed. Try again shortly.`);
+}
 
 export async function handleAuth(
   request: Request,
@@ -125,9 +127,8 @@ export async function handleAuth(
         },
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Guest sign-in failed.";
-      console.error("guest failed", message);
-      return errorJson(500, message);
+      console.error("guest failed", err instanceof Error ? err.message : err);
+      return genericAuthFailure("Guest sign-in");
     }
   }
 
@@ -155,7 +156,7 @@ export async function handleAuth(
         return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
       }
       const limited = await env.AUTH_RATE_LIMIT.limit({
-        key: request.headers.get("cf-connecting-ip") ?? "anon",
+        key: `register:${request.headers.get("cf-connecting-ip") ?? "anon"}`,
       });
       if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
 
@@ -172,12 +173,12 @@ export async function handleAuth(
       const existingUsername = await env.DB.prepare(`SELECT id FROM users WHERE username = ?`)
         .bind(parsed.data.username)
         .first();
-      if (existingUsername) return errorJson(409, "That username is taken.");
-
       const existingEmail = await env.DB.prepare(`SELECT id FROM users WHERE email = ?`)
         .bind(parsed.data.email)
         .first();
-      if (existingEmail) return errorJson(409, "That email is already registered.");
+      if (existingUsername || existingEmail) {
+        return errorJson(409, "Could not create that account. Try a different username or email.");
+      }
 
       const userId = randomId("usr");
       const displayName = parsed.data.displayName ?? parsed.data.username;
@@ -213,9 +214,8 @@ export async function handleAuth(
         },
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Registration failed.";
-      console.error("register failed", message);
-      return errorJson(500, message);
+      console.error("register failed", err instanceof Error ? err.message : err);
+      return genericAuthFailure("Registration");
     }
   }
 
@@ -224,9 +224,8 @@ export async function handleAuth(
       if (!env.SESSION_SECRET) {
         return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
       }
-      const limited = await env.AUTH_RATE_LIMIT.limit({
-        key: request.headers.get("cf-connecting-ip") ?? "anon",
-      });
+      const ip = request.headers.get("cf-connecting-ip") ?? "anon";
+      const limited = await env.AUTH_RATE_LIMIT.limit({ key: `login:${ip}` });
       if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
 
       const parsed = await readJson(request, loginSchema);
@@ -250,11 +249,10 @@ export async function handleAuth(
           password_hash: string | null;
         }>();
 
-      if (!row?.password_hash) {
+      const ok = await verifyPasswordOrDummy(parsed.data.password, row?.password_hash);
+      if (!ok || !row) {
         return errorJson(401, "Invalid username or password.");
       }
-      const ok = await verifyPassword(parsed.data.password, row.password_hash);
-      if (!ok) return errorJson(401, "Invalid username or password.");
 
       const session = await createSession(env, row.id);
       writeAnalytics(env, "auth_login", row.id);
@@ -274,63 +272,81 @@ export async function handleAuth(
         },
       );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed.";
-      console.error("login failed", message);
-      return errorJson(500, message);
+      console.error("login failed", err instanceof Error ? err.message : err);
+      return genericAuthFailure("Login");
     }
   }
 
+  /**
+   * Unauthenticated password reset via username+email is disabled (account takeover).
+   * Logged-in users can change passwords via /api/auth/change-password.
+   */
   if (path === "/api/auth/reset-password" && request.method === "POST") {
+    const limited = await env.AUTH_RATE_LIMIT.limit({
+      key: `reset:${request.headers.get("cf-connecting-ip") ?? "anon"}`,
+    });
+    if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
+    return errorJson(
+      403,
+      "Password reset by username and email is disabled. Sign in and change your password, or create a new account.",
+    );
+  }
+
+  if (path === "/api/auth/change-password" && request.method === "POST") {
     try {
       if (!env.SESSION_SECRET) {
         return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
       }
+      const auth = await requireUser(env, request);
+      if (!auth.ok) return errorJson(auth.status, auth.error);
+      if (auth.user.isGuest) {
+        return errorJson(403, "Guests do not have passwords. Create a full account first.");
+      }
+
       const limited = await env.AUTH_RATE_LIMIT.limit({
-        key: request.headers.get("cf-connecting-ip") ?? "anon",
+        key: `change-pw:${auth.user.id}`,
       });
       if (!limited.success) return errorJson(429, "Too many attempts. Try again shortly.");
 
-      const parsed = await readJson(request, resetPasswordSchema);
+      const parsed = await readJson(request, changePasswordSchema);
       if (!parsed.ok) return parsed.response;
 
-      const okTurnstile = await verifyTurnstile(
-        env,
-        parsed.data.turnstileToken,
-        request.headers.get("cf-connecting-ip"),
+      const row = await env.DB.prepare(`SELECT password_hash FROM users WHERE id = ?`)
+        .bind(auth.user.id)
+        .first<{ password_hash: string | null }>();
+      const ok = await verifyPasswordOrDummy(
+        parsed.data.currentPassword,
+        row?.password_hash,
       );
-      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
-
-      // Require username + email to match the same row; single error for any miss.
-      const row = await env.DB.prepare(
-        `SELECT id FROM users WHERE username = ? AND email = ?`,
-      )
-        .bind(parsed.data.username, parsed.data.email)
-        .first<{ id: string }>();
-
-      if (!row) {
-        return errorJson(400, "Username and email do not match our records.");
-      }
+      if (!ok) return errorJson(401, "Current password is incorrect.");
 
       const passwordHash = await hashPassword(parsed.data.newPassword);
       const now = Date.now();
-      await env.DB.prepare(
-        `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`,
-      )
-        .bind(passwordHash, now, row.id)
+      await env.DB.prepare(`UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`)
+        .bind(passwordHash, now, auth.user.id)
         .run();
 
-      // Force re-login after reset.
+      // Revoke sibling sessions; keep the caller's cookie by re-issuing below.
       await env.DB.prepare(
         `UPDATE sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL`,
       )
-        .bind(now, row.id)
+        .bind(now, auth.user.id)
         .run();
 
-      return json({ ok: true, message: "Password updated. You can sign in with your new password." });
+      const session = await createSession(env, auth.user.id);
+      writeAnalytics(env, "auth_change_password", auth.user.id);
+      return new Response(
+        JSON.stringify({ ok: true, message: "Password updated." }),
+        {
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": sessionCookieHeader(session.token, env.APP_ORIGIN),
+          },
+        },
+      );
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Password reset failed.";
-      console.error("reset-password failed", message);
-      return errorJson(500, message);
+      console.error("change-password failed", err instanceof Error ? err.message : err);
+      return genericAuthFailure("Password change");
     }
   }
 

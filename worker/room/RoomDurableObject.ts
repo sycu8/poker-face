@@ -261,6 +261,19 @@ export class RoomDurableObject extends DurableObject<Env> {
     }
   }
 
+  /** Drop live sockets for a user after kick / leave so they cannot keep watching. */
+  private closeSocketsForUser(userId: string, reason = "Removed from table"): void {
+    for (const ws of this.ctx.getWebSockets()) {
+      const att = ws.deserializeAttachment() as ClientAttachment | null;
+      if (att?.userId !== userId) continue;
+      try {
+        ws.close(4000, reason);
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+
   private startRequestSummary() {
     const latest = this.startRequests[this.startRequests.length - 1] ?? null;
     return {
@@ -564,6 +577,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (!seated) {
         this.persist();
         this.broadcast({ type: "player_left", userId: body.userId });
+        this.closeSocketsForUser(body.userId, "Left table");
         for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
         return Response.json({ ok: true });
       }
@@ -577,13 +591,10 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (result.deferred) this.pendingLeaves.add(body.userId);
       else this.pendingLeaves.delete(body.userId);
       this.flushLeavesIfWaiting();
-      // After deferred flush, buy out at 0 if hand already settled stack into leave label.
-      if (!result.deferred) {
-        /* already recorded */
-      }
       this.persist();
       this.broadcast({ type: "player_left", userId: body.userId });
       writeAnalytics(this.env, "player_left", this.roomId ?? "unknown");
+      this.closeSocketsForUser(body.userId, "Left table");
       for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
       if (result.events.length) this.broadcast({ type: "events", events: result.events });
       return Response.json({ ok: true });
@@ -604,6 +615,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (!seated) {
         this.persist();
         this.broadcast({ type: "player_kicked", userId: body.targetUserId });
+        this.closeSocketsForUser(body.targetUserId, "Kicked from table");
         for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
         return Response.json({ ok: true });
       }
@@ -617,6 +629,7 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.persist();
       this.broadcast({ type: "player_kicked", userId: body.targetUserId });
       writeAnalytics(this.env, "player_kicked", this.roomId ?? "unknown");
+      this.closeSocketsForUser(body.targetUserId, "Kicked from table");
       for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
       if (result.events.length) this.broadcast({ type: "events", events: result.events });
       return Response.json({ ok: true });
