@@ -880,6 +880,90 @@ button {
   margin-top: 0.4rem;
 }
 
+.seat-holes--deal-in {
+  opacity: 0;
+  animation: deal-holes-reveal 220ms ease-out forwards;
+  animation-delay: var(--deal-reveal-delay, 0ms);
+}
+
+.playing-card--dealt {
+  animation: none;
+}
+
+.seat-dealer-chip {
+  position: absolute;
+  top: -0.35rem;
+  right: -0.2rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  color: var(--night);
+  background: radial-gradient(circle at 35% 30%, #ffe29a, var(--gold) 55%, var(--gold-deep));
+  border: 1px solid #0006;
+  box-shadow: 0 2px 6px #0007;
+  z-index: 3;
+}
+
+.seat--dealer {
+  box-shadow: 0 0 0 1px #f4bc5644;
+}
+
+.deal-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.deal-flyer {
+  position: absolute;
+  left: var(--deal-from-x);
+  top: var(--deal-from-y);
+  transform: translate(-50%, -50%) scale(0.72) rotate(-18deg);
+  opacity: 0;
+  animation: deal-fly 480ms cubic-bezier(0.22, 0.9, 0.3, 1) forwards;
+  filter: drop-shadow(0 8px 12px #0008);
+}
+
+.deal-flyer .playing-card {
+  animation: none;
+}
+
+@keyframes deal-fly {
+  0% {
+    left: var(--deal-from-x);
+    top: var(--deal-from-y);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.65) rotate(-22deg);
+  }
+  12% {
+    opacity: 1;
+  }
+  100% {
+    left: var(--deal-to-x);
+    top: var(--deal-to-y);
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1) rotate(4deg);
+  }
+}
+
+@keyframes deal-holes-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
 .seat-host-actions {
   display: flex;
   flex-wrap: wrap;

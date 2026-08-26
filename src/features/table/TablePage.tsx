@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type LedgerSnapshot, type User } from "../../lib/api";
 import { isBotUserId } from "../../lib/bots";
@@ -8,7 +8,7 @@ import { VoiceSessionProvider } from "../voice/VoiceSession";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
-import { seatRingStyle, visualSeatIndex } from "./seatLayout";
+import { seatRingStyle, visualSeatIndex, seatRingPercents, dealOrderSeatIndexes } from "./seatLayout";
 import {
   WinCelebration,
   winningBestFiveCodes,
@@ -48,6 +48,7 @@ interface GameView {
   pot: number;
   sequence: number;
   handNumber: number;
+  dealerSeat?: number;
   actionSeat: number | null;
   turnDeadlineMs: number | null;
   paused?: boolean;
@@ -156,8 +157,15 @@ export function TablePage({ user }: { user: User }) {
   const [spectators, setSpectators] = useState<Array<{ userId: string; displayName: string }>>(
     [],
   );
+  const [dealBurst, setDealBurst] = useState<{
+    handNumber: number;
+    dealerSeat: number;
+    targets: number[];
+  } | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const lastAskAtRef = useRef(0);
+  const prevHandRef = useRef(0);
+  const dealPrimedRef = useRef(false);
   const turnLeft = useTurnSeconds(view?.turnDeadlineMs ?? null);
 
   const refreshAccess = useCallback(async () => {
@@ -487,6 +495,41 @@ export function TablePage({ user }: { user: User }) {
     if (viewer) return viewer.seatIndex;
     return 0;
   }, [view?.seats]);
+
+  useEffect(() => {
+    if (!view) return;
+    const hand = view.handNumber;
+    if (!dealPrimedRef.current) {
+      prevHandRef.current = hand;
+      dealPrimedRef.current = true;
+      return;
+    }
+    if (hand > prevHandRef.current && view.street === "preflop") {
+      const dealerSeat = view.dealerSeat ?? 0;
+      const live = view.seats
+        .filter(
+          (s) =>
+            s.playerId &&
+            (s.status === "active" || s.status === "all_in" || s.status === "folded"),
+        )
+        .map((s) => s.seatIndex);
+      const dealt = live.length
+        ? live
+        : view.seats
+            .filter((s) => s.playerId && s.status !== "sitting_out" && s.status !== "empty")
+            .map((s) => s.seatIndex);
+      const targets = dealOrderSeatIndexes(dealerSeat, dealt, view.seats.length);
+      prevHandRef.current = hand;
+      if (targets.length > 0) {
+        setDealBurst({ handNumber: hand, dealerSeat, targets });
+        const ms = 700 + targets.length * 2 * 70;
+        const id = window.setTimeout(() => setDealBurst(null), ms);
+        return () => window.clearTimeout(id);
+      }
+      return;
+    }
+    prevHandRef.current = hand;
+  }, [view]);
 
   async function copyInvite() {
     if (!meta?.inviteCode) return;
@@ -915,10 +958,46 @@ export function TablePage({ user }: { user: User }) {
               {view?.paused ? " · paused" : ""}
             </div>
           </div>
+          {dealBurst ? (
+            <div className="deal-layer" aria-hidden="true">
+              {dealBurst.targets.flatMap((seatIndex, order) => {
+                const visual = visualSeatIndex(seatIndex, seatCount, anchorSeatIndex);
+                const to = seatRingPercents(visual, seatCount);
+                const fromVisual = visualSeatIndex(dealBurst.dealerSeat, seatCount, anchorSeatIndex);
+                const from = seatRingPercents(fromVisual, seatCount);
+                return [0, 1].map((cardIdx) => {
+                  const step = order * 2 + cardIdx;
+                  return (
+                    <div
+                      key={`deal-${dealBurst.handNumber}-${seatIndex}-${cardIdx}`}
+                      className="deal-flyer"
+                      style={
+                        {
+                          "--deal-from-x": `${from.left}%`,
+                          "--deal-from-y": `${from.top}%`,
+                          "--deal-to-x": `${to.left}%`,
+                          "--deal-to-y": `${to.top}%`,
+                          animationDelay: `${step * 70}ms`,
+                        } as CSSProperties
+                      }
+                    >
+                      <PlayingCard code="?" size="sm" />
+                    </div>
+                  );
+                });
+              })}
+            </div>
+          ) : null}
           <div className="seats" role="list">
             {seats.map((seat) => {
               const visual = visualSeatIndex(seat.seatIndex, seatCount, anchorSeatIndex);
               const isHero = seat.isViewer;
+              const isDealer = view?.dealerSeat === seat.seatIndex && Boolean(seat.playerId);
+              const dealingHere = Boolean(dealBurst?.targets.includes(seat.seatIndex));
+              const holeCodes: [string, string] | null =
+                seat.holeCards ??
+                (dealingHere && !isHero ? (["?", "?"] as [string, string]) : null);
+              const dealOrder = dealBurst ? dealBurst.targets.indexOf(seat.seatIndex) : -1;
               return (
                 <div
                   key={seat.seatIndex}
@@ -930,11 +1009,18 @@ export function TablePage({ user }: { user: User }) {
                     view?.actionSeat === seat.seatIndex ? "active-turn" : "",
                     seat.playerId && winnerIdSet.has(seat.playerId) ? "seat--winner" : "",
                     seat.status === "sitting_out" ? "seat--away" : "",
+                    isDealer ? "seat--dealer" : "",
+                    dealingHere ? "seat--dealing" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
                   style={seatRingStyle(visual, seatCount)}
                 >
+                  {isDealer ? (
+                    <span className="seat-dealer-chip" title="Dealer" aria-label="Dealer">
+                      D
+                    </span>
+                  ) : null}
                   <div className="seat-info">
                     <div className="name">
                       {seat.displayName ? (
@@ -1000,14 +1086,35 @@ export function TablePage({ user }: { user: User }) {
                       </div>
                     ) : null}
                   </div>
-                  {seat.holeCards ? (
-                    <div className={`seat-holes${isHero ? " seat-holes--hero" : ""}`}>
-                      {seat.holeCards.map((c, i) => (
+                  {holeCodes ? (
+                    <div
+                      className={`seat-holes${isHero ? " seat-holes--hero" : ""}${
+                        dealingHere ? " seat-holes--deal-in" : ""
+                      }`}
+                      style={
+                        dealingHere && dealOrder >= 0
+                          ? ({
+                              "--deal-reveal-delay": `${dealOrder * 2 * 70 + 320}ms`,
+                            } as CSSProperties)
+                          : undefined
+                      }
+                    >
+                      {holeCodes.map((c, i) => (
                         <PlayingCard
-                          key={`${c}-${i}`}
+                          key={`${c}-${i}-${view?.handNumber ?? 0}`}
                           code={c}
                           size={isHero ? "hero" : "sm"}
-                          className={winningCardCodes.has(c) ? "playing-card--winning" : ""}
+                          className={[
+                            winningCardCodes.has(c) ? "playing-card--winning" : "",
+                            dealingHere ? "playing-card--dealt" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          style={
+                            dealingHere
+                              ? ({ animationDelay: `${i * 70}ms` } as CSSProperties)
+                              : undefined
+                          }
                         />
                       ))}
                     </div>
