@@ -78,3 +78,13 @@ Authenticated seated player:
 
 Expect `{ available: true, token, meetingId }` (never log the full token).  
 If you still see `not_configured`, Worker secrets for RealtimeKit are missing on that environment.
+
+## Seat mic indicators
+
+After **Enable voice**, each joined participant’s seat name tag shows a mic:
+
+- **Muted** — crossed mic
+- **Live** — mic on (quiet)
+- **Speaking** — gold mic + animated bars (`activeSpeaker` + local level meter)
+
+Mapping uses RealtimeKit `custom_participant_id` = app user id (`usr_…` / `gst_…`).
