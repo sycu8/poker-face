@@ -5,6 +5,67 @@ import { requireUser } from "../auth/session";
 /** Default RealtimeKit preset — must exist on the app (override with REALTIMEKIT_PRESET_NAME). */
 export const DEFAULT_REALTIMEKIT_PRESET = "group_call_participant";
 
+/** Pull a string id from common RealtimeKit / Cloudflare API envelope shapes. */
+export function extractRealtimeId(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const root = body as Record<string, unknown>;
+  const candidates: unknown[] = [
+    root.id,
+    root.meetingId,
+    (root.result as Record<string, unknown> | undefined)?.id,
+    (root.result as Record<string, unknown> | undefined)?.meetingId,
+    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
+      ?.id,
+    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
+      ?.meetingId,
+    (root.data as Record<string, unknown> | undefined)?.id,
+    (root.data as Record<string, unknown> | undefined)?.meetingId,
+    ((root.data as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)?.id,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.length > 0) return c;
+  }
+  return null;
+}
+
+/** Pull participant auth token from common envelope shapes. */
+export function extractRealtimeToken(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const root = body as Record<string, unknown>;
+  const candidates: unknown[] = [
+    root.token,
+    root.authToken,
+    (root.result as Record<string, unknown> | undefined)?.token,
+    (root.result as Record<string, unknown> | undefined)?.authToken,
+    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
+      ?.token,
+    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
+      ?.authToken,
+    (root.data as Record<string, unknown> | undefined)?.token,
+    (root.data as Record<string, unknown> | undefined)?.authToken,
+    ((root.data as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
+      ?.token,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.length > 0) return c;
+  }
+  return null;
+}
+
+function apiErrorDetail(body: unknown, status: number): string {
+  if (body && typeof body === "object") {
+    const root = body as Record<string, unknown>;
+    const errors = root.errors;
+    if (Array.isArray(errors) && errors[0] && typeof errors[0] === "object") {
+      const msg = (errors[0] as { message?: string }).message;
+      if (msg) return msg;
+    }
+    const message = root.message;
+    if (typeof message === "string" && message) return message;
+  }
+  return `HTTP ${status}`;
+}
+
 /**
  * RealtimeKit voice provisioning. Degraded mode: if credentials are missing,
  * return a structured unavailable payload so the game continues.
@@ -66,14 +127,10 @@ export async function handleVoice(
         },
         body: JSON.stringify({ title: room.name }),
       });
-      const body = (await created.json()) as {
-        success?: boolean;
-        errors?: Array<{ message?: string }>;
-        result?: { id?: string; data?: { id?: string } };
-      };
-      meetingId = body.result?.id ?? body.result?.data?.id ?? null;
+      const body: unknown = await created.json();
+      meetingId = extractRealtimeId(body);
       if (!meetingId) {
-        const detail = body.errors?.[0]?.message ?? `HTTP ${created.status}`;
+        const detail = apiErrorDetail(body, created.status);
         return json({
           available: false,
           reason: "meeting_create_failed",
@@ -109,15 +166,10 @@ export async function handleVoice(
         custom_participant_id: customParticipantId,
       }),
     });
-    const participantBody = (await participantRes.json()) as {
-      success?: boolean;
-      errors?: Array<{ message?: string }>;
-      result?: { token?: string; data?: { token?: string } };
-    };
-    const token =
-      participantBody.result?.token ?? participantBody.result?.data?.token ?? null;
+    const participantBody: unknown = await participantRes.json();
+    const token = extractRealtimeToken(participantBody);
     if (!token) {
-      const detail = participantBody.errors?.[0]?.message ?? `HTTP ${participantRes.status}`;
+      const detail = apiErrorDetail(participantBody, participantRes.status);
       return json({
         available: false,
         reason: "participant_failed",
