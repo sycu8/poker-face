@@ -4,10 +4,44 @@ import { handleRooms } from "./routes/rooms";
 import { handleVoice } from "./voice/realtimekit";
 import { requireUser } from "./auth/session";
 import { readPublicConfig } from "./lib/configKv";
+import { requireActiveMember } from "./lib/membership";
 import { errorJson, json } from "./lib/http";
 import { RoomDurableObject } from "./room/RoomDurableObject";
 
 export { RoomDurableObject };
+
+const SECURITY_HEADERS: Record<string, string> = {
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Frame-Options": "DENY",
+  "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "form-action 'self'",
+    "script-src 'self' https://challenges.cloudflare.com",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self'",
+    "connect-src 'self' https: wss:",
+    "frame-src https://challenges.cloudflare.com",
+    "worker-src 'self' blob:",
+  ].join("; "),
+};
+
+function withSecurityHeaders(response: Response): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+    if (!headers.has(key)) headers.set(key, value);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 async function handleArchiveBatch(
   batch: MessageBatch,
@@ -66,51 +100,53 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "OPTIONS") {
-      return new Response(null, {
-        headers: {
-          "access-control-allow-origin": env.APP_ORIGIN,
-          "access-control-allow-credentials": "true",
-          "access-control-allow-headers":
-            "content-type, authorization, x-idempotency-key",
-          "access-control-allow-methods": "GET,POST,OPTIONS",
-        },
-      });
+      return withSecurityHeaders(
+        new Response(null, {
+          headers: {
+            "access-control-allow-origin": env.APP_ORIGIN,
+            "access-control-allow-credentials": "true",
+            "access-control-allow-headers":
+              "content-type, authorization, x-idempotency-key",
+            "access-control-allow-methods": "GET,POST,OPTIONS",
+          },
+        }),
+      );
     }
 
     if (url.pathname === "/api/health") {
-      return json({
-        ok: true,
-        service: "poker-faces",
-        environment: env.ENVIRONMENT,
-        tagline: "Your table. Your people.",
-      });
+      return withSecurityHeaders(
+        json({
+          ok: true,
+          service: "poker-faces",
+          environment: env.ENVIRONMENT,
+          tagline: "Your table. Your people.",
+        }),
+      );
     }
 
     if (url.pathname === "/api/config") {
       const cfg = await readPublicConfig(env);
-      return json(cfg);
+      return withSecurityHeaders(json(cfg));
     }
 
     const authRes = await handleAuth(request, env, url.pathname);
-    if (authRes) return authRes;
+    if (authRes) return withSecurityHeaders(authRes);
 
     const roomsRes = await handleRooms(request, env, url.pathname);
-    if (roomsRes) return roomsRes;
+    if (roomsRes) return withSecurityHeaders(roomsRes);
 
     const voiceRes = await handleVoice(request, env, url.pathname);
-    if (voiceRes) return voiceRes;
+    if (voiceRes) return withSecurityHeaders(voiceRes);
 
     const wsMatch = url.pathname.match(/^\/ws\/rooms\/([^/]+)$/);
     if (wsMatch) {
       const auth = await requireUser(env, request);
-      if (!auth.ok) return errorJson(auth.status, auth.error);
+      if (!auth.ok) return withSecurityHeaders(errorJson(auth.status, auth.error));
       const roomId = wsMatch[1]!;
-      const member = await env.DB.prepare(
-        `SELECT * FROM room_members WHERE room_id = ? AND user_id = ?`,
-      )
-        .bind(roomId, auth.user.id)
-        .first();
-      if (!member) return errorJson(403, "Ask to join this table first.");
+      const member = await requireActiveMember(env, roomId, auth.user.id);
+      if (!member.ok) {
+        return withSecurityHeaders(errorJson(403, "Ask to join this table first."));
+      }
       const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
       const doUrl = new URL("https://room/ws");
       doUrl.searchParams.set("userId", auth.user.id);
@@ -119,10 +155,11 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/")) {
-      return errorJson(404, "Not found.");
+      return withSecurityHeaders(errorJson(404, "Not found."));
     }
 
-    return env.ASSETS.fetch(request);
+    const assetRes = await env.ASSETS.fetch(request);
+    return withSecurityHeaders(assetRes);
   },
 
   async queue(batch: MessageBatch, env: Env): Promise<void> {

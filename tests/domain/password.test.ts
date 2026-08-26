@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hashPassword, verifyPassword } from "../../worker/auth/password";
+import { hashPassword, verifyPassword, verifyPasswordOrDummy } from "../../worker/auth/password";
 
 describe("password hashing", () => {
   it("hashes and verifies a password", async () => {
@@ -12,5 +12,12 @@ describe("password hashing", () => {
   it("rejects malformed stored hashes", async () => {
     expect(await verifyPassword("anything", "not-a-hash")).toBe(false);
     expect(await verifyPassword("anything", "pbkdf2$100$aa$bb")).toBe(false);
+  });
+
+  it("runs dummy work when hash is missing", async () => {
+    expect(await verifyPasswordOrDummy("password", null)).toBe(false);
+    expect(await verifyPasswordOrDummy("password", undefined)).toBe(false);
+    const hash = await hashPassword("password");
+    expect(await verifyPasswordOrDummy("password", hash)).toBe(true);
   });
 });

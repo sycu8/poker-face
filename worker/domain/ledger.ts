@@ -104,6 +104,9 @@ export function ledgerToCsv(snapshot: LedgerSnapshot): string {
 }
 
 function csvEscape(value: string): string {
-  if (/[",\n]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
-  return value;
+  // Neutralize spreadsheet formula injection (=, +, -, @, tab/CR).
+  const safe =
+    /^[=+\-@\t\r]/.test(value) || value.includes("\t") ? `'${value}` : value;
+  if (/[",\n]/.test(safe)) return `"${safe.replace(/"/g, '""')}"`;
+  return safe;
 }
