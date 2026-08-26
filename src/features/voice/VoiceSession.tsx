@@ -6,10 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  RealtimeKitProvider,
-  useRealtimeKitClient,
-} from "@cloudflare/realtimekit-react";
+import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { api, type VoiceTokenResponse } from "../../lib/api";
 import {
@@ -335,12 +332,10 @@ export function VoiceSessionProvider({
   );
 
   return (
-    <RealtimeKitProvider value={meeting}>
-      <VoiceControlsContext.Provider value={controls}>
-        <VoiceStatusSync meeting={meeting} active={joined}>
-          {children}
-        </VoiceStatusSync>
-      </VoiceControlsContext.Provider>
-    </RealtimeKitProvider>
+    <VoiceControlsContext.Provider value={controls}>
+      <VoiceStatusSync meeting={meeting} active={joined}>
+        {children}
+      </VoiceStatusSync>
+    </VoiceControlsContext.Provider>
   );
 }
