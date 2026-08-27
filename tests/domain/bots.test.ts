@@ -8,13 +8,16 @@ function legal(partial: Partial<LegalActions>): LegalActions {
     canCheck: false,
     canCall: false,
     callAmount: 0,
+    callIsAllIn: false,
     canBet: false,
     canRaise: false,
+    canShortAllInRaise: false,
     minBet: 2,
     maxBet: 100,
     minRaiseTo: 4,
     maxRaiseTo: 100,
     canAllIn: true,
+    allInAmount: 100,
     ...partial,
   };
 }

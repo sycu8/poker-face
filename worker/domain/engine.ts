@@ -477,7 +477,6 @@ export function getLegalActions(state: GameState, seatIndex: number): LegalActio
   const callIsAllIn = canCall && callAmount >= seat.stack;
 
   const rights = raiseRightsOpen(state, seat);
-  const stackAfterCall = seat.stack - callAmount;
   const maxRaiseToRaw = Math.min(seat.betThisStreet + seat.stack, Math.max(state.currentBet, cap));
   const minRaiseTo = state.currentBet + state.minRaise;
   const maxRaiseTo = maxRaiseToRaw;

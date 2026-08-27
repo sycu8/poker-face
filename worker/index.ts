@@ -168,7 +168,7 @@ export default {
 
   /**
    * Cron: purge expired / old-revoked sessions.
-   * Production/staging triggers: "0 */6 * * *" (see wrangler.jsonc).
+   * Production/staging triggers every 6 hours (see wrangler.jsonc crons).
    */
   async scheduled(
     _controller: ScheduledController,
