@@ -716,320 +716,308 @@ export function TablePage({ user }: { user: User }) {
           .filter(Boolean)
           .join(" ")}
       >
-        <div className="table-top">
-          <div className="table-top-meta">
+        <header className="table-toolbar">
+          <div className="table-toolbar__lead">
             <h1>{meta?.roomName ?? "Private table"}</h1>
-            <p className="muted">
-              {status} · {STREET_LABEL[view?.street ?? "waiting"] ?? view?.street} · Hand{" "}
-              {view?.handNumber ?? 0} · Blinds {view?.config.smallBlind ?? "–"}/
-              {view?.config.bigBlind ?? "–"}
-              {view?.paused ? " · PAUSED" : ""}
-              {turnLeft !== null ? ` · ${turnLeft}s` : ""}
-              {view?.timeBankActive ? " (time bank)" : ""} ·{" "}
-              <span className="badge">Virtual chips only</span>
-              {view?.isSpectator ? <span className="badge"> Spectating</span> : null}
-            </p>
-            {meta?.inviteCode ? (
-              <div className="table-invite-row">
-                <span>
-                  Invite{" "}
-                  <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>
-                </span>
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => void shareInvite()}
-                >
-                  {shareMsg ?? "Share"}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => void copyInvite()}
-                >
-                  {copied ? "Copied" : "Copy code"}
-                </button>
-              </div>
-            ) : null}
-            {winnerNames ? (
-              <p className="badge" style={{ marginTop: "0.5rem" }}>
-                Last hand: {winnerNames}
-              </p>
-            ) : null}
-            {view?.pendingConfig ? (
-              <p className="muted">Rule changes pending for the next hand.</p>
-            ) : null}
-          </div>
-          <div className="table-top-actions">
-            <div className="cta-row">
-              {meta?.inviteCode ? (
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => void shareInvite()}
-                >
-                  {shareMsg ?? "Share table"}
-                </button>
+            <div className="table-status-chips" aria-label="Table status">
+              <span className="table-status-chip">{status}</span>
+              <span className="table-status-chip">
+                {STREET_LABEL[view?.street ?? "waiting"] ?? view?.street}
+              </span>
+              <span className="table-status-chip">Hand {view?.handNumber ?? 0}</span>
+              <span className="table-status-chip">
+                Blinds {view?.config.smallBlind ?? "–"}/{view?.config.bigBlind ?? "–"}
+              </span>
+              {view?.paused ? (
+                <span className="table-status-chip table-status-chip--warn">Paused</span>
               ) : null}
-              {isHost && waitingToDeal ? (
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  disabled={Boolean(view?.paused)}
-                  onClick={() => {
-                    setStartRequests({
-                      count: 0,
-                      latestDisplayName: null,
-                      requesters: [],
-                    });
-                    send({ type: "start_hand" });
-                  }}
-                >
-                  Deal everyone in
-                </button>
+              {turnLeft !== null ? (
+                <span className="table-status-chip">{turnLeft}s</span>
               ) : null}
-              {isHost && seats.some((s) => !s.playerId) ? (
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => void fillOpenSeatsWithBots()}
-                >
-                  Fill open seats with bots
-                </button>
+              {view?.timeBankActive ? (
+                <span className="table-status-chip">Time bank</span>
               ) : null}
-              {isHost ? (
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => void togglePause()}
-                >
-                  {view?.paused ? "Resume" : "Pause"}
-                </button>
-              ) : null}
-              {!isHost && waitingToDeal && isSeated ? (
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  disabled={askedToStart || Boolean(view?.paused)}
-                  onClick={askHostToStart}
-                >
-                  {askedToStart ? "Asked host" : "Ask host to start"}
-                </button>
-              ) : null}
-              {waitingToDeal && view?.lastHandResult && (view.board?.length ?? 0) < 5 ? (
-                <button
-                  className="btn btn-secondary"
-                  type="button"
-                  onClick={() => send({ type: "rabbit" })}
-                >
-                  Rabbit hunt
-                </button>
-              ) : null}
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() => void leaveTable()}
-              >
-                {isHost ? "Back to lobby" : "Leave table"}
-              </button>
-              {isHost ? (
-                <button
-                  className="btn btn-danger"
-                  type="button"
-                  onClick={() => void closeTable()}
-                >
-                  Close table
-                </button>
+              <span className="table-status-chip">Virtual chips only</span>
+              {view?.isSpectator ? (
+                <span className="table-status-chip">Spectating</span>
               ) : null}
             </div>
-          </div>
-        </div>
-
-        {waitingToDeal && access === "member" ? (
-          <div
-            className="panel between-hand"
-            role="status"
-            style={{ marginBottom: "1rem", textAlign: "center" }}
-          >
-            <strong>
-              {view?.handNumber ? `Hand #${view.handNumber} complete` : "Waiting to deal"}
-            </strong>
-            <p className="muted" style={{ margin: "0.35rem 0 0" }}>
-              {seatedReady < 2
-                ? "Need at least two seated players with chips before the host can deal."
-                : isHost
-                  ? "Everyone is ready when you are — deal the next hand."
-                  : askedToStart
-                    ? "Host has been asked to deal. Hang tight."
-                    : "Waiting for the host to deal the next hand."}
-            </p>
-            {bustedSelf ? (
-              <div
-                className="cta-row"
-                style={{ marginTop: "0.75rem", justifyContent: "center" }}
-              >
-                <button
-                  className="btn btn-primary"
-                  type="button"
-                  onClick={() => void doRebuy()}
-                >
-                  Rebuy play-money stack
-                </button>
-              </div>
+            {winnerNames ? (
+              <p className="table-toolbar__note badge">Last hand: {winnerNames}</p>
+            ) : null}
+            {view?.pendingConfig ? (
+              <p className="table-toolbar__note muted">Rule changes pending for the next hand.</p>
             ) : null}
           </div>
-        ) : null}
-
-        {actionMsg ? (
-          <p className="badge" role="status" style={{ marginBottom: "0.75rem" }}>
-            {actionMsg}
-          </p>
-        ) : null}
-
-        {isHost && waitingToDeal && startRequestLabel ? (
-          <div
-            className="panel"
-            style={{
-              marginBottom: "1rem",
-              borderColor: "#f4bc5666",
-              display: "grid",
-              gap: "0.75rem",
-              justifyItems: "center",
-              textAlign: "center",
-            }}
-            role="status"
-          >
-            <strong>{startRequestLabel}</strong>
-            <p className="muted" style={{ margin: 0 }}>
-              Ready when you are — deal is still yours to start.
-            </p>
-            <div className="cta-row" style={{ justifyContent: "center" }}>
+          <div className="table-toolbar__actions">
+            {isHost && waitingToDeal ? (
               <button
-                className="btn btn-primary"
+                className="btn btn-primary btn--compact"
                 type="button"
+                disabled={Boolean(view?.paused)}
                 onClick={() => {
-                  setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+                  setStartRequests({
+                    count: 0,
+                    latestDisplayName: null,
+                    requesters: [],
+                  });
                   send({ type: "start_hand" });
                 }}
               >
                 Deal everyone in
               </button>
+            ) : null}
+            {!isHost && waitingToDeal && isSeated ? (
+              <button
+                className="btn btn-primary btn--compact"
+                type="button"
+                disabled={askedToStart || Boolean(view?.paused)}
+                onClick={askHostToStart}
+              >
+                {askedToStart ? "Asked host" : "Ask host to start"}
+              </button>
+            ) : null}
+            {isHost && seats.some((s) => !s.playerId) ? (
+              <button
+                className="btn btn-secondary btn--compact"
+                type="button"
+                onClick={() => void fillOpenSeatsWithBots()}
+              >
+                Fill bots
+              </button>
+            ) : null}
+            {isHost ? (
+              <button
+                className="btn btn-secondary btn--compact"
+                type="button"
+                onClick={() => void togglePause()}
+              >
+                {view?.paused ? "Resume" : "Pause"}
+              </button>
+            ) : null}
+            {waitingToDeal && view?.lastHandResult && (view.board?.length ?? 0) < 5 ? (
+              <button
+                className="btn btn-secondary btn--compact"
+                type="button"
+                onClick={() => send({ type: "rabbit" })}
+              >
+                Rabbit hunt
+              </button>
+            ) : null}
+            <button
+              className="btn btn-secondary btn--compact"
+              type="button"
+              onClick={() => void leaveTable()}
+            >
+              {isHost ? "Lobby" : "Leave"}
+            </button>
+            {isHost ? (
+              <button
+                className="btn btn-danger btn--compact"
+                type="button"
+                onClick={() => void closeTable()}
+              >
+                Close
+              </button>
+            ) : null}
+          </div>
+        </header>
+
+        {meta?.inviteCode ? (
+          <div className="table-invite-bar">
+            <span className="table-invite-bar__code">
+              Invite{" "}
+              <strong style={{ letterSpacing: "0.08em" }}>{meta.inviteCode}</strong>
+            </span>
+            <div className="table-invite-bar__actions">
+              <button
+                className="btn btn-primary btn--compact"
+                type="button"
+                onClick={() => void shareInvite()}
+              >
+                {shareMsg ?? "Share"}
+              </button>
+              <button
+                className="btn btn-secondary btn--compact"
+                type="button"
+                onClick={() => void copyInvite()}
+              >
+                {copied ? "Copied" : "Copy code"}
+              </button>
             </div>
           </div>
         ) : null}
 
-        {pendingJoins.length > 0 && isHost ? (
-          <div className="panel" style={{ marginBottom: "1rem", textAlign: "center" }}>
-            <strong>Join requests</strong>
-            {pendingJoins.map((j) => (
-              <div key={j.requestId} className="join-request-row">
-                <span>{j.displayName} asks to join</span>
-                <label
-                  className="muted"
-                  style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
-                >
-                  Seat
-                  <select
-                    value={seatPick[j.requestId] ?? ""}
-                    onChange={(e) =>
-                      setSeatPick((m) => ({
-                        ...m,
-                        [j.requestId]:
-                          e.target.value === "" ? "" : Number(e.target.value),
-                      }))
-                    }
-                  >
-                    <option value="">Auto</option>
-                    {openSeats.map((s) => (
-                      <option key={s} value={s}>
-                        #{s + 1}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="cta-row">
-                  <button
-                    className="btn btn-primary"
-                    type="button"
-                    onClick={() =>
-                      void api
-                        .decideJoin({
-                          requestId: j.requestId,
-                          approve: true,
-                          seatIndex:
-                            seatPick[j.requestId] === "" ||
-                            seatPick[j.requestId] === undefined
-                              ? undefined
-                              : Number(seatPick[j.requestId]),
-                          idempotencyKey: crypto.randomUUID(),
-                        })
-                        .then(() =>
-                          setPendingJoins((list) =>
-                            list.filter((x) => x.requestId !== j.requestId),
-                          ),
-                        )
-                        .catch((e) =>
-                          setActionMsg(
-                            e instanceof Error ? e.message : "Could not approve.",
-                          ),
-                        )
-                    }
-                  >
-                    Take a seat
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={() =>
-                      void api
-                        .decideJoin({
-                          requestId: j.requestId,
-                          approve: true,
-                          asSpectator: true,
-                          seatIndex: null,
-                          idempotencyKey: crypto.randomUUID(),
-                        })
-                        .then(() =>
-                          setPendingJoins((list) =>
-                            list.filter((x) => x.requestId !== j.requestId),
-                          ),
-                        )
-                        .catch((e) =>
-                          setActionMsg(
-                            e instanceof Error ? e.message : "Could not approve.",
-                          ),
-                        )
-                    }
-                  >
-                    Spectate
-                  </button>
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    onClick={() =>
-                      void api
-                        .decideJoin({
-                          requestId: j.requestId,
-                          approve: false,
-                          idempotencyKey: crypto.randomUUID(),
-                        })
-                        .then(() =>
-                          setPendingJoins((list) =>
-                            list.filter((x) => x.requestId !== j.requestId),
-                          ),
-                        )
-                    }
-                  >
-                    Decline
-                  </button>
+        {actionMsg ||
+        (isHost && waitingToDeal && startRequestLabel) ||
+        (pendingJoins.length > 0 && isHost) ? (
+          <div className="table-alerts">
+            {actionMsg ? (
+              <p className="table-alert badge" role="status">
+                {actionMsg}
+              </p>
+            ) : null}
+            {isHost && waitingToDeal && startRequestLabel ? (
+              <div className="table-alert panel table-alert--start" role="status">
+                <div className="table-alert__body">
+                  <strong>{startRequestLabel}</strong>
+                  <p className="muted">Ready when you are — deal is still yours to start.</p>
                 </div>
+                <button
+                  className="btn btn-primary btn--compact"
+                  type="button"
+                  onClick={() => {
+                    setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+                    send({ type: "start_hand" });
+                  }}
+                >
+                  Deal
+                </button>
               </div>
-            ))}
+            ) : null}
+            {pendingJoins.length > 0 && isHost ? (
+              <div className="table-alert panel">
+                <strong>Join requests</strong>
+                {pendingJoins.map((j) => (
+                  <div key={j.requestId} className="join-request-row">
+                    <span>{j.displayName} asks to join</span>
+                    <label
+                      className="muted"
+                      style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
+                    >
+                      Seat
+                      <select
+                        value={seatPick[j.requestId] ?? ""}
+                        onChange={(e) =>
+                          setSeatPick((m) => ({
+                            ...m,
+                            [j.requestId]:
+                              e.target.value === "" ? "" : Number(e.target.value),
+                          }))
+                        }
+                      >
+                        <option value="">Auto</option>
+                        {openSeats.map((s) => (
+                          <option key={s} value={s}>
+                            #{s + 1}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="cta-row">
+                      <button
+                        className="btn btn-primary btn--compact"
+                        type="button"
+                        onClick={() =>
+                          void api
+                            .decideJoin({
+                              requestId: j.requestId,
+                              approve: true,
+                              seatIndex:
+                                seatPick[j.requestId] === "" ||
+                                seatPick[j.requestId] === undefined
+                                  ? undefined
+                                  : Number(seatPick[j.requestId]),
+                              idempotencyKey: crypto.randomUUID(),
+                            })
+                            .then(() =>
+                              setPendingJoins((list) =>
+                                list.filter((x) => x.requestId !== j.requestId),
+                              ),
+                            )
+                            .catch((e) =>
+                              setActionMsg(
+                                e instanceof Error ? e.message : "Could not approve.",
+                              ),
+                            )
+                        }
+                      >
+                        Seat
+                      </button>
+                      <button
+                        className="btn btn-secondary btn--compact"
+                        type="button"
+                        onClick={() =>
+                          void api
+                            .decideJoin({
+                              requestId: j.requestId,
+                              approve: true,
+                              asSpectator: true,
+                              seatIndex: null,
+                              idempotencyKey: crypto.randomUUID(),
+                            })
+                            .then(() =>
+                              setPendingJoins((list) =>
+                                list.filter((x) => x.requestId !== j.requestId),
+                              ),
+                            )
+                            .catch((e) =>
+                              setActionMsg(
+                                e instanceof Error ? e.message : "Could not approve.",
+                              ),
+                            )
+                        }
+                      >
+                        Spectate
+                      </button>
+                      <button
+                        className="btn btn-secondary btn--compact"
+                        type="button"
+                        onClick={() =>
+                          void api
+                            .decideJoin({
+                              requestId: j.requestId,
+                              approve: false,
+                              idempotencyKey: crypto.randomUUID(),
+                            })
+                            .then(() =>
+                              setPendingJoins((list) =>
+                                list.filter((x) => x.requestId !== j.requestId),
+                              ),
+                            )
+                        }
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
           </div>
         ) : null}
 
-        <div className="table-stage">
-          <div className="table-felt" aria-label="Poker table">
+        <div className="table-main">
+          <div className="table-main__play">
+            <div className="table-stage">
+              <div className="table-felt" aria-label="Poker table">
+                {waitingToDeal && access === "member" ? (
+                  <div className="between-hand between-hand--felt panel" role="status">
+                    <strong>
+                      {view?.handNumber
+                        ? `Hand #${view.handNumber} complete`
+                        : "Waiting to deal"}
+                    </strong>
+                    <p className="muted">
+                      {seatedReady < 2
+                        ? "Need at least two seated players with chips before the host can deal."
+                        : isHost
+                          ? "Everyone is ready when you are — deal the next hand."
+                          : askedToStart
+                            ? "Host has been asked to deal. Hang tight."
+                            : "Waiting for the host to deal the next hand."}
+                    </p>
+                    {bustedSelf ? (
+                      <button
+                        className="btn btn-primary btn--compact"
+                        type="button"
+                        onClick={() => void doRebuy()}
+                      >
+                        Rebuy stack
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
             {celebrationWinners && celebrationWinners.length > 0 ? (
               <WinCelebration
                 winners={celebrationWinners}
@@ -1349,12 +1337,12 @@ export function TablePage({ user }: { user: User }) {
               />
             </>
           ) : null}
-        </div>
+            </div>
+          </div>
 
-        <div className="table-side-grid">
-          <div className="panel">
+          <aside className="table-main__chat panel" aria-label="Table chat">
             <strong>Table chat</strong>
-            <div className="chat" style={{ marginTop: "0.6rem" }}>
+            <div className="chat table-chat-log">
               {chat.map((m) => (
                 <div key={m.id} className="chat-item">
                   <strong>{m.displayName}</strong>: {m.text}
@@ -1376,11 +1364,14 @@ export function TablePage({ user }: { user: User }) {
                 placeholder="Say something"
                 aria-label="Chat message"
               />
-              <button className="btn btn-secondary" type="submit">
+              <button className="btn btn-secondary btn--compact" type="submit">
                 Send
               </button>
             </form>
-          </div>
+          </aside>
+        </div>
+
+        <div className="table-side-grid">
           <div className="panel">
             <div
               className="cta-row"
