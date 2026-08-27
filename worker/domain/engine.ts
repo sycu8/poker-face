@@ -28,7 +28,12 @@ export interface SeatState {
   holeCards: [Card, Card] | null;
   betThisStreet: number;
   committedThisHand: number;
-  hasActedThisStreet: boolean;
+  /**
+   * Bet level (`currentBet`) at which this seat last completed an action this street.
+   * `null` = has not acted yet this street (or street was reset).
+   * Used for no-limit raise-reopen semantics.
+   */
+  actedAtBetLevel: number | null;
   /** Remaining time-bank pool in ms for this seat. */
   timeBankMs: number;
 }
@@ -84,6 +89,8 @@ export interface GameState {
   timeBankStartedMs: number | null;
   /** Milliseconds of time bank allocated when the bank phase began. */
   timeBankExtensionMs: number | null;
+  /** True when pause interrupted an active time-bank burn. */
+  pausedDuringTimeBank: boolean;
   /** Rabbit-hunt cards revealed after a hand (undealt board only). */
   rabbitCards: Card[];
 }
@@ -117,7 +124,7 @@ export function createEmptySeats(maxSeats: number): SeatState[] {
     holeCards: null,
     betThisStreet: 0,
     committedThisHand: 0,
-    hasActedThisStreet: false,
+    actedAtBetLevel: null,
     timeBankMs: 0,
   }));
 }
@@ -144,6 +151,7 @@ export function createInitialGameState(config: TableConfig): GameState {
     pausedTurnRemainingMs: null,
     timeBankStartedMs: null,
     timeBankExtensionMs: null,
+    pausedDuringTimeBank: false,
     rabbitCards: [],
   };
 }
@@ -164,9 +172,18 @@ export function normalizeGameState(state: GameState): GameState {
   if (state.pausedTurnRemainingMs === undefined) state.pausedTurnRemainingMs = null;
   if (state.timeBankStartedMs === undefined) state.timeBankStartedMs = null;
   if (state.timeBankExtensionMs === undefined) state.timeBankExtensionMs = null;
+  if (state.pausedDuringTimeBank == null) state.pausedDuringTimeBank = false;
   if (!state.rabbitCards) state.rabbitCards = [];
   for (const seat of state.seats) {
     if (typeof seat.timeBankMs !== "number") seat.timeBankMs = 0;
+    // Migrate legacy hasActedThisStreet snapshots.
+    const legacy = seat as SeatState & { hasActedThisStreet?: boolean };
+    if (!("actedAtBetLevel" in seat) || (seat.actedAtBetLevel === undefined && typeof legacy.hasActedThisStreet === "boolean")) {
+      seat.actedAtBetLevel = legacy.hasActedThisStreet ? seat.betThisStreet : null;
+    } else if (seat.actedAtBetLevel === undefined) {
+      seat.actedAtBetLevel = null;
+    }
+    delete legacy.hasActedThisStreet;
   }
   // Grow seat ring if maxSeats increased (e.g. 9 → 10).
   while (state.seats.length < state.config.maxSeats) {
@@ -180,7 +197,7 @@ export function normalizeGameState(state: GameState): GameState {
       holeCards: null,
       betThisStreet: 0,
       committedThisHand: 0,
-      hasActedThisStreet: false,
+      actedAtBetLevel: null,
       timeBankMs: 0,
     });
   }
@@ -196,7 +213,11 @@ function canDealPlayers(state: GameState): SeatState[] {
   );
 }
 
-function nextOccupiedSeat(state: GameState, from: number, predicate: (s: SeatState) => boolean): number | null {
+function nextOccupiedSeat(
+  state: GameState,
+  from: number,
+  predicate: (s: SeatState) => boolean,
+): number | null {
   const n = state.seats.length;
   for (let i = 1; i <= n; i++) {
     const idx = (from + i) % n;
@@ -206,19 +227,29 @@ function nextOccupiedSeat(state: GameState, from: number, predicate: (s: SeatSta
   return null;
 }
 
+function liveInHand(s: SeatState): boolean {
+  return s.status === "active" || s.status === "all_in";
+}
+
 function playersToAct(state: GameState): SeatState[] {
   return state.seats.filter(
     (s) =>
       s.status === "active" &&
       s.stack > 0 &&
-      (!s.hasActedThisStreet || s.betThisStreet < state.currentBet),
+      (s.actedAtBetLevel === null || s.betThisStreet < state.currentBet),
   );
+}
+
+/** Raise rights reopen only after facing ≥ one full legal raise since last action. */
+export function raiseRightsOpen(state: GameState, seat: SeatState): boolean {
+  if (seat.actedAtBetLevel === null) return true;
+  return state.currentBet - seat.actedAtBetLevel >= state.minRaise;
 }
 
 function resetStreetFlags(state: GameState): void {
   for (const seat of state.seats) {
     seat.betThisStreet = 0;
-    seat.hasActedThisStreet = false;
+    seat.actedAtBetLevel = null;
   }
   state.currentBet = 0;
   state.minRaise = state.config.bigBlind;
@@ -231,6 +262,53 @@ function postBlind(seat: SeatState, amount: number): number {
   seat.committedThisHand += paid;
   if (seat.stack === 0) seat.status = "all_in";
   return paid;
+}
+
+/** Count players dealt into the current hand (active or all-in). */
+function handPlayerCount(state: GameState): number {
+  return state.seats.filter((s) => liveInHand(s)).length;
+}
+
+/**
+ * After blinds / actions: if ≤1 player can still make a betting decision and
+ * ≥2 live hands remain, auto-run the remaining board to showdown.
+ */
+function maybeAutoRunout(state: GameState, nowMs: number): EngineEvent[] | null {
+  const live = state.seats.filter((s) => liveInHand(s));
+  if (live.length < 2) return null;
+  const actionable = state.seats.filter((s) => s.status === "active" && s.stack > 0);
+  if (actionable.length > 1) return null;
+  // One or zero actionable players with chips — no meaningful betting remains.
+  if (actionable.length === 1 && playersToAct(state).length > 0) {
+    // The single actionable player still faces a decision (e.g. call short all-in).
+    return null;
+  }
+  if (actionable.length === 1 && playersToAct(state).length === 0) {
+    return runOutBoardAndComplete(state, nowMs);
+  }
+  if (actionable.length === 0) {
+    return runOutBoardAndComplete(state, nowMs);
+  }
+  return null;
+}
+
+function runOutBoardAndComplete(state: GameState, nowMs: number): EngineEvent[] {
+  const events: EngineEvent[] = [];
+  state.actionSeat = null;
+  setTurnDeadline(state, nowMs, null);
+  while (state.board.length < 5) {
+    if (state.board.length === 0) {
+      state.street = "flop";
+      events.push({ type: "board", street: "flop", cards: dealBoard(state, 3) });
+    } else if (state.board.length === 3) {
+      state.street = "turn";
+      events.push({ type: "board", street: "turn", cards: dealBoard(state, 1) });
+    } else if (state.board.length === 4) {
+      state.street = "river";
+      events.push({ type: "board", street: "river", cards: dealBoard(state, 1) });
+    } else break;
+  }
+  return events.concat(completeHand(state, nowMs));
 }
 
 export function startHand(state: GameState, nowMs: number): EngineEvent[] {
@@ -262,7 +340,7 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
     seat.holeCards = null;
     seat.betThisStreet = 0;
     seat.committedThisHand = 0;
-    seat.hasActedThisStreet = false;
+    seat.actedAtBetLevel = null;
   }
 
   state.handNumber += 1;
@@ -273,6 +351,7 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
   state.rabbitCards = [];
   state.timeBankStartedMs = null;
   state.timeBankExtensionMs = null;
+  state.pausedDuringTimeBank = false;
   state.deck = shuffleDeck(buildDeck());
   state.street = "preflop";
 
@@ -289,25 +368,36 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
     dealerSeat: state.dealerSeat,
   });
 
-  const sbSeat = nextOccupiedSeat(
-    state,
-    state.dealerSeat,
-    (s) => s.status === "active" || s.status === "all_in",
-  );
-  const bbSeat =
-    sbSeat === null
-      ? null
-      : nextOccupiedSeat(state, sbSeat, (s) => s.status === "active" || s.status === "all_in");
+  const inHand = handPlayerCount(state);
+  let sbSeat: number | null;
+  let bbSeat: number | null;
+  if (inHand === 2) {
+    // Heads-up: button posts SB; other posts BB.
+    sbSeat = state.dealerSeat;
+    bbSeat = nextOccupiedSeat(state, state.dealerSeat, (s) => liveInHand(s));
+  } else {
+    sbSeat = nextOccupiedSeat(state, state.dealerSeat, (s) => liveInHand(s));
+    bbSeat =
+      sbSeat === null ? null : nextOccupiedSeat(state, sbSeat, (s) => liveInHand(s));
+  }
   if (sbSeat === null || bbSeat === null) return events;
 
   const sbPaid = postBlind(state.seats[sbSeat]!, state.config.smallBlind);
   const bbPaid = postBlind(state.seats[bbSeat]!, state.config.bigBlind);
   state.pot = sbPaid + bbPaid;
-  state.currentBet = Math.max(
-    state.seats[sbSeat]!.betThisStreet,
-    state.seats[bbSeat]!.betThisStreet,
-  );
+  // Multiway short-BB: opening level remains the configured full big blind.
+  // Heads-up short-BB: face the amount actually contested.
+  if (inHand === 2) {
+    state.currentBet = Math.max(
+      state.seats[sbSeat]!.betThisStreet,
+      state.seats[bbSeat]!.betThisStreet,
+    );
+  } else {
+    state.currentBet = state.config.bigBlind;
+  }
   state.minRaise = state.config.bigBlind;
+  // Blind posts are not voluntary actions — leave actedAtBetLevel null so
+  // SB/button can open and BB retains preflop option.
   events.push({
     type: "blinds_posted",
     sb: sbPaid,
@@ -326,6 +416,10 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
   }
   events.push({ type: "dealt_hole" });
 
+  const auto = maybeAutoRunout(state, nowMs);
+  if (auto) return events.concat(auto);
+
+  // Preflop: first to act is left of BB (HU: button/SB).
   const first =
     nextOccupiedSeat(state, bbSeat, (s) => s.status === "active" && s.stack > 0) ??
     nextOccupiedSeat(state, bbSeat, (s) => s.status === "active" || s.status === "all_in");
@@ -339,6 +433,7 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
 function setTurnDeadline(state: GameState, nowMs: number, seatIndex: number | null): EngineEvent[] {
   state.timeBankStartedMs = null;
   state.timeBankExtensionMs = null;
+  state.pausedDuringTimeBank = false;
   if (seatIndex === null) {
     state.turnDeadlineMs = null;
     return [];
@@ -352,13 +447,18 @@ export interface LegalActions {
   canCheck: boolean;
   canCall: boolean;
   callAmount: number;
+  /** True when calling consumes the entire stack. */
+  callIsAllIn: boolean;
   canBet: boolean;
   canRaise: boolean;
+  /** Raise rights open but stack only covers a short all-in increase. */
+  canShortAllInRaise: boolean;
   minBet: number;
   maxBet: number;
   minRaiseTo: number;
   maxRaiseTo: number;
   canAllIn: boolean;
+  allInAmount: number;
 }
 
 export function getLegalActions(state: GameState, seatIndex: number): LegalActions | null {
@@ -370,45 +470,74 @@ export function getLegalActions(state: GameState, seatIndex: number): LegalActio
   const potBeforeAction = state.pot;
   const cap = maxTargetWager(potBeforeAction, state.config.potCapMultiplier);
   const canCheck = toCall === 0;
-  const canCall = toCall > 0 && seat.stack > toCall;
+  // Calling remains possible whenever there is something to call and chips remain,
+  // including exact-stack and short all-in calls.
+  const canCall = toCall > 0 && seat.stack > 0;
   const callAmount = Math.min(toCall, seat.stack);
-  const canBet = state.currentBet === 0 && seat.stack > 0;
-  const canRaise = state.currentBet > 0 && seat.stack > toCall;
+  const callIsAllIn = canCall && callAmount >= seat.stack;
+
+  const rights = raiseRightsOpen(state, seat);
+  const stackAfterCall = seat.stack - callAmount;
+  const maxRaiseToRaw = Math.min(seat.betThisStreet + seat.stack, Math.max(state.currentBet, cap));
+  const minRaiseTo = state.currentBet + state.minRaise;
+  const maxRaiseTo = maxRaiseToRaw;
+  const fullRaisePossible = rights && seat.stack > toCall && minRaiseTo <= maxRaiseTo;
+  const shortAllInRaisePossible =
+    rights &&
+    seat.stack > toCall &&
+    seat.betThisStreet + seat.stack > state.currentBet &&
+    seat.betThisStreet + seat.stack < minRaiseTo;
+
+  const canBet = state.currentBet === 0 && seat.stack > 0 && rights;
+  const canRaise = state.currentBet > 0 && fullRaisePossible;
+  const canShortAllInRaise = state.currentBet > 0 && shortAllInRaisePossible;
 
   const minBet = state.config.bigBlind;
   const maxBet = Math.min(seat.stack, Math.max(minBet, cap - seat.betThisStreet));
-  const minRaiseTo = state.currentBet + state.minRaise;
-  const maxRaiseTo = Math.min(
-    seat.betThisStreet + seat.stack,
-    Math.max(minRaiseTo, cap),
-  );
+
+  // Generic all-in: call-all-in, open shove, or legal raise shove — never bypass closed rights.
+  let canAllIn = false;
+  if (seat.stack > 0) {
+    if (toCall > 0 && seat.stack <= toCall) {
+      canAllIn = true; // call all-in
+    } else if (toCall === 0) {
+      canAllIn = true; // open shove / bet all-in
+    } else if (rights && seat.stack > toCall) {
+      canAllIn = true; // raise all-in (full or short) with open rights
+    }
+  }
+
+  // Invariant: never advertise canRaise when min > max.
+  const safeCanRaise = canRaise && minRaiseTo <= maxRaiseTo;
 
   return {
     canFold: true,
     canCheck,
     canCall,
     callAmount,
+    callIsAllIn,
     canBet,
-    canRaise,
+    canRaise: safeCanRaise,
+    canShortAllInRaise,
     minBet,
     maxBet: Math.max(0, maxBet),
     minRaiseTo,
-    maxRaiseTo,
-    canAllIn: seat.stack > 0,
+    maxRaiseTo: Math.max(0, maxRaiseTo),
+    canAllIn,
+    allInAmount: seat.stack,
   };
 }
 
 function advanceAfterAction(state: GameState, nowMs: number): EngineEvent[] {
   const events: EngineEvent[] = [];
-  const active = state.seats.filter((s) => s.status === "active" || s.status === "all_in");
-  const inHand = state.seats.filter(
-    (s) => s.status === "active" || s.status === "all_in" || s.status === "folded",
-  );
-  const notFolded = active;
+  const live = state.seats.filter((s) => liveInHand(s));
 
-  if (notFolded.length === 1) {
+  if (live.length === 1) {
     return events.concat(completeHand(state, nowMs));
   }
+
+  const auto = maybeAutoRunout(state, nowMs);
+  if (auto) return events.concat(auto);
 
   if (playersToAct(state).length === 0) {
     return events.concat(advanceStreet(state, nowMs));
@@ -420,7 +549,7 @@ function advanceAfterAction(state: GameState, nowMs: number): EngineEvent[] {
     (s) =>
       s.status === "active" &&
       s.stack > 0 &&
-      (!s.hasActedThisStreet || s.betThisStreet < state.currentBet),
+      (s.actedAtBetLevel === null || s.betThisStreet < state.currentBet),
   );
   state.actionSeat = next;
   if (next !== null) {
@@ -428,7 +557,6 @@ function advanceAfterAction(state: GameState, nowMs: number): EngineEvent[] {
   } else {
     setTurnDeadline(state, nowMs, null);
   }
-  void inHand;
   return events;
 }
 
@@ -467,22 +595,24 @@ function advanceStreet(state: GameState, nowMs: number): EngineEvent[] {
 
   const still = state.seats.filter((s) => s.status === "active" && s.stack > 0);
   if (still.length <= 1) {
-    // Run out remaining board then showdown
+    // Board street above may already be dealt; run out the rest then showdown.
+    const more: EngineEvent[] = [];
     while (state.board.length < 5) {
       if (state.board.length === 0) {
         state.street = "flop";
-        events.push({ type: "board", street: "flop", cards: dealBoard(state, 3) });
+        more.push({ type: "board", street: "flop", cards: dealBoard(state, 3) });
       } else if (state.board.length === 3) {
         state.street = "turn";
-        events.push({ type: "board", street: "turn", cards: dealBoard(state, 1) });
+        more.push({ type: "board", street: "turn", cards: dealBoard(state, 1) });
       } else if (state.board.length === 4) {
         state.street = "river";
-        events.push({ type: "board", street: "river", cards: dealBoard(state, 1) });
+        more.push({ type: "board", street: "river", cards: dealBoard(state, 1) });
       } else break;
     }
-    return events.concat(completeHand(state, nowMs));
+    return events.concat(more).concat(completeHand(state, nowMs));
   }
 
+  // Postflop: first to act is left of button (HU: BB).
   const first = nextOccupiedSeat(
     state,
     state.dealerSeat,
@@ -495,6 +625,34 @@ function advanceStreet(state: GameState, nowMs: number): EngineEvent[] {
     setTurnDeadline(state, nowMs, null);
   }
   return events;
+}
+
+/**
+ * Award odd chips clockwise from the button among tied winners.
+ * `tied` is unordered; we sort by clockwise seat distance from dealer.
+ */
+function awardOddChipsClockwise(
+  state: GameState,
+  tiedPlayerIds: string[],
+  potAmount: number,
+): Array<{ playerId: string; amount: number }> {
+  const n = state.seats.length;
+  const ordered = [...tiedPlayerIds].sort((a, b) => {
+    const seatA = state.seats.find((s) => s.playerId === a)!.seatIndex;
+    const seatB = state.seats.find((s) => s.playerId === b)!.seatIndex;
+    const distA = (seatA - state.dealerSeat + n) % n;
+    const distB = (seatB - state.dealerSeat + n) % n;
+    // First odd chip goes to the first seat clockwise from the button
+    // (smallest positive distance; distance 0 = button gets odd chip first).
+    return distA - distB;
+  });
+  const share = Math.floor(potAmount / ordered.length);
+  let remainder = potAmount - share * ordered.length;
+  return ordered.map((playerId) => {
+    const extra = remainder > 0 ? 1 : 0;
+    remainder -= extra;
+    return { playerId, amount: share + extra };
+  });
 }
 
 function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
@@ -540,21 +698,28 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
     evaluated.sort((a, b) => compareHands(b.hand, a.hand));
     const best = evaluated[0]!.hand;
     const tied = evaluated.filter((e) => compareHands(e.hand, best) === 0);
-    const winningHand: WinningHandInfo = {
-      category: best.category,
-      label: categoryDisplayLabel(best),
-      bestFive: best.bestFive,
-      strength: best.ranks,
-    };
-    const share = Math.floor(pot.amount / tied.length);
-    let remainder = pot.amount - share * tied.length;
-    for (const t of tied) {
-      const seat = state.seats.find((s) => s.playerId === t.pid)!;
-      const extra = remainder > 0 ? 1 : 0;
-      remainder -= extra;
-      const amount = share + extra;
-      seat.stack += amount;
-      winners.push({ playerId: t.pid, amount, potIndex, hand: winningHand });
+    const awards = awardOddChipsClockwise(
+      state,
+      tied.map((t) => t.pid),
+      pot.amount,
+    );
+    for (const award of awards) {
+      const seat = state.seats.find((s) => s.playerId === award.playerId)!;
+      const ev = tied.find((t) => t.pid === award.playerId)!;
+      // Each tied winner keeps their own best-five metadata.
+      const winningHand: WinningHandInfo = {
+        category: ev.hand.category,
+        label: categoryDisplayLabel(ev.hand),
+        bestFive: ev.hand.bestFive,
+        strength: ev.hand.ranks,
+      };
+      seat.stack += award.amount;
+      winners.push({
+        playerId: award.playerId,
+        amount: award.amount,
+        potIndex,
+        hand: winningHand,
+      });
     }
   });
 
@@ -564,6 +729,8 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
   state.sequence += 1;
   state.timeBankStartedMs = null;
   state.timeBankExtensionMs = null;
+  state.pausedDuringTimeBank = false;
+  // Keep deck for rabbit hunt; clear hole cards from seats after showdown projection.
   state.rabbitCards = [];
 
   for (const seat of state.seats) {
@@ -571,7 +738,7 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
     seat.holeCards = null;
     seat.betThisStreet = 0;
     seat.committedThisHand = 0;
-    seat.hasActedThisStreet = false;
+    seat.actedAtBetLevel = null;
     if (seat.stack <= 0) {
       seat.status = "sitting_out";
     } else {
@@ -580,6 +747,32 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
   }
   state.street = "waiting";
   return [{ type: "hand_complete", result }];
+}
+
+/**
+ * Apply a wager increase that may be a full raise or short all-in.
+ * Updates minRaise only on full legal raises; never reduces minRaise.
+ */
+function applyWagerIncrease(
+  state: GameState,
+  seat: SeatState,
+  paid: number,
+): void {
+  const previousBet = state.currentBet;
+  const newBet = seat.betThisStreet + paid;
+  const raiseSize = newBet - previousBet;
+  seat.stack -= paid;
+  seat.betThisStreet = newBet;
+  seat.committedThisHand += paid;
+  state.pot += paid;
+  if (newBet > previousBet) {
+    if (raiseSize >= state.minRaise) {
+      state.minRaise = raiseSize;
+    }
+    state.currentBet = newBet;
+  }
+  seat.actedAtBetLevel = state.currentBet;
+  if (seat.stack === 0) seat.status = "all_in";
 }
 
 export function applyAction(
@@ -592,34 +785,38 @@ export function applyAction(
 ): { ok: true; events: EngineEvent[]; idempotencyKey: string } | { ok: false; error: string } {
   void idempotencyKey;
   if (state.paused) return { ok: false, error: "The table is paused." };
-  settleTimeBankOnAction(state, seatIndex, nowMs);
+
+  // Validate FIRST — invalid actions must not mutate the time bank.
   const legal = getLegalActions(state, seatIndex);
   if (!legal) return { ok: false, error: "Not your turn." };
   const seat = state.seats[seatIndex]!;
+
+  // Pre-validate action legality before any mutation.
+  const precheck = precheckAction(legal, seat, state, action, amount);
+  if (!precheck.ok) return precheck;
+
+  settleTimeBankOnAction(state, seatIndex, nowMs);
+
   let paid = 0;
   let resolved: ActionType = action;
 
   switch (action) {
     case "fold": {
       seat.status = "folded";
-      seat.hasActedThisStreet = true;
+      seat.actedAtBetLevel = state.currentBet;
       break;
     }
     case "check": {
-      if (!legal.canCheck) return { ok: false, error: "Cannot check." };
-      seat.hasActedThisStreet = true;
+      seat.actedAtBetLevel = state.currentBet;
       break;
     }
     case "call": {
-      if (!legal.canCall && !(legal.callAmount > 0 && legal.canAllIn)) {
-        return { ok: false, error: "Cannot call." };
-      }
       paid = Math.min(legal.callAmount, seat.stack);
       seat.stack -= paid;
       seat.betThisStreet += paid;
       seat.committedThisHand += paid;
       state.pot += paid;
-      seat.hasActedThisStreet = true;
+      seat.actedAtBetLevel = state.currentBet;
       if (seat.stack === 0) {
         seat.status = "all_in";
         resolved = "all_in";
@@ -627,77 +824,63 @@ export function applyAction(
       break;
     }
     case "bet": {
-      if (!legal.canBet) return { ok: false, error: "Cannot bet." };
       const target = amount ?? legal.minBet;
-      if (target < legal.minBet) return { ok: false, error: "Bet below minimum." };
-      const capped = Math.min(target, legal.maxBet, seat.stack);
-      // Allow all-in shove even above pot-cap
-      const wantAllIn = amount !== undefined && amount >= seat.stack;
-      paid = wantAllIn ? seat.stack : capped;
-      if (!wantAllIn && paid < legal.minBet) return { ok: false, error: "Bet below minimum." };
-      seat.stack -= paid;
-      seat.betThisStreet += paid;
-      seat.committedThisHand += paid;
-      state.pot += paid;
-      state.minRaise = Math.max(state.minRaise, paid - state.currentBet);
-      state.currentBet = seat.betThisStreet;
-      seat.hasActedThisStreet = true;
-      // reopen action
-      for (const s of state.seats) {
-        if (s.seatIndex !== seatIndex && s.status === "active") s.hasActedThisStreet = false;
+      const wantAllIn = amount !== undefined && amount >= seat.stack + seat.betThisStreet;
+      if (wantAllIn || (amount !== undefined && amount >= seat.stack)) {
+        paid = seat.stack;
+      } else {
+        const capped = Math.min(target, legal.maxBet, seat.stack);
+        if (capped < legal.minBet && capped < seat.stack) {
+          return { ok: false, error: "Bet below minimum." };
+        }
+        paid = capped;
       }
-      if (seat.stack === 0) {
-        seat.status = "all_in";
-        resolved = "all_in";
-      }
+      if (paid <= 0) return { ok: false, error: "Invalid bet." };
+      applyWagerIncrease(state, seat, paid);
+      if (seat.status === "all_in") resolved = "all_in";
       break;
     }
     case "raise": {
-      if (!legal.canRaise && !legal.canAllIn) return { ok: false, error: "Cannot raise." };
       const raiseTo = amount ?? legal.minRaiseTo;
-      const wantAllIn = raiseTo >= seat.betThisStreet + seat.stack;
-      let target = raiseTo;
-      if (!wantAllIn) {
+      const maxStackTo = seat.betThisStreet + seat.stack;
+      const wantAllIn = raiseTo >= maxStackTo;
+      if (!legal.canRaise && !legal.canShortAllInRaise) {
+        return { ok: false, error: "Cannot raise." };
+      }
+      if (wantAllIn) {
+        if (!legal.canRaise && !legal.canShortAllInRaise && !legal.canAllIn) {
+          return { ok: false, error: "Cannot raise." };
+        }
+        paid = seat.stack;
+      } else {
+        if (!legal.canRaise) return { ok: false, error: "Cannot raise." };
         if (raiseTo < legal.minRaiseTo) return { ok: false, error: "Raise below minimum." };
-        target = Math.min(raiseTo, legal.maxRaiseTo);
+        const target = Math.min(raiseTo, legal.maxRaiseTo);
+        paid = target - seat.betThisStreet;
       }
-      paid = Math.min(target - seat.betThisStreet, seat.stack);
       if (paid <= 0) return { ok: false, error: "Invalid raise." };
-      const raiseSize = seat.betThisStreet + paid - state.currentBet;
-      seat.stack -= paid;
-      seat.betThisStreet += paid;
-      seat.committedThisHand += paid;
-      state.pot += paid;
-      if (raiseSize > 0) state.minRaise = Math.max(state.minRaise, raiseSize);
-      state.currentBet = Math.max(state.currentBet, seat.betThisStreet);
-      seat.hasActedThisStreet = true;
-      for (const s of state.seats) {
-        if (s.seatIndex !== seatIndex && s.status === "active") s.hasActedThisStreet = false;
-      }
-      if (seat.stack === 0) {
-        seat.status = "all_in";
-        resolved = "all_in";
-      }
+      applyWagerIncrease(state, seat, paid);
+      if (seat.status === "all_in") resolved = "all_in";
       break;
     }
     case "all_in": {
+      if (!legal.canAllIn) return { ok: false, error: "All-in not allowed." };
       paid = seat.stack;
       if (paid <= 0) return { ok: false, error: "Nothing to shove." };
-      const newBet = seat.betThisStreet + paid;
-      const raiseSize = newBet - state.currentBet;
-      seat.stack = 0;
-      seat.betThisStreet = newBet;
-      seat.committedThisHand += paid;
-      state.pot += paid;
-      if (newBet > state.currentBet) {
-        state.minRaise = Math.max(state.minRaise, raiseSize);
-        state.currentBet = newBet;
-        for (const s of state.seats) {
-          if (s.seatIndex !== seatIndex && s.status === "active") s.hasActedThisStreet = false;
-        }
+      const toCall = Math.max(0, state.currentBet - seat.betThisStreet);
+      if (paid <= toCall) {
+        // Call all-in (or partial) — does not reopen / change minRaise.
+        seat.stack = 0;
+        seat.betThisStreet += paid;
+        seat.committedThisHand += paid;
+        state.pot += paid;
+        seat.status = "all_in";
+        seat.actedAtBetLevel = state.currentBet;
+      } else {
+        // Increase — only reachable when raise rights are open (canAllIn gated).
+        applyWagerIncrease(state, seat, paid);
       }
-      seat.status = "all_in";
-      seat.hasActedThisStreet = true;
+      resolved = "all_in";
       break;
     }
     default:
@@ -719,6 +902,60 @@ export function applyAction(
     events: events.concat(advanceAfterAction(state, nowMs)),
     idempotencyKey,
   };
+}
+
+function precheckAction(
+  legal: LegalActions,
+  seat: SeatState,
+  state: GameState,
+  action: ActionType,
+  amount: number | undefined,
+): { ok: true } | { ok: false; error: string } {
+  void state;
+  switch (action) {
+    case "fold":
+      return { ok: true };
+    case "check":
+      if (!legal.canCheck) return { ok: false, error: "Cannot check." };
+      return { ok: true };
+    case "call":
+      if (!legal.canCall) return { ok: false, error: "Cannot call." };
+      return { ok: true };
+    case "bet": {
+      if (!legal.canBet && !(legal.canAllIn && state.currentBet === 0)) {
+        return { ok: false, error: "Cannot bet." };
+      }
+      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
+        return { ok: false, error: "Invalid bet amount." };
+      }
+      return { ok: true };
+    }
+    case "raise": {
+      if (!legal.canRaise && !legal.canShortAllInRaise) {
+        // Allow raise-to-all-in only when canAllIn with open increase rights.
+        if (!(legal.canAllIn && raiseRightsOpen(state, seat) && seat.stack > 0)) {
+          return { ok: false, error: "Cannot raise." };
+        }
+      }
+      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
+        return { ok: false, error: "Invalid raise amount." };
+      }
+      if (
+        amount !== undefined &&
+        Number.isFinite(amount) &&
+        amount < legal.minRaiseTo &&
+        amount < seat.betThisStreet + seat.stack
+      ) {
+        return { ok: false, error: "Raise below minimum." };
+      }
+      return { ok: true };
+    }
+    case "all_in":
+      if (!legal.canAllIn) return { ok: false, error: "All-in not allowed." };
+      return { ok: true };
+    default:
+      return { ok: false, error: "Unknown action." };
+  }
 }
 
 export function seatPlayer(
@@ -750,13 +987,57 @@ function clearSeat(seat: SeatState): void {
   seat.holeCards = null;
   seat.betThisStreet = 0;
   seat.committedThisHand = 0;
-  seat.hasActedThisStreet = false;
+  seat.actedAtBetLevel = null;
   seat.timeBankMs = 0;
 }
 
 /**
- * Remove a player from their seat. Mid-hand: fold if still active and defer
+ * Force-fold a player regardless of whose turn it is.
+ * Commitments remain in the pot. Advances action if they were actionSeat.
+ */
+export function forceFoldPlayer(
+  state: GameState,
+  playerId: string,
+  nowMs: number,
+): { ok: true; events: EngineEvent[] } | { ok: false; error: string } {
+  const seat = state.seats.find((s) => s.playerId === playerId);
+  if (!seat) return { ok: false, error: "Player is not seated." };
+  if (seat.status !== "active") {
+    return { ok: true, events: [] };
+  }
+
+  const wasAction = state.actionSeat === seat.seatIndex;
+  seat.status = "folded";
+  seat.actedAtBetLevel = state.currentBet;
+  state.sequence += 1;
+  const events: EngineEvent[] = [
+    {
+      type: "action",
+      playerId,
+      action: "fold",
+      amount: 0,
+      pot: state.pot,
+    },
+  ];
+
+  if (wasAction || state.actionSeat === seat.seatIndex) {
+    return { ok: true, events: events.concat(advanceAfterAction(state, nowMs)) };
+  }
+
+  // Not their turn — check if hand ends (only one live hand left).
+  const live = state.seats.filter((s) => liveInHand(s));
+  if (live.length <= 1) {
+    return { ok: true, events: events.concat(completeHand(state, nowMs)) };
+  }
+  const auto = maybeAutoRunout(state, nowMs);
+  if (auto) return { ok: true, events: events.concat(auto) };
+  return { ok: true, events };
+}
+
+/**
+ * Remove a player from their seat. Mid-hand: force-fold if still active and defer
  * clearing the seat until the hand returns to waiting (preserves pot math).
+ * All-in players stay live until hand completion.
  */
 export function unseatPlayer(
   state: GameState,
@@ -774,14 +1055,7 @@ export function unseatPlayer(
     (seat.status === "active" || seat.status === "all_in" || seat.status === "folded");
 
   if (inHand && seat.status === "active") {
-    const fold = applyAction(
-      state,
-      seat.seatIndex,
-      "fold",
-      undefined,
-      nowMs,
-      `leave:${playerId}:${state.sequence}`,
-    );
+    const fold = forceFoldPlayer(state, playerId, nowMs);
     if (fold.ok) events.push(...fold.events);
   }
 
@@ -801,14 +1075,26 @@ export function unseatPlayer(
   return { ok: true, events, deferred: false };
 }
 
-/** Clear seats marked for deferred leave once the table is between hands. */
-export function flushDeferredLeaves(state: GameState, playerIds: string[]): void {
-  if (state.street !== "waiting") return;
+/**
+ * Clear seats marked for deferred leave once the table is between hands.
+ * Returns the final stacks that should be recorded for ledger buy-out
+ * BEFORE seats are cleared (caller must record buy-outs).
+ */
+export function flushDeferredLeaves(
+  state: GameState,
+  playerIds: string[],
+): Array<{ playerId: string; stack: number }> {
+  if (state.street !== "waiting") return [];
+  const settlements: Array<{ playerId: string; stack: number }> = [];
   for (const id of playerIds) {
     const seat = state.seats.find((s) => s.playerId === id);
-    if (seat) clearSeat(seat);
+    if (seat) {
+      settlements.push({ playerId: id, stack: seat.stack });
+      clearSeat(seat);
+    }
   }
   if (playerIds.length) state.sequence += 1;
+  return settlements;
 }
 
 /** Play-money stack reset for a busted (0-chip) seated player. */
@@ -848,7 +1134,6 @@ export function setPlayerAway(
   if (!seat) return { ok: false, error: "Player is not seated." };
   if (away) {
     if (state.street !== "waiting" && (seat.status === "active" || seat.status === "all_in")) {
-      // Stay in the hand; mark sitting_out only between hands.
       return { ok: false, error: "Finish this hand before going away." };
     }
     seat.status = "sitting_out";
@@ -927,6 +1212,7 @@ export function settleTimeBankOnAction(
   seat.timeBankMs = (seat.timeBankMs ?? 0) + unused;
   state.timeBankStartedMs = null;
   state.timeBankExtensionMs = null;
+  state.pausedDuringTimeBank = false;
 }
 
 /**
@@ -948,6 +1234,7 @@ export function onTurnTimerExpired(
   if (state.timeBankStartedMs != null) {
     state.timeBankStartedMs = null;
     state.timeBankExtensionMs = null;
+    state.pausedDuringTimeBank = false;
     return { kind: "timeout" };
   }
 
@@ -983,19 +1270,38 @@ export function setPaused(
   }
   if (paused) {
     state.paused = true;
-    if (state.turnDeadlineMs != null) {
+    if (state.timeBankStartedMs != null && state.timeBankExtensionMs != null) {
+      // Freeze time-bank burn — wall-clock while paused must not consume bank.
+      const used = Math.max(0, nowMs - state.timeBankStartedMs);
+      const remaining = Math.max(0, state.timeBankExtensionMs - used);
+      state.pausedTurnRemainingMs = remaining;
+      state.timeBankExtensionMs = remaining;
+      state.timeBankStartedMs = null;
+      state.pausedDuringTimeBank = true;
+      state.turnDeadlineMs = null;
+    } else if (state.turnDeadlineMs != null) {
       state.pausedTurnRemainingMs = Math.max(0, state.turnDeadlineMs - nowMs);
       state.turnDeadlineMs = null;
+      state.pausedDuringTimeBank = false;
     } else {
       state.pausedTurnRemainingMs = null;
+      state.pausedDuringTimeBank = false;
     }
   } else {
     state.paused = false;
     if (state.pausedTurnRemainingMs != null && state.actionSeat !== null) {
-      state.turnDeadlineMs = nowMs + state.pausedTurnRemainingMs;
+      if (state.pausedDuringTimeBank) {
+        state.timeBankStartedMs = nowMs;
+        state.timeBankExtensionMs = state.pausedTurnRemainingMs;
+        state.turnDeadlineMs = nowMs + state.pausedTurnRemainingMs;
+      } else {
+        state.turnDeadlineMs = nowMs + state.pausedTurnRemainingMs;
+      }
       state.pausedTurnRemainingMs = null;
+      state.pausedDuringTimeBank = false;
     } else {
       state.pausedTurnRemainingMs = null;
+      state.pausedDuringTimeBank = false;
     }
   }
   state.sequence += 1;
@@ -1004,7 +1310,8 @@ export function setPaused(
 
 /**
  * Reveal remaining undealt board cards after a hand ends (play-money fun only).
- * Only undealt streets — never invents cards if the board already has 5.
+ * Simulates the same burn+deal sequence as normal dealing (deck.pop direction).
+ * Never mutates the live board — only fills rabbitCards from a cloned deck walk.
  */
 export function rabbitHunt(
   state: GameState,
@@ -1022,11 +1329,38 @@ export function rabbitHunt(
   if (need <= 0) {
     return { ok: false, error: "The full board was already dealt." };
   }
-  if (state.deck.length < need) {
-    return { ok: false, error: "No undealt cards left." };
+
+  // Clone remaining deck and simulate burn+deal with pop (same as dealBoard).
+  const deck = [...state.deck];
+  const cards: Card[] = [];
+  let boardLen = state.board.length;
+  while (boardLen < 5) {
+    const burn = deck.pop();
+    if (!burn) {
+      return { ok: false, error: "No undealt cards left." };
+    }
+    const count = boardLen === 0 ? 3 : 1;
+    for (let i = 0; i < count; i++) {
+      const c = deck.pop();
+      if (!c) return { ok: false, error: "No undealt cards left." };
+      cards.push(c);
+      boardLen += 1;
+    }
   }
-  const cards = state.deck.splice(0, need);
-  state.rabbitCards = cards;
+  // Only the newly revealed cards (undealt streets).
+  const revealed = cards.slice(cards.length - need);
+  // If board was empty we'd have dealt 5; need already accounts for that.
+  const rabbit = cards.length === need ? cards : revealed.length === need ? revealed : cards.slice(-need);
+  state.rabbitCards = rabbit;
   state.sequence += 1;
-  return { ok: true, events: [{ type: "rabbit", cards }], cards };
+  return { ok: true, events: [{ type: "rabbit", cards: rabbit }], cards: rabbit };
+}
+
+/** Total chips on the table (stacks + pot + street bets already in pot). */
+export function totalChipsInPlay(state: GameState): number {
+  let total = state.pot;
+  for (const seat of state.seats) {
+    if (seat.playerId) total += seat.stack;
+  }
+  return total;
 }

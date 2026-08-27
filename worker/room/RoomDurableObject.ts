@@ -171,9 +171,19 @@ export class RoomDurableObject extends DurableObject<Env> {
     return buildLedgerSnapshot(this.ledger, stacks);
   }
 
+  /**
+   * Settle deferred leaves only after hand completion: record final stacks
+   * (post-showdown) into the ledger exactly once, then clear seats.
+   */
   private flushLeavesIfWaiting(): void {
     if (!this.game || this.game.street !== "waiting" || this.pendingLeaves.size === 0) return;
-    flushDeferredLeaves(this.game, [...this.pendingLeaves]);
+    const ids = [...this.pendingLeaves];
+    const settlements = flushDeferredLeaves(this.game, ids);
+    for (const { playerId, stack } of settlements) {
+      if (this.ledger[playerId]?.active) {
+        recordBuyOut(this.ledger, playerId, stack);
+      }
+    }
     this.pendingLeaves.clear();
   }
 
@@ -210,17 +220,10 @@ export class RoomDurableObject extends DurableObject<Env> {
     reason?: string,
   ): Promise<void> {
     if (!this.game) return;
+    // Flush deferred leaves after showdown so buy-out uses final stacks.
     this.flushLeavesIfWaiting();
     this.persist();
     await this.syncAlarms();
-    if (this.game.street === "waiting") {
-      for (const id of [...this.pendingLeaves]) {
-        const gone = !this.game.seats.some((s) => s.playerId === id);
-        if (gone && this.ledger[id]?.active) {
-          recordBuyOut(this.ledger, id, 0);
-        }
-      }
-    }
     for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
     this.broadcast(
       reason
@@ -725,6 +728,17 @@ export class RoomDurableObject extends DurableObject<Env> {
       const body = (await request.json()) as { hostUserId: string };
       if (body.hostUserId !== this.hostUserId) {
         return Response.json({ ok: false, error: "Only the host can close the table." });
+      }
+      // Conservative policy: refuse close while a hand is in progress.
+      if (this.game.street !== "waiting") {
+        return Response.json(
+          {
+            ok: false,
+            error: "Finish the current hand before closing the table.",
+            code: "hand_in_progress",
+          },
+          { status: 409 },
+        );
       }
       // Cash out seated stacks into ledger.
       for (const seat of this.game.seats) {

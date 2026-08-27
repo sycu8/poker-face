@@ -179,7 +179,7 @@ describe("engine privacy and flow", () => {
       if (!seat.playerId) continue;
       seat.status = "active";
       seat.betThisStreet = 0;
-      seat.hasActedThisStreet = false;
+      seat.actedAtBetLevel = null;
       seat.committedThisHand = Math.max(seat.committedThisHand, 2);
     }
     state.seats[0]!.holeCards = ["Ah", "Ad"];

@@ -31,10 +31,30 @@ export function computeSidePots(
     const potEligible = contributors
       .map(([id]) => id)
       .filter((id) => eligible.has(id));
-    // Even if everyone folded into a pot incorrectly, keep amount on last eligible set
+    if (potEligible.length === 0) {
+      // Dead chips from a layer with only folded contributors: merge into the
+      // previous pot (still awarded only to live eligible), or award to remaining
+      // in-hand players who contributed. Never fall back to all (folded) contributors.
+      if (pots.length > 0) {
+        pots[pots.length - 1]!.amount += amount;
+        prev = level;
+        continue;
+      }
+      const liveContributors = eligiblePlayerIds.filter(
+        (id) => (contributions.get(id) ?? 0) > 0,
+      );
+      if (liveContributors.length === 0) {
+        throw new Error(
+          `Side-pot invariant failure: pot layer amount=${amount} has no eligible winners.`,
+        );
+      }
+      pots.push({ amount, eligiblePlayerIds: liveContributors });
+      prev = level;
+      continue;
+    }
     pots.push({
       amount,
-      eligiblePlayerIds: potEligible.length > 0 ? potEligible : contributors.map(([id]) => id),
+      eligiblePlayerIds: potEligible,
     });
     prev = level;
   }

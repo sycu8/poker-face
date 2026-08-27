@@ -668,8 +668,11 @@ export async function handleRooms(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ hostUserId: auth.user.id }),
     });
-    const doBody = (await doRes.json()) as { ok: boolean; error?: string };
-    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not close table.");
+    const doBody = (await doRes.json()) as { ok: boolean; error?: string; code?: string };
+    if (!doBody.ok) {
+      const status = doRes.status === 409 || doBody.code === "hand_in_progress" ? 409 : 400;
+      return errorJson(status, doBody.error ?? "Could not close table.");
+    }
 
     const now = Date.now();
     await env.DB.batch([
