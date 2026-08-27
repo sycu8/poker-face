@@ -1,10 +1,22 @@
 # Poker Faces
 
-Private play-money Texas Hold'em for friends. **Your table. Your people.**
+[![License: MIT](https://img.shields.io/badge/License-MIT-gold.svg)](LICENSE)
+[![Live demo](https://img.shields.io/badge/demo-poker.orangecloud.vn-emerald)](https://poker.orangecloud.vn)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Sycule-yellow?logo=buy-me-a-coffee&logoColor=white)](https://buymeacoffee.com/Sycule)
 
-Deploy target: `https://poker.orangecloud.vn`
+**Open-source** private play-money Texas Hold'em for friends. **Your table. Your people.**
+
+Live app: [https://poker.orangecloud.vn](https://poker.orangecloud.vn)
 
 Virtual chips only. No purchases, cash-out, wallets, or real-money language.
+
+## Open source
+
+This repository is public under the [MIT License](LICENSE). You are welcome to fork, study, and contribute — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Support the project
+
+If Poker Faces helps your group play online, you can [buy me a coffee](https://buymeacoffee.com/Sycule). It helps keep the lights on for hosting and new features.
 
 ## Stack
 
@@ -13,7 +25,7 @@ Virtual chips only. No purchases, cash-out, wallets, or real-money language.
 - SQLite-backed Durable Object per room (hibernatable WebSockets)
 - D1 (users, sessions, rooms, hand summaries)
 - KV / R2 / Queues / Analytics Engine / Rate Limiting / Turnstile
-- Username + email + password auth (PBKDF2) with cookie sessions; in-app password reset (username + email verify, no SMTP)
+- Username + email + password auth (PBKDF2) with cookie sessions; signed-in password change
 - Host-approved private tables, text chat, optional voice
 - PWA manifest + service worker shell cache
 - Voice via Cloudflare RealtimeKit (degraded-safe when unset)
@@ -21,6 +33,8 @@ Virtual chips only. No purchases, cash-out, wallets, or real-money language.
 ## Quick start
 
 ```bash
+git clone https://github.com/sycu8/poker-face.git
+cd poker-face
 npm install
 cp .env.example .dev.vars
 # set SESSION_SECRET at minimum

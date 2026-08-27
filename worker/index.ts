@@ -23,7 +23,7 @@ const SECURITY_HEADERS: Record<string, string> = {
     "form-action 'self'",
     "script-src 'self' https://challenges.cloudflare.com",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    "img-src 'self' data: blob: https://cdn.buymeacoffee.com",
     "font-src 'self'",
     "connect-src 'self' https: wss:",
     "frame-src https://challenges.cloudflare.com",

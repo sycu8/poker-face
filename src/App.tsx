@@ -4,6 +4,7 @@ import { api, type User } from "./lib/api";
 import { HomePage } from "./features/lobby/HomePage";
 import { AuthPage } from "./features/auth/AuthPage";
 import { TablePage } from "./features/table/TablePage";
+import { BuyMeACoffeeLink } from "./components/BuyMeACoffeeLink";
 
 type ThemeId = "felt" | "midnight" | "sunset";
 
@@ -123,6 +124,21 @@ export function App() {
           element={user ? <TablePage user={user} /> : <Navigate to="/auth" replace />}
         />
       </Routes>
+
+      <footer className="app-footer">
+        <p className="muted app-footer-copy">
+          Poker Faces is{" "}
+          <a
+            href="https://github.com/sycu8/poker-face"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            open source
+          </a>{" "}
+          (MIT). Virtual chips only.
+        </p>
+        <BuyMeACoffeeLink />
+      </footer>
     </div>
   );
 }

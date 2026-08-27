@@ -1267,6 +1267,49 @@ button {
   text-align: center;
 }
 
+.app-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem 1.5rem;
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #ffffff14;
+}
+
+.app-footer-copy {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.app-footer-copy a {
+  color: var(--gold);
+}
+
+.bmc-link {
+  display: inline-flex;
+  line-height: 0;
+  border-radius: 8px;
+  transition: transform 120ms ease, opacity 120ms ease;
+}
+
+.bmc-link:hover {
+  transform: translateY(-1px);
+  opacity: 0.92;
+}
+
+.bmc-link:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 3px;
+}
+
+.bmc-link img {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+
 .table-top {
   display: flex;
   flex-direction: column;
