@@ -83,7 +83,10 @@ export function validateConfigInput(input: {
   };
 }
 
-export function promoteConfig(current: TableConfig, pending: PendingConfig | null): TableConfig {
+export function promoteConfig(
+  current: TableConfig,
+  pending: PendingConfig | null,
+): TableConfig {
   if (!pending) return current;
   const smallBlind = pending.smallBlind ?? current.smallBlind;
   const startingStack = pending.startingStack ?? current.startingStack;
@@ -102,6 +105,9 @@ export function promoteConfig(current: TableConfig, pending: PendingConfig | nul
 }
 
 /** Max target wager for a non-all-in action based on pot before the action. */
-export function maxTargetWager(potBeforeAction: number, potCapMultiplier: number): number {
+export function maxTargetWager(
+  potBeforeAction: number,
+  potCapMultiplier: number,
+): number {
   return Math.floor(Math.max(0, potBeforeAction) * potCapMultiplier);
 }

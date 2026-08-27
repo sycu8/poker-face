@@ -178,7 +178,11 @@ export function normalizeGameState(state: GameState): GameState {
     if (typeof seat.timeBankMs !== "number") seat.timeBankMs = 0;
     // Migrate legacy hasActedThisStreet snapshots.
     const legacy = seat as SeatState & { hasActedThisStreet?: boolean };
-    if (!("actedAtBetLevel" in seat) || (seat.actedAtBetLevel === undefined && typeof legacy.hasActedThisStreet === "boolean")) {
+    if (
+      !("actedAtBetLevel" in seat) ||
+      (seat.actedAtBetLevel === undefined &&
+        typeof legacy.hasActedThisStreet === "boolean")
+    ) {
       seat.actedAtBetLevel = legacy.hasActedThisStreet ? seat.betThisStreet : null;
     } else if (seat.actedAtBetLevel === undefined) {
       seat.actedAtBetLevel = null;
@@ -209,7 +213,9 @@ function canDealPlayers(state: GameState): SeatState[] {
     (s) =>
       s.playerId &&
       s.stack > 0 &&
-      (s.status === "seated" || s.status === "waiting_next_hand" || s.status === "active"),
+      (s.status === "seated" ||
+        s.status === "waiting_next_hand" ||
+        s.status === "active"),
   );
 }
 
@@ -334,7 +340,11 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
 
   // Promote waiting_next_hand → active
   for (const seat of state.seats) {
-    if (seat.playerId && seat.stack > 0 && (seat.status === "seated" || seat.status === "waiting_next_hand")) {
+    if (
+      seat.playerId &&
+      seat.stack > 0 &&
+      (seat.status === "seated" || seat.status === "waiting_next_hand")
+    ) {
       seat.status = "active";
     }
     seat.holeCards = null;
@@ -422,7 +432,11 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
   // Preflop: first to act is left of BB (HU: button/SB).
   const first =
     nextOccupiedSeat(state, bbSeat, (s) => s.status === "active" && s.stack > 0) ??
-    nextOccupiedSeat(state, bbSeat, (s) => s.status === "active" || s.status === "all_in");
+    nextOccupiedSeat(
+      state,
+      bbSeat,
+      (s) => s.status === "active" || s.status === "all_in",
+    );
   state.actionSeat = first;
   if (first !== null) {
     events.push(...setTurnDeadline(state, nowMs, first));
@@ -430,7 +444,11 @@ export function startHand(state: GameState, nowMs: number): EngineEvent[] {
   return events;
 }
 
-function setTurnDeadline(state: GameState, nowMs: number, seatIndex: number | null): EngineEvent[] {
+function setTurnDeadline(
+  state: GameState,
+  nowMs: number,
+  seatIndex: number | null,
+): EngineEvent[] {
   state.timeBankStartedMs = null;
   state.timeBankExtensionMs = null;
   state.pausedDuringTimeBank = false;
@@ -461,7 +479,10 @@ export interface LegalActions {
   allInAmount: number;
 }
 
-export function getLegalActions(state: GameState, seatIndex: number): LegalActions | null {
+export function getLegalActions(
+  state: GameState,
+  seatIndex: number,
+): LegalActions | null {
   if (state.actionSeat !== seatIndex) return null;
   const seat = state.seats[seatIndex];
   if (!seat || seat.status !== "active") return null;
@@ -477,7 +498,10 @@ export function getLegalActions(state: GameState, seatIndex: number): LegalActio
   const callIsAllIn = canCall && callAmount >= seat.stack;
 
   const rights = raiseRightsOpen(state, seat);
-  const maxRaiseToRaw = Math.min(seat.betThisStreet + seat.stack, Math.max(state.currentBet, cap));
+  const maxRaiseToRaw = Math.min(
+    seat.betThisStreet + seat.stack,
+    Math.max(state.currentBet, cap),
+  );
   const minRaiseTo = state.currentBet + state.minRaise;
   const maxRaiseTo = maxRaiseToRaw;
   const fullRaisePossible = rights && seat.stack > toCall && minRaiseTo <= maxRaiseTo;
@@ -675,7 +699,11 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
   const shownHands: HandResult["shownHands"] = [];
 
   for (const seat of state.seats) {
-    if (seat.playerId && seat.holeCards && (seat.status === "active" || seat.status === "all_in")) {
+    if (
+      seat.playerId &&
+      seat.holeCards &&
+      (seat.status === "active" || seat.status === "all_in")
+    ) {
       shownHands.push({ playerId: seat.playerId, cards: seat.holeCards });
     }
   }
@@ -752,11 +780,7 @@ function completeHand(state: GameState, _nowMs: number): EngineEvent[] {
  * Apply a wager increase that may be a full raise or short all-in.
  * Updates minRaise only on full legal raises; never reduces minRaise.
  */
-function applyWagerIncrease(
-  state: GameState,
-  seat: SeatState,
-  paid: number,
-): void {
+function applyWagerIncrease(state: GameState, seat: SeatState, paid: number): void {
   const previousBet = state.currentBet;
   const newBet = seat.betThisStreet + paid;
   const raiseSize = newBet - previousBet;
@@ -781,7 +805,9 @@ export function applyAction(
   amount: number | undefined,
   nowMs: number,
   idempotencyKey: string,
-): { ok: true; events: EngineEvent[]; idempotencyKey: string } | { ok: false; error: string } {
+):
+  | { ok: true; events: EngineEvent[]; idempotencyKey: string }
+  | { ok: false; error: string } {
   void idempotencyKey;
   if (state.paused) return { ok: false, error: "The table is paused." };
 
@@ -853,7 +879,8 @@ export function applyAction(
         paid = seat.stack;
       } else {
         if (!legal.canRaise) return { ok: false, error: "Cannot raise." };
-        if (raiseTo < legal.minRaiseTo) return { ok: false, error: "Raise below minimum." };
+        if (raiseTo < legal.minRaiseTo)
+          return { ok: false, error: "Raise below minimum." };
         const target = Math.min(raiseTo, legal.maxRaiseTo);
         paid = target - seat.betThisStreet;
       }
@@ -1042,9 +1069,7 @@ export function unseatPlayer(
   state: GameState,
   playerId: string,
   nowMs: number,
-):
-  | { ok: true; events: EngineEvent[]; deferred: boolean }
-  | { ok: false; error: string } {
+): { ok: true; events: EngineEvent[]; deferred: boolean } | { ok: false; error: string } {
   const seat = state.seats.find((s) => s.playerId === playerId);
   if (!seat) return { ok: false, error: "Player is not seated." };
 
@@ -1107,7 +1132,12 @@ export function rebuyPlayer(
   if (seat.stack > 0) {
     return { ok: false, error: "Rebuy is only for busted seats (0 chips)." };
   }
-  if (state.street !== "waiting" && seat.status !== "sitting_out" && seat.status !== "waiting_next_hand" && seat.status !== "seated") {
+  if (
+    state.street !== "waiting" &&
+    seat.status !== "sitting_out" &&
+    seat.status !== "waiting_next_hand" &&
+    seat.status !== "seated"
+  ) {
     return { ok: false, error: "Wait until the hand finishes before rebuying." };
   }
   const amount = chips ?? state.config.startingStack;
@@ -1132,7 +1162,10 @@ export function setPlayerAway(
   const seat = state.seats.find((s) => s.playerId === playerId);
   if (!seat) return { ok: false, error: "Player is not seated." };
   if (away) {
-    if (state.street !== "waiting" && (seat.status === "active" || seat.status === "all_in")) {
+    if (
+      state.street !== "waiting" &&
+      (seat.status === "active" || seat.status === "all_in")
+    ) {
       return { ok: false, error: "Finish this hand before going away." };
     }
     seat.status = "sitting_out";
@@ -1176,8 +1209,8 @@ export function projectForPlayer(state: GameState, viewerId: string | null) {
         s.playerId && s.playerId === viewerId
           ? s.holeCards
           : state.street === "showdown" || state.lastHandResult
-            ? state.lastHandResult?.shownHands.find((h) => h.playerId === s.playerId)?.cards ??
-              null
+            ? (state.lastHandResult?.shownHands.find((h) => h.playerId === s.playerId)
+                ?.cards ?? null)
             : null,
       isViewer: s.playerId === viewerId,
     })),
@@ -1185,7 +1218,8 @@ export function projectForPlayer(state: GameState, viewerId: string | null) {
       viewerId && state.actionSeat !== null && !state.paused
         ? (() => {
             const seat = state.seats[state.actionSeat!];
-            if (seat?.playerId === viewerId) return getLegalActions(state, state.actionSeat!);
+            if (seat?.playerId === viewerId)
+              return getLegalActions(state, state.actionSeat!);
             return null;
           })()
         : null,
@@ -1221,10 +1255,7 @@ export function settleTimeBankOnAction(
 export function onTurnTimerExpired(
   state: GameState,
   nowMs: number,
-):
-  | { kind: "bank"; events: EngineEvent[] }
-  | { kind: "timeout" }
-  | { kind: "noop" } {
+): { kind: "bank"; events: EngineEvent[] } | { kind: "timeout" } | { kind: "noop" } {
   if (state.paused || state.actionSeat === null) return { kind: "noop" };
   const seat = state.seats[state.actionSeat];
   if (!seat || seat.status !== "active") return { kind: "noop" };
@@ -1349,7 +1380,12 @@ export function rabbitHunt(
   // Only the newly revealed cards (undealt streets).
   const revealed = cards.slice(cards.length - need);
   // If board was empty we'd have dealt 5; need already accounts for that.
-  const rabbit = cards.length === need ? cards : revealed.length === need ? revealed : cards.slice(-need);
+  const rabbit =
+    cards.length === need
+      ? cards
+      : revealed.length === need
+        ? revealed
+        : cards.slice(-need);
   state.rabbitCards = rabbit;
   state.sequence += 1;
   return { ok: true, events: [{ type: "rabbit", cards: rabbit }], cards: rabbit };

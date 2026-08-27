@@ -28,9 +28,7 @@ export function computeSidePots(
       prev = level;
       continue;
     }
-    const potEligible = contributors
-      .map(([id]) => id)
-      .filter((id) => eligible.has(id));
+    const potEligible = contributors.map(([id]) => id).filter((id) => eligible.has(id));
     if (potEligible.length === 0) {
       // Dead chips from a layer with only folded contributors: merge into the
       // previous pot (still awarded only to live eligible), or award to remaining

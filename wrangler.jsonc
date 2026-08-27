@@ -6,7 +6,7 @@
   "assets": {
     "not_found_handling": "single-page-application",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/ws/*"]
+    "run_worker_first": ["/api/*", "/ws/*"],
   },
   "vars": {
     "ENVIRONMENT": "local",
@@ -15,27 +15,27 @@
     "REALTIMEKIT_APP_ID": "6867ec48-6a1e-43b9-b940-a542afad90d3",
     "REALTIMEKIT_PRESET_NAME": "group_call_participant",
     "TURN_KEY_ID": "c07d4ea34ad3c340d3c96ab9781dd477",
-    "TURN_KEY_NAME": "poker-call"
+    "TURN_KEY_NAME": "poker-call",
   },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "poker-faces-local",
       "database_id": "00000000-0000-0000-0000-000000000001",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   "kv_namespaces": [
     {
       "binding": "CONFIG_KV",
-      "id": "00000000000000000000000000000001"
-    }
+      "id": "00000000000000000000000000000001",
+    },
   ],
   "r2_buckets": [
     {
       "binding": "REPLAY_R2",
-      "bucket_name": "poker-faces-replays-local"
-    }
+      "bucket_name": "poker-faces-replays-local",
+    },
   ],
   "queues": {
     "producers": [{ "binding": "ARCHIVE_QUEUE", "queue": "poker-faces-archive-local" }],
@@ -45,33 +45,33 @@
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 5,
-        "dead_letter_queue": "poker-faces-archive-dlq-local"
-      }
-    ]
+        "dead_letter_queue": "poker-faces-archive-dlq-local",
+      },
+    ],
   },
   "analytics_engine_datasets": [
-    { "binding": "ANALYTICS", "dataset": "poker_faces_events_local" }
+    { "binding": "ANALYTICS", "dataset": "poker_faces_events_local" },
   ],
   "ratelimits": [
     {
       "name": "AUTH_RATE_LIMIT",
       "namespace_id": "1001",
-      "simple": { "limit": 30, "period": 60 }
+      "simple": { "limit": 30, "period": 60 },
     },
     {
       "name": "JOIN_RATE_LIMIT",
       "namespace_id": "1002",
-      "simple": { "limit": 20, "period": 60 }
-    }
+      "simple": { "limit": 20, "period": 60 },
+    },
   ],
   "durable_objects": {
-    "bindings": [{ "name": "ROOM", "class_name": "RoomDurableObject" }]
+    "bindings": [{ "name": "ROOM", "class_name": "RoomDurableObject" }],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["RoomDurableObject"]
-    }
+      "new_sqlite_classes": ["RoomDurableObject"],
+    },
   ],
   "observability": { "enabled": true },
   "env": {
@@ -84,23 +84,23 @@
         "REALTIMEKIT_APP_ID": "6867ec48-6a1e-43b9-b940-a542afad90d3",
         "REALTIMEKIT_PRESET_NAME": "group_call_participant",
         "TURN_KEY_ID": "c07d4ea34ad3c340d3c96ab9781dd477",
-        "TURN_KEY_NAME": "poker-call"
+        "TURN_KEY_NAME": "poker-call",
       },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "poker-faces-staging",
           "database_id": "REPLACE_STAGING_D1_ID",
-          "migrations_dir": "migrations"
-        }
+          "migrations_dir": "migrations",
+        },
       ],
       "kv_namespaces": [{ "binding": "CONFIG_KV", "id": "REPLACE_STAGING_KV_ID" }],
       "r2_buckets": [
-        { "binding": "REPLAY_R2", "bucket_name": "poker-faces-replays-staging" }
+        { "binding": "REPLAY_R2", "bucket_name": "poker-faces-replays-staging" },
       ],
       "queues": {
         "producers": [
-          { "binding": "ARCHIVE_QUEUE", "queue": "poker-faces-archive-staging" }
+          { "binding": "ARCHIVE_QUEUE", "queue": "poker-faces-archive-staging" },
         ],
         "consumers": [
           {
@@ -108,38 +108,36 @@
             "max_batch_size": 10,
             "max_batch_timeout": 5,
             "max_retries": 5,
-            "dead_letter_queue": "poker-faces-archive-dlq-staging"
-          }
-        ]
+            "dead_letter_queue": "poker-faces-archive-dlq-staging",
+          },
+        ],
       },
       "analytics_engine_datasets": [
-        { "binding": "ANALYTICS", "dataset": "poker_faces_events_staging" }
+        { "binding": "ANALYTICS", "dataset": "poker_faces_events_staging" },
       ],
       "triggers": {
-        "crons": ["0 */6 * * *"]
+        "crons": ["0 */6 * * *"],
       },
       "ratelimits": [
         {
           "name": "AUTH_RATE_LIMIT",
           "namespace_id": "2001",
-          "simple": { "limit": 30, "period": 60 }
+          "simple": { "limit": 30, "period": 60 },
         },
         {
           "name": "JOIN_RATE_LIMIT",
           "namespace_id": "2002",
-          "simple": { "limit": 20, "period": 60 }
-        }
+          "simple": { "limit": 20, "period": 60 },
+        },
       ],
       "durable_objects": {
-        "bindings": [{ "name": "ROOM", "class_name": "RoomDurableObject" }]
-      }
+        "bindings": [{ "name": "ROOM", "class_name": "RoomDurableObject" }],
+      },
     },
     "production": {
       "name": "poker-faces",
       "workers_dev": false,
-      "routes": [
-        { "pattern": "poker.orangecloud.vn", "custom_domain": true }
-      ],
+      "routes": [{ "pattern": "poker.orangecloud.vn", "custom_domain": true }],
       "vars": {
         "ENVIRONMENT": "production",
         "APP_ORIGIN": "https://poker.orangecloud.vn",
@@ -147,23 +145,23 @@
         "REALTIMEKIT_APP_ID": "6867ec48-6a1e-43b9-b940-a542afad90d3",
         "REALTIMEKIT_PRESET_NAME": "group_call_participant",
         "TURN_KEY_ID": "c07d4ea34ad3c340d3c96ab9781dd477",
-        "TURN_KEY_NAME": "poker-call"
+        "TURN_KEY_NAME": "poker-call",
       },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "poker-faces-production",
           "database_id": "REPLACE_PRODUCTION_D1_ID",
-          "migrations_dir": "migrations"
-        }
+          "migrations_dir": "migrations",
+        },
       ],
       "kv_namespaces": [{ "binding": "CONFIG_KV", "id": "REPLACE_PRODUCTION_KV_ID" }],
       "r2_buckets": [
-        { "binding": "REPLAY_R2", "bucket_name": "poker-faces-replays-production" }
+        { "binding": "REPLAY_R2", "bucket_name": "poker-faces-replays-production" },
       ],
       "queues": {
         "producers": [
-          { "binding": "ARCHIVE_QUEUE", "queue": "poker-faces-archive-production" }
+          { "binding": "ARCHIVE_QUEUE", "queue": "poker-faces-archive-production" },
         ],
         "consumers": [
           {
@@ -171,31 +169,31 @@
             "max_batch_size": 10,
             "max_batch_timeout": 5,
             "max_retries": 5,
-            "dead_letter_queue": "poker-faces-archive-dlq-production"
-          }
-        ]
+            "dead_letter_queue": "poker-faces-archive-dlq-production",
+          },
+        ],
       },
       "analytics_engine_datasets": [
-        { "binding": "ANALYTICS", "dataset": "poker_faces_events_production" }
+        { "binding": "ANALYTICS", "dataset": "poker_faces_events_production" },
       ],
       "triggers": {
-        "crons": ["0 */6 * * *"]
+        "crons": ["0 */6 * * *"],
       },
       "ratelimits": [
         {
           "name": "AUTH_RATE_LIMIT",
           "namespace_id": "3001",
-          "simple": { "limit": 30, "period": 60 }
+          "simple": { "limit": 30, "period": 60 },
         },
         {
           "name": "JOIN_RATE_LIMIT",
           "namespace_id": "3002",
-          "simple": { "limit": 20, "period": 60 }
-        }
+          "simple": { "limit": 20, "period": 60 },
+        },
       ],
       "durable_objects": {
-        "bindings": [{ "name": "ROOM", "class_name": "RoomDurableObject" }]
-      }
-    }
-  }
+        "bindings": [{ "name": "ROOM", "class_name": "RoomDurableObject" }],
+      },
+    },
+  },
 }

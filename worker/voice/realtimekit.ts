@@ -16,13 +16,20 @@ export function extractRealtimeId(body: unknown): string | null {
     root.meetingId,
     (root.result as Record<string, unknown> | undefined)?.id,
     (root.result as Record<string, unknown> | undefined)?.meetingId,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.id,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.meetingId,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.id,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.meetingId,
     (root.data as Record<string, unknown> | undefined)?.id,
     (root.data as Record<string, unknown> | undefined)?.meetingId,
-    ((root.data as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)?.id,
+    (
+      (root.data as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.id,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.length > 0) return c;
@@ -39,14 +46,20 @@ export function extractRealtimeToken(body: unknown): string | null {
     root.authToken,
     (root.result as Record<string, unknown> | undefined)?.token,
     (root.result as Record<string, unknown> | undefined)?.authToken,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.token,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.authToken,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.token,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.authToken,
     (root.data as Record<string, unknown> | undefined)?.token,
     (root.data as Record<string, unknown> | undefined)?.authToken,
-    ((root.data as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.token,
+    (
+      (root.data as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.token,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.length > 0) return c;
@@ -98,7 +111,11 @@ export async function createRealtimeKitMeeting(
   env: Env,
   title: string,
 ): Promise<{ meetingId: string } | { error: string }> {
-  if (!env.REALTIMEKIT_API_TOKEN || !env.REALTIMEKIT_APP_ID || !env.CLOUDFLARE_ACCOUNT_ID) {
+  if (
+    !env.REALTIMEKIT_API_TOKEN ||
+    !env.REALTIMEKIT_APP_ID ||
+    !env.CLOUDFLARE_ACCOUNT_ID
+  ) {
     return { error: "not_configured" };
   }
   try {
@@ -157,8 +174,7 @@ export async function handleVoice(
     return json({
       available: false,
       reason: "not_configured",
-      message:
-        "Voice isn’t configured on this deployment. The game stays connected.",
+      message: "Voice isn’t configured on this deployment. The game stays connected.",
     });
   }
 

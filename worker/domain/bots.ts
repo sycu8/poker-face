@@ -6,7 +6,9 @@ export function isBotUserId(userId: string | null | undefined): boolean {
 }
 
 /** Next unused “Bot N” label from currently seated display names. */
-export function nextBotDisplayName(seatedNames: Array<string | null | undefined>): string {
+export function nextBotDisplayName(
+  seatedNames: Array<string | null | undefined>,
+): string {
   const used = new Set(
     seatedNames.filter((n): n is string => Boolean(n)).map((n) => n.trim().toLowerCase()),
   );

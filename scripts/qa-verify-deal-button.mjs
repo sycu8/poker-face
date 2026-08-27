@@ -13,7 +13,13 @@ function jar() {
       for (const x of res.headers.getSetCookie?.() ?? []) {
         const p = x.split(";")[0];
         const n = p.split("=")[0];
-        c = [...c.split("; ").filter(Boolean).filter((y) => !y.startsWith(n + "=")), p].join("; ");
+        c = [
+          ...c
+            .split("; ")
+            .filter(Boolean)
+            .filter((y) => !y.startsWith(n + "=")),
+          p,
+        ].join("; ");
       }
     },
   };
@@ -58,7 +64,10 @@ await api(p2, "/api/auth/register", {
 });
 const jr = await api(p2, "/api/rooms/join-request", {
   method: "POST",
-  body: JSON.stringify({ inviteCode: room.inviteCode, idempotencyKey: crypto.randomUUID() }),
+  body: JSON.stringify({
+    inviteCode: room.inviteCode,
+    idempotencyKey: crypto.randomUUID(),
+  }),
 });
 await api(host, "/api/rooms/join-decision", {
   method: "POST",
@@ -72,7 +81,12 @@ await api(host, "/api/rooms/join-decision", {
 const browser = await puppeteer.launch({
   executablePath: "/opt/google/chrome/chrome",
   headless: "new",
-  args: ["--no-sandbox", "--disable-gpu", "--window-size=1280,900", "--disable-dev-shm-usage"],
+  args: [
+    "--no-sandbox",
+    "--disable-gpu",
+    "--window-size=1280,900",
+    "--disable-dev-shm-usage",
+  ],
   defaultViewport: { width: 1280, height: 900 },
 });
 const page = await browser.newPage();
@@ -81,21 +95,30 @@ await page.setCookie({ name, value: rest.join("="), url: base });
 await page.goto(`${base}/table/${room.id}`, { waitUntil: "networkidle0" });
 await page.waitForSelector(".table-felt", { timeout: 20000 });
 await page.waitForFunction(
-  () => [...document.querySelectorAll("button")].some((b) => b.textContent?.includes("Deal everyone in")),
+  () =>
+    [...document.querySelectorAll("button")].some((b) =>
+      b.textContent?.includes("Deal everyone in"),
+    ),
   { timeout: 15000 },
 );
 const before = await page.evaluate(() =>
-  [...document.querySelectorAll("button")].some((b) => b.textContent?.includes("Deal everyone in")),
+  [...document.querySelectorAll("button")].some((b) =>
+    b.textContent?.includes("Deal everyone in"),
+  ),
 );
 await page.evaluate(() =>
-  [...document.querySelectorAll("button")].find((b) => b.textContent?.includes("Deal everyone in"))?.click(),
+  [...document.querySelectorAll("button")]
+    .find((b) => b.textContent?.includes("Deal everyone in"))
+    ?.click(),
 );
 await page.waitForFunction(() => /Preflop|Fold|Call/i.test(document.body.innerText), {
   timeout: 15000,
 });
 await new Promise((r) => setTimeout(r, 600));
 const after = await page.evaluate(() =>
-  [...document.querySelectorAll("button")].some((b) => b.textContent?.includes("Deal everyone in")),
+  [...document.querySelectorAll("button")].some((b) =>
+    b.textContent?.includes("Deal everyone in"),
+  ),
 );
 await page.screenshot({
   path: "/opt/cursor/artifacts/qa_deal_hidden_midhand_after.png",

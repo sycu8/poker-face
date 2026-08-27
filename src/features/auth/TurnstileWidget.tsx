@@ -31,7 +31,9 @@ function loadTurnstileScript(): Promise<void> {
     );
     if (existing) {
       existing.addEventListener("load", () => resolve());
-      existing.addEventListener("error", () => reject(new Error("Turnstile failed to load")));
+      existing.addEventListener("error", () =>
+        reject(new Error("Turnstile failed to load")),
+      );
       if (window.turnstile) resolve();
       return;
     }

@@ -18,7 +18,9 @@ async function parse<T>(res: Response): Promise<T> {
     );
   }
   if (!res.ok) {
-    throw new Error((data as { error?: string }).error ?? `Request failed (${res.status})`);
+    throw new Error(
+      (data as { error?: string }).error ?? `Request failed (${res.status})`,
+    );
   }
   return data as T;
 }
@@ -37,7 +39,12 @@ export type RoomAccess =
         potCapMultiplier: number;
         status: string;
       };
-      member: { role: string; seat_index: number | null; display_name: string; status: string };
+      member: {
+        role: string;
+        seat_index: number | null;
+        display_name: string;
+        status: string;
+      };
     }
   | {
       access: "pending";
@@ -146,11 +153,7 @@ export const api = {
     fetch("/api/rooms/mine", { credentials: "include" }).then((r) =>
       parse<{ rooms: MyRoom[] }>(r),
     ),
-  createRoom: (body: {
-    name: string;
-    smallBlind: number;
-    startingStack: number;
-  }) =>
+  createRoom: (body: { name: string; smallBlind: number; startingStack: number }) =>
     fetch("/api/rooms", {
       method: "POST",
       credentials: "include",
@@ -162,7 +165,9 @@ export const api = {
       }>(r),
     ),
   getRoom: (roomId: string) =>
-    fetch(`/api/rooms/${roomId}`, { credentials: "include" }).then((r) => parse<RoomAccess>(r)),
+    fetch(`/api/rooms/${roomId}`, { credentials: "include" }).then((r) =>
+      parse<RoomAccess>(r),
+    ),
   joinRequest: (body: {
     inviteCode: string;
     idempotencyKey: string;
@@ -209,7 +214,12 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) =>
-      parse<{ status: string; message?: string; seatIndex?: number; spectator?: boolean }>(r),
+      parse<{
+        status: string;
+        message?: string;
+        seatIndex?: number;
+        spectator?: boolean;
+      }>(r),
     ),
   openSeats: (roomId: string) =>
     fetch(`/api/rooms/${roomId}/open-seats`, { credentials: "include" }).then((r) =>
@@ -293,10 +303,7 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ status: string; seatIndex?: number; message?: string }>(r)),
-  addBots: (
-    roomId: string,
-    body: { seatIndex?: number; fillOpen?: boolean } = {},
-  ) =>
+  addBots: (roomId: string, body: { seatIndex?: number; fillOpen?: boolean } = {}) =>
     fetch(`/api/rooms/${roomId}/bots`, {
       method: "POST",
       credentials: "include",
@@ -314,14 +321,15 @@ export const api = {
       parse<{ hands: HandSummaryListItem[] }>(r),
     ),
   getHand: (roomId: string, handNumber: number) =>
-    fetch(`/api/rooms/${roomId}/hands/${handNumber}`, { credentials: "include" }).then((r) =>
-      parse<{
-        roomId: string;
-        handNumber: number;
-        createdAt: number | null;
-        summary: unknown;
-        source: string;
-      }>(r),
+    fetch(`/api/rooms/${roomId}/hands/${handNumber}`, { credentials: "include" }).then(
+      (r) =>
+        parse<{
+          roomId: string;
+          handNumber: number;
+          createdAt: number | null;
+          summary: unknown;
+          source: string;
+        }>(r),
     ),
   updateRoomConfig: (
     roomId: string,

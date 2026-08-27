@@ -10,7 +10,7 @@ export function visualSeatIndex(
   anchorSeatIndex: number,
 ): number {
   const n = Math.max(seatCount, 1);
-  return ((seatIndex - anchorSeatIndex) % n + n) % n;
+  return (((seatIndex - anchorSeatIndex) % n) + n) % n;
 }
 
 /** Ellipse percents of the felt (same geometry as `seatRingStyle`). */

@@ -71,7 +71,10 @@ export function useRoomSocket({
     setConnectionState("offline");
     const ws = wsRef.current;
     wsRef.current = null;
-    if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    if (
+      ws &&
+      (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)
+    ) {
       ws.close();
     }
   }, [clearReconnectTimer]);
@@ -194,7 +197,10 @@ export function useRoomSocket({
       setConnectionState("offline");
       const ws = wsRef.current;
       wsRef.current = null;
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      if (
+        ws &&
+        (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)
+      ) {
         ws.close();
       }
       return () => {
@@ -210,7 +216,10 @@ export function useRoomSocket({
       clearReconnectTimer();
       const ws = wsRef.current;
       wsRef.current = null;
-      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+      if (
+        ws &&
+        (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)
+      ) {
         ws.close();
       }
       setConnectionState("offline");

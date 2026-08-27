@@ -132,15 +132,7 @@ const PIP_LAYOUTS: Record<string, Pip[]> = {
   ],
 };
 
-function SuitGlyph({
-  suit,
-  size,
-  color,
-}: {
-  suit: Suit;
-  size: number;
-  color: string;
-}) {
+function SuitGlyph({ suit, size, color }: { suit: Suit; size: number; color: string }) {
   const s = size;
   if (suit === "h") {
     return (
@@ -177,7 +169,13 @@ function SuitGlyph({
             C ${s * 0.74} ${s * 0.74}, ${s * 0.88} ${s * 0.66}, ${s * 0.88} ${s * 0.52}
             C ${s * 0.88} ${s * 0.36}, ${s * 0.5} ${s * 0.04}, ${s * 0.5} ${s * 0.04} Z`}
         />
-        <rect x={s * 0.42} y={s * 0.72} width={s * 0.16} height={s * 0.22} rx={s * 0.02} />
+        <rect
+          x={s * 0.42}
+          y={s * 0.72}
+          width={s * 0.16}
+          height={s * 0.22}
+          rx={s * 0.02}
+        />
       </g>
     );
   }
@@ -244,7 +242,16 @@ function CardFace({ rank, suit }: { rank: Rank; suit: Suit }) {
       aria-hidden="true"
       focusable="false"
     >
-      <rect x="0.5" y="0.5" width="62" height="87" rx="6" ry="6" fill="#fffef8" stroke="#d9d2c3" />
+      <rect
+        x="0.5"
+        y="0.5"
+        width="62"
+        height="87"
+        rx="6"
+        ry="6"
+        fill="#fffef8"
+        stroke="#d9d2c3"
+      />
       <CornerIndex rank={rank} suit={suit} color={color} />
       <CornerIndex rank={rank} suit={suit} color={color} inverted />
 
@@ -301,10 +308,20 @@ const SIZE_CLASS: Record<Size, string> = {
   md: "playing-card--md",
 };
 
-export function PlayingCard({ code, size = "board", className = "", style }: PlayingCardProps) {
+export function PlayingCard({
+  code,
+  size = "board",
+  className = "",
+  style,
+}: PlayingCardProps) {
   const parsed = code === "?" ? null : parseCode(code);
   const isBack = code === "?" || !parsed;
-  const classes = ["playing-card", SIZE_CLASS[size], isBack ? "playing-card--back" : "", className]
+  const classes = [
+    "playing-card",
+    SIZE_CLASS[size],
+    isBack ? "playing-card--back" : "",
+    className,
+  ]
     .filter(Boolean)
     .join(" ");
 

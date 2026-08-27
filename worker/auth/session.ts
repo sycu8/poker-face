@@ -39,7 +39,9 @@ export interface SessionUser {
 export async function requireUser(
   env: Env,
   request: Request,
-): Promise<{ ok: true; user: SessionUser } | { ok: false; status: number; error: string }> {
+): Promise<
+  { ok: true; user: SessionUser } | { ok: false; status: number; error: string }
+> {
   const token = readSessionToken(request);
   if (!token) return { ok: false, status: 401, error: "Sign in required." };
   const tokenHash = await sha256Hex(`${env.SESSION_SECRET}:${token}`);

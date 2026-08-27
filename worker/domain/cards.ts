@@ -46,7 +46,10 @@ export function buildDeck(): Card[] {
 }
 
 /** Unbiased Fisher–Yates using crypto.getRandomValues (or injected source for tests). */
-export function shuffleDeck(deck: Card[], randomBytes?: (n: number) => Uint32Array): Card[] {
+export function shuffleDeck(
+  deck: Card[],
+  randomBytes?: (n: number) => Uint32Array,
+): Card[] {
   const out = [...deck];
   const get =
     randomBytes ??

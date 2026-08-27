@@ -19,7 +19,9 @@ if (envName !== "staging" && envName !== "production") {
 }
 
 if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID) {
-  console.error("CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required in the environment.");
+  console.error(
+    "CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are required in the environment.",
+  );
   process.exit(1);
 }
 

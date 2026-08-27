@@ -40,4 +40,6 @@ for (const key of keys) {
 
 const target = path.resolve(out);
 writeFileSync(target, JSON.stringify(payload, null, 2));
-console.log(`Wrote ${Object.keys(payload).length} secret keys to ${out} (values redacted).`);
+console.log(
+  `Wrote ${Object.keys(payload).length} secret keys to ${out} (values redacted).`,
+);

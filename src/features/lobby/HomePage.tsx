@@ -187,12 +187,18 @@ export function HomePage({
                 maxLength={32}
               />
             </div>
-            <TurnstileWidget siteKey={siteKey} onToken={onToken} resetKey={turnstileReset} />
+            <TurnstileWidget
+              siteKey={siteKey}
+              onToken={onToken}
+              resetKey={turnstileReset}
+            />
             <div className="home-panel-actions">
               <button
                 className="btn btn-primary"
                 type="button"
-                disabled={guestBusy || guestName.trim().length < 2 || invite.trim().length < 4}
+                disabled={
+                  guestBusy || guestName.trim().length < 2 || invite.trim().length < 4
+                }
                 onClick={() => void continueAsGuestAndJoin()}
               >
                 {guestBusy ? "Joining…" : "Continue as guest"}
@@ -200,7 +206,9 @@ export function HomePage({
             </div>
             <p className="muted" style={{ marginTop: "0.75rem" }}>
               Prefer a lasting handle?{" "}
-              <Link to={`/auth?mode=register${invite ? `&invite=${invite}` : ""}`}>Sign up</Link>
+              <Link to={`/auth?mode=register${invite ? `&invite=${invite}` : ""}`}>
+                Sign up
+              </Link>
               {" · "}
               <Link to={`/auth${invite ? `?invite=${invite}` : ""}`}>Sign in</Link>
             </p>
@@ -234,7 +242,11 @@ export function HomePage({
                 <h3 className="home-panel-title">Create your table</h3>
                 <div className="field">
                   <label htmlFor="roomName">Table name</label>
-                  <input id="roomName" value={name} onChange={(e) => setName(e.target.value)} />
+                  <input
+                    id="roomName"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="sb">Small blind</label>
@@ -245,7 +257,9 @@ export function HomePage({
                     value={smallBlind}
                     onChange={(e) => setSmallBlind(Number(e.target.value))}
                   />
-                  <span className="muted">Big blind is always {smallBlind * 2} (read-only).</span>
+                  <span className="muted">
+                    Big blind is always {smallBlind * 2} (read-only).
+                  </span>
                 </div>
                 <div className="field">
                   <label htmlFor="stack">Starting stack (10–1000)</label>
@@ -259,7 +273,11 @@ export function HomePage({
                   />
                 </div>
                 <div className="home-panel-actions">
-                  <button className="btn btn-primary" type="button" onClick={() => void createRoom()}>
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    onClick={() => void createRoom()}
+                  >
                     Create a room
                   </button>
                 </div>
@@ -268,8 +286,8 @@ export function HomePage({
               <div className="panel">
                 <h3 className="home-panel-title">Guest session</h3>
                 <p className="muted">
-                  Signed in as <strong>{user.displayName}</strong> (guest). Guest names are not
-                  accounts.{" "}
+                  Signed in as <strong>{user.displayName}</strong> (guest). Guest names
+                  are not accounts.{" "}
                   <Link to="/auth?mode=register">Create an account</Link> to host tables.
                 </p>
               </div>
@@ -285,9 +303,17 @@ export function HomePage({
                   placeholder="ABC123"
                 />
               </div>
-              <TurnstileWidget siteKey={siteKey} onToken={onToken} resetKey={turnstileReset} />
+              <TurnstileWidget
+                siteKey={siteKey}
+                onToken={onToken}
+                resetKey={turnstileReset}
+              />
               <div className="home-panel-actions">
-                <button className="btn btn-secondary" type="button" onClick={() => void askToJoin()}>
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => void askToJoin()}
+                >
                   Ask to join
                 </button>
               </div>
@@ -334,8 +360,8 @@ export function HomePage({
         <div className="home-section-intro">
           <h2 id="what-next">What to do next</h2>
           <p className="muted">
-            A private digital table for friends — sign up, then create or join a room. Play-money
-            Texas Hold&apos;em with virtual chips only.
+            A private digital table for friends — sign up, then create or join a room.
+            Play-money Texas Hold&apos;em with virtual chips only.
           </p>
         </div>
         <ol className="home-steps">
@@ -345,7 +371,9 @@ export function HomePage({
             </span>
             <div>
               <h3>Sign up</h3>
-              <p className="muted">Create an account so you can host or take a seat at a table.</p>
+              <p className="muted">
+                Create an account so you can host or take a seat at a table.
+              </p>
             </div>
           </li>
           <li className="home-step">
@@ -355,7 +383,8 @@ export function HomePage({
             <div>
               <h3>Create or join</h3>
               <p className="muted">
-                Hosts open a room and share an invite code. Guests ask to join and wait for approval.
+                Hosts open a room and share an invite code. Guests ask to join and wait
+                for approval.
               </p>
             </div>
           </li>
@@ -366,8 +395,8 @@ export function HomePage({
             <div>
               <h3>Deal the next hand</h3>
               <p className="muted">
-                Once you have a seat, play continuous hands with your people — voice optional, chips
-                always virtual.
+                Once you have a seat, play continuous hands with your people — voice
+                optional, chips always virtual.
               </p>
             </div>
           </li>
@@ -387,18 +416,23 @@ export function HomePage({
       <section className="home-section home-section--play" aria-labelledby="how-to-play">
         <div className="home-section-intro">
           <h2 id="how-to-play">How to play</h2>
-          <p className="muted">Friendly Texas Hold&apos;em flow — enough to sit down and deal.</p>
+          <p className="muted">
+            Friendly Texas Hold&apos;em flow — enough to sit down and deal.
+          </p>
         </div>
         <ol className="home-flow">
           <li>
             <strong>Blinds</strong>
             <span className="muted">
-              Small and big blinds post. Big blind is always twice the small blind the host set.
+              Small and big blinds post. Big blind is always twice the small blind the
+              host set.
             </span>
           </li>
           <li>
             <strong>Hole cards</strong>
-            <span className="muted">Each player gets two private cards. No dealer hand.</span>
+            <span className="muted">
+              Each player gets two private cards. No dealer hand.
+            </span>
           </li>
           <li>
             <strong>Betting rounds</strong>
@@ -409,17 +443,22 @@ export function HomePage({
           <li>
             <strong>Showdown</strong>
             <span className="muted">
-              Best five-card hand with hole cards and the board wins the pot. Next hand starts when
-              you&apos;re ready.
+              Best five-card hand with hole cards and the board wins the pot. Next hand
+              starts when you&apos;re ready.
             </span>
           </li>
         </ol>
       </section>
 
-      <section className="home-section home-section--roles" aria-labelledby="hosts-guests">
+      <section
+        className="home-section home-section--roles"
+        aria-labelledby="hosts-guests"
+      >
         <div className="home-section-intro">
           <h2 id="hosts-guests">Hosts and guests</h2>
-          <p className="muted">Everyone plays the same game — hosts keep the table running.</p>
+          <p className="muted">
+            Everyone plays the same game — hosts keep the table running.
+          </p>
         </div>
         <div className="home-roles">
           <div className="home-role">

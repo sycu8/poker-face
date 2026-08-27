@@ -71,11 +71,15 @@ export function HandHistoryPanel({ roomId }: { roomId: string }) {
               <li key={h.id}>
                 <button
                   type="button"
-                  className={selected === h.handNumber ? "btn btn-primary" : "btn btn-secondary"}
+                  className={
+                    selected === h.handNumber ? "btn btn-primary" : "btn btn-secondary"
+                  }
                   onClick={() => void openHand(h.handNumber)}
                 >
                   Hand #{h.handNumber}
-                  {winnerCount ? ` · ${winnerCount} winner${winnerCount > 1 ? "s" : ""}` : ""}
+                  {winnerCount
+                    ? ` · ${winnerCount} winner${winnerCount > 1 ? "s" : ""}`
+                    : ""}
                 </button>
               </li>
             );
@@ -105,7 +109,11 @@ export function HandHistoryPanel({ roomId }: { roomId: string }) {
             <div style={{ marginTop: "0.75rem" }}>
               <div className="muted">Shown hands</div>
               {detail.shownHands!.map((h) => (
-                <div key={h.playerId} className="hand-replay-cards" style={{ marginTop: 4 }}>
+                <div
+                  key={h.playerId}
+                  className="hand-replay-cards"
+                  style={{ marginTop: 4 }}
+                >
                   {h.cards.map((c, i) => (
                     <PlayingCard key={`${c}-${i}`} code={c} size="hole" />
                   ))}

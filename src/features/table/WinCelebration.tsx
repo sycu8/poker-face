@@ -103,22 +103,24 @@ export function WinCelebration({
       ? "Split pots"
       : (primary?.label ?? "Winner")
     : (primary?.label ?? "Winner");
-  const subtitle =
-    multiPot
-      ? pots
-          .map((p) => {
-            const potName = p.potIndex === 0 ? "Main pot" : `Side pot ${p.potIndex}`;
-            const rank = p.label ?? "takes it";
-            const who = p.names.length ? ` · ${p.names.join(" & ")}` : "";
-            return `${potName}: ${rank}${who}`;
-          })
-          .join(" · ")
-      : (primary?.names.join(" & ") ?? "");
+  const subtitle = multiPot
+    ? pots
+        .map((p) => {
+          const potName = p.potIndex === 0 ? "Main pot" : `Side pot ${p.potIndex}`;
+          const rank = p.label ?? "takes it";
+          const who = p.names.length ? ` · ${p.names.join(" & ")}` : "";
+          return `${potName}: ${rank}${who}`;
+        })
+        .join(" · ")
+    : (primary?.names.join(" & ") ?? "");
 
   useEffect(() => {
     setVisible(true);
     setExiting(false);
-    const fadeId = window.setTimeout(() => setExiting(true), Math.max(0, durationMs - 400));
+    const fadeId = window.setTimeout(
+      () => setExiting(true),
+      Math.max(0, durationMs - 400),
+    );
     const hideId = window.setTimeout(() => {
       setVisible(false);
       onDismiss?.();
@@ -139,7 +141,9 @@ export function WinCelebration({
       aria-label={`${title}. ${subtitle}`}
     >
       <div className="win-celebration__panel">
-        <p className="win-celebration__eyebrow">{contested.length > 0 ? "Showdown" : "Winner"}</p>
+        <p className="win-celebration__eyebrow">
+          {contested.length > 0 ? "Showdown" : "Winner"}
+        </p>
         <h2 className="win-celebration__rank">{title}</h2>
         {subtitle ? <p className="win-celebration__names">{subtitle}</p> : null}
 

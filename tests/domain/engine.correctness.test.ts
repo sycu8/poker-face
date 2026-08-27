@@ -17,7 +17,12 @@ import {
   unseatPlayer,
 } from "../../worker/domain/engine";
 import { validateConfigInput } from "../../worker/domain/config";
-import { emptyLedger, recordBuyIn, recordBuyOut, buildLedgerSnapshot } from "../../worker/domain/ledger";
+import {
+  emptyLedger,
+  recordBuyIn,
+  recordBuyOut,
+  buildLedgerSnapshot,
+} from "../../worker/domain/ledger";
 
 function cfg(stack = 200, sb = 5) {
   const res = validateConfigInput({ smallBlind: sb, startingStack: stack });
@@ -310,7 +315,9 @@ describe("force fold / leave / deferred ledger", () => {
     ]);
     startHand(state, 1_000);
     const actor = state.actionSeat!;
-    const other = state.seats.find((s) => s.playerId && s.seatIndex !== actor && s.status === "active")!;
+    const other = state.seats.find(
+      (s) => s.playerId && s.seatIndex !== actor && s.status === "active",
+    )!;
     const committed = other.committedThisHand;
     const potBefore = state.pot;
     const fold = forceFoldPlayer(state, other.playerId!, 1_100);
@@ -377,7 +384,9 @@ describe("force fold / leave / deferred ledger", () => {
     expect(leave.ok).toBe(true);
     if (state.street !== "waiting") {
       expect(leave.ok && leave.deferred).toBe(true);
-      expect(state.seats.find((s) => s.playerId === nonActor.playerId)?.status).toBe("folded");
+      expect(state.seats.find((s) => s.playerId === nonActor.playerId)?.status).toBe(
+        "folded",
+      );
     }
   });
 });

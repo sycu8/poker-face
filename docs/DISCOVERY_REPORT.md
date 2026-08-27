@@ -24,27 +24,27 @@ Browser (React SPA/PWA)
 
 ## B. Existing tests
 
-| Suite | Coverage |
-|---|---|
-| `tests/domain/engine.test.ts` | cards, hand ranks, side pots, privacy, HU fold, leave/rebuy/away, pause, time bank, rabbit |
-| `tests/domain/ledger.test.ts` | buy-in/out, CSV injection |
-| `tests/domain/password.test.ts` | PBKDF2 |
-| `tests/domain/turnstile.test.ts` | fail-open/closed |
-| `tests/domain/*` | bots, join coalesce, realtimekit parse, seat layout, voice status |
-| `tests/ui/*` | playing card, seat layout, win celebration |
+| Suite                            | Coverage                                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------ |
+| `tests/domain/engine.test.ts`    | cards, hand ranks, side pots, privacy, HU fold, leave/rebuy/away, pause, time bank, rabbit |
+| `tests/domain/ledger.test.ts`    | buy-in/out, CSV injection                                                                  |
+| `tests/domain/password.test.ts`  | PBKDF2                                                                                     |
+| `tests/domain/turnstile.test.ts` | fail-open/closed                                                                           |
+| `tests/domain/*`                 | bots, join coalesce, realtimekit parse, seat layout, voice status                          |
+| `tests/ui/*`                     | playing card, seat layout, win celebration                                                 |
 
 **Gaps:** heads-up blinds, raise reopen / short all-in, legal call-all-in, short BB, force-fold leave, deferred leave settlement, WS validation, Turnstile single-use guest+join, CI lint/format, production smoke false-green.
 
 ## C. Current authoritative state model
 
-| Category | Authority | Notes |
-|---|---|---|
-| Hand / stacks / bets / cards / timers | Room DO | Correct placement |
-| Membership / rooms / sessions | D1 | Can diverge on partial failure |
-| Chat (live) | DO memory (capped 100 on persist) | No rate limit |
-| Action idempotency | In-memory Map on DO | Lost on eviction |
-| Join idempotency | D1 `idempotency_keys` | Join-decision key unused |
-| Ledger | DO snapshot | Deferred leave buyout buggy |
+| Category                              | Authority                         | Notes                          |
+| ------------------------------------- | --------------------------------- | ------------------------------ |
+| Hand / stacks / bets / cards / timers | Room DO                           | Correct placement              |
+| Membership / rooms / sessions         | D1                                | Can diverge on partial failure |
+| Chat (live)                           | DO memory (capped 100 on persist) | No rate limit                  |
+| Action idempotency                    | In-memory Map on DO               | Lost on eviction               |
+| Join idempotency                      | D1 `idempotency_keys`             | Join-decision key unused       |
+| Ledger                                | DO snapshot                       | Deferred leave buyout buggy    |
 
 ## D. Relevant files
 
@@ -70,18 +70,18 @@ Browser (React SPA/PWA)
 
 ## F. Risks
 
-| Risk | Severity |
-|---|---|
-| Engine raise/HU/side-pot bugs → chip-wrong play | **BLOCKER** |
-| Deferred leave records buyout 0 / never | **BLOCKER** |
-| Turnstile token reused guest→join | **BLOCKER** |
-| SESSION_SECRET generated per deploy | **BLOCKER** |
-| Production smoke false-green via workers.dev | **BLOCKER** |
-| Stale/duplicate WS actions; unbounded idem Map | HIGH |
-| Close table mid-hand without conflict | HIGH |
-| Voice meeting race; CF token as RealtimeKit fallback | HIGH |
-| Docs claim unsafe password reset | MEDIUM |
-| Frontend reconnect after unmount | MEDIUM |
+| Risk                                                 | Severity    |
+| ---------------------------------------------------- | ----------- |
+| Engine raise/HU/side-pot bugs → chip-wrong play      | **BLOCKER** |
+| Deferred leave records buyout 0 / never              | **BLOCKER** |
+| Turnstile token reused guest→join                    | **BLOCKER** |
+| SESSION_SECRET generated per deploy                  | **BLOCKER** |
+| Production smoke false-green via workers.dev         | **BLOCKER** |
+| Stale/duplicate WS actions; unbounded idem Map       | HIGH        |
+| Close table mid-hand without conflict                | HIGH        |
+| Voice meeting race; CF token as RealtimeKit fallback | HIGH        |
+| Docs claim unsafe password reset                     | MEDIUM      |
+| Frontend reconnect after unmount                     | MEDIUM      |
 
 ## G. Implementation order
 

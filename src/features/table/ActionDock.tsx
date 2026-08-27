@@ -174,7 +174,11 @@ export function ActionDock({
             onChange={(e) => setRaiseTo(clamp(Number(e.target.value), minTo, maxTo))}
           />
           {presets.length > 0 ? (
-            <div className="action-dock__presets" role="group" aria-label="Bet size presets">
+            <div
+              className="action-dock__presets"
+              role="group"
+              aria-label="Bet size presets"
+            >
               {presets.map((p) => (
                 <button
                   key={p.label}

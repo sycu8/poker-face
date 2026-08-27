@@ -62,14 +62,24 @@ describe("hand evaluation", () => {
     expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Ad", "Ac", "2s", "2c"]))).toBe(
       "Full house",
     );
-    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Kh", "9h", "4h", "2h"]))).toBe("Flush");
-    expect(categoryDisplayLabel(evaluateBestHand(["9c", "8d", "7h", "6s", "5c"]))).toBe("Straight");
+    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Kh", "9h", "4h", "2h"]))).toBe(
+      "Flush",
+    );
+    expect(categoryDisplayLabel(evaluateBestHand(["9c", "8d", "7h", "6s", "5c"]))).toBe(
+      "Straight",
+    );
     expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Ad", "Ac", "9s", "2c"]))).toBe(
       "Three of a kind",
     );
-    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Ad", "Kc", "Ks", "2c"]))).toBe("Two pair");
-    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Ad", "9c", "5s", "2c"]))).toBe("One pair");
-    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Kd", "9c", "5s", "2c"]))).toBe("High card");
+    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Ad", "Kc", "Ks", "2c"]))).toBe(
+      "Two pair",
+    );
+    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Ad", "9c", "5s", "2c"]))).toBe(
+      "One pair",
+    );
+    expect(categoryDisplayLabel(evaluateBestHand(["Ah", "Kd", "9c", "5s", "2c"]))).toBe(
+      "High card",
+    );
   });
 
   it("detects wheel straight", () => {
@@ -241,9 +251,9 @@ describe("leave / rebuy / away", () => {
     if (!leave.ok) return;
     if (state.street !== "waiting") {
       expect(leave.deferred).toBe(true);
-      expect(state.seats.find((s) => s.playerId === other.playerId)?.committedThisHand).toBe(
-        committed,
-      );
+      expect(
+        state.seats.find((s) => s.playerId === other.playerId)?.committedThisHand,
+      ).toBe(committed);
     }
   });
 
@@ -292,7 +302,14 @@ describe("e2e smoke: seat → deal → hand", () => {
       const legal = getLegalActions(state, seatIdx);
       if (!legal) break;
       const action = legal.canCheck ? "check" : legal.canCall ? "call" : "fold";
-      const res = applyAction(state, seatIdx, action, undefined, Date.now() + guard, `smoke:${guard}`);
+      const res = applyAction(
+        state,
+        seatIdx,
+        action,
+        undefined,
+        Date.now() + guard,
+        `smoke:${guard}`,
+      );
       expect(res.ok).toBe(true);
     }
     expect(state.handNumber).toBeGreaterThanOrEqual(1);
@@ -334,11 +351,17 @@ describe("pokernow parity engine", () => {
     expect(state.paused).toBe(true);
     expect(state.turnDeadlineMs).toBeNull();
     expect(state.pausedTurnRemainingMs).toBe(before! - 1_400);
-    expect(applyAction(state, state.actionSeat!, "fold", undefined, 1_500, "p").ok).toBe(false);
+    expect(applyAction(state, state.actionSeat!, "fold", undefined, 1_500, "p").ok).toBe(
+      false,
+    );
   });
 
   it("consumes time bank before timeout fold/check", () => {
-    const cfg = validateConfigInput({ smallBlind: 1, startingStack: 100, timeBankSeconds: 30 });
+    const cfg = validateConfigInput({
+      smallBlind: 1,
+      startingStack: 100,
+      timeBankSeconds: 30,
+    });
     if (!cfg.ok) throw new Error(cfg.error);
     const state = createInitialGameState(cfg.config);
     seatPlayer(state, "a", "A", 0);

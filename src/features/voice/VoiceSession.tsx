@@ -1,11 +1,4 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRealtimeKitClient } from "@cloudflare/realtimekit-react";
 import type RealtimeKitClient from "@cloudflare/realtimekit";
 import { api, type VoiceTokenResponse } from "../../lib/api";
@@ -126,7 +119,8 @@ function VoiceStatusSync({
       }
       const Ctx =
         window.AudioContext ??
-        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        (window as unknown as { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
       if (!Ctx) return;
       let cancelled = false;
       let raf = 0;
@@ -274,7 +268,9 @@ export function VoiceSessionProvider({
       meetingRef.current = client;
       setMuted(true);
       setJoined(true);
-      setMessage("Voice connected. Unmute when you’re ready — cards never depend on voice.");
+      setMessage(
+        "Voice connected. Unmute when you’re ready — cards never depend on voice.",
+      );
     } catch (err) {
       setJoined(false);
       setMessage(

@@ -9,8 +9,11 @@ export const json = (data: unknown, init: ResponseInit = {}) =>
     },
   });
 
-export const errorJson = (status: number, error: string, extra?: Record<string, unknown>) =>
-  json({ error, ...extra }, { status });
+export const errorJson = (
+  status: number,
+  error: string,
+  extra?: Record<string, unknown>,
+) => json({ error, ...extra }, { status });
 
 export async function readJson<T>(
   request: Request,

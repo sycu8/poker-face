@@ -13,7 +13,8 @@
   --font-ui: "Manrope", system-ui, sans-serif;
   --font-display: "Fraunces", Georgia, serif;
   color: var(--ivory);
-  background: radial-gradient(1200px 700px at 20% -10%, #0f4c3540, transparent),
+  background:
+    radial-gradient(1200px 700px at 20% -10%, #0f4c3540, transparent),
     radial-gradient(900px 500px at 90% 10%, #f4bc5622, transparent), var(--night);
   font-family: var(--font-ui);
   font-synthesis: none;
@@ -155,10 +156,16 @@ button {
   width: min(100%, 420px);
   aspect-ratio: 1.55 / 1;
   border-radius: 999px;
-  background:
-    radial-gradient(ellipse at 45% 40%, #176b49 0%, var(--felt) 52%, #0a2e21 100%);
+  background: radial-gradient(
+    ellipse at 45% 40%,
+    #176b49 0%,
+    var(--felt) 52%,
+    #0a2e21 100%
+  );
   border: 9px solid #1b1408;
-  box-shadow: inset 0 0 36px #0007, 0 18px 40px #0005;
+  box-shadow:
+    inset 0 0 36px #0007,
+    0 18px 40px #0005;
   overflow: hidden;
 }
 
@@ -198,7 +205,12 @@ button {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #ffd27a, var(--gold) 45%, var(--gold-deep));
+  background: radial-gradient(
+    circle at 35% 30%,
+    #ffd27a,
+    var(--gold) 45%,
+    var(--gold-deep)
+  );
   border: 3px dashed #1a1204;
   box-shadow: 0 4px 10px #0005;
   animation: rise 500ms ease-out 360ms both;
@@ -435,7 +447,10 @@ button {
   font-weight: 700;
   text-align: center;
   text-decoration: none;
-  transition: transform 180ms ease-out, background 180ms ease-out, border-color 180ms ease-out;
+  transition:
+    transform 180ms ease-out,
+    background 180ms ease-out,
+    border-color 180ms ease-out;
 }
 
 .btn:disabled {
@@ -511,10 +526,16 @@ button {
 .table-felt {
   position: relative;
   border-radius: 50% / 46%;
-  background:
-    radial-gradient(ellipse at center, #176b49 0%, var(--felt) 55%, #0a2e21 100%);
+  background: radial-gradient(
+    ellipse at center,
+    #176b49 0%,
+    var(--felt) 55%,
+    #0a2e21 100%
+  );
   border: 10px solid #1b1408;
-  box-shadow: inset 0 0 40px #0008, 0 20px 50px #0006;
+  box-shadow:
+    inset 0 0 40px #0008,
+    0 20px 50px #0006;
   width: 100%;
   aspect-ratio: 1.55 / 1;
   min-height: min(62vw, 460px);
@@ -703,7 +724,9 @@ button {
 
 .seat.seat--winner {
   border-color: var(--gold);
-  box-shadow: 0 0 0 2px #f4bc5666, 0 0 24px #f4bc5633;
+  box-shadow:
+    0 0 0 2px #f4bc5666,
+    0 0 24px #f4bc5633;
   animation: winner-pulse 1.6s ease-in-out 2;
 }
 
@@ -718,10 +741,14 @@ button {
 @keyframes winner-pulse {
   0%,
   100% {
-    box-shadow: 0 0 0 2px #f4bc5644, 0 0 12px #f4bc5622;
+    box-shadow:
+      0 0 0 2px #f4bc5644,
+      0 0 12px #f4bc5622;
   }
   50% {
-    box-shadow: 0 0 0 3px #f4bc5688, 0 0 28px #f4bc5644;
+    box-shadow:
+      0 0 0 3px #f4bc5688,
+      0 0 28px #f4bc5644;
   }
 }
 
@@ -903,7 +930,12 @@ button {
   font-weight: 800;
   letter-spacing: 0;
   color: var(--night);
-  background: radial-gradient(circle at 35% 30%, #ffe29a, var(--gold) 55%, var(--gold-deep));
+  background: radial-gradient(
+    circle at 35% 30%,
+    #ffe29a,
+    var(--gold) 55%,
+    var(--gold-deep)
+  );
   border: 1px solid #0006;
   box-shadow: 0 2px 6px #0007;
   z-index: 3;
@@ -1133,7 +1165,9 @@ button {
 }
 
 .playing-card--winning {
-  box-shadow: 0 0 0 2px var(--gold), 0 0 14px #f4bc5555;
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 14px #f4bc5555;
   transform: translateY(-3px);
 }
 
@@ -1334,7 +1368,8 @@ button {
     z-index: 40;
     margin: 0;
     padding: 0.65rem max(0.75rem, env(safe-area-inset-left, 0px))
-      calc(0.65rem + env(safe-area-inset-bottom, 0px)) max(0.75rem, env(safe-area-inset-right, 0px));
+      calc(0.65rem + env(safe-area-inset-bottom, 0px))
+      max(0.75rem, env(safe-area-inset-right, 0px));
     background: linear-gradient(180deg, #0a1a14f2 0%, #07140ff8 40%, #07100dfc 100%);
     border-top: 1px solid #f4bc5633;
     box-shadow: 0 -12px 28px #0008;
@@ -1436,7 +1471,9 @@ button {
   display: inline-flex;
   line-height: 0;
   border-radius: 8px;
-  transition: transform 120ms ease, opacity 120ms ease;
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease;
 }
 
 .bmc-link:hover {
@@ -1703,7 +1740,9 @@ html[data-theme="sunset"] {
   border: 1px solid #ffffff14;
   text-decoration: none;
   color: inherit;
-  transition: transform 160ms ease, border-color 160ms ease;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease;
 }
 
 .my-table-link:hover {
