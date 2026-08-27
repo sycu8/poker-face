@@ -83,7 +83,9 @@ async function findExistingAllow(zoneId, ip) {
   );
   if (!res.ok || !json.success) return null;
   const rows = json.result || [];
-  return rows.find((r) => r?.configuration?.value === ip && r?.mode === "whitelist") || null;
+  return (
+    rows.find((r) => r?.configuration?.value === ip && r?.mode === "whitelist") || null
+  );
 }
 
 /**
