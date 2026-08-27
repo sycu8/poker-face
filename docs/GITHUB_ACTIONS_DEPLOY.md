@@ -68,20 +68,37 @@ Production cannot deploy when full CI validations fail.
 
 If this fails, **production smoke fails**. Wrangler `deployments list` may be printed for diagnostics only — it **must not** convert a failed health check into success. There is **no** workers.dev fallback for production smoke.
 
+Production smoke runs `node scripts/ci-smoke-health.mjs`, which:
+
+1. Resolves the Cloudflare zone for the custom domain
+2. Creates a **temporary IP Access Allow** for the GitHub Actions runner egress IP
+3. Probes canonical `/api/health` until HTTP 200 + required JSON
+4. Deletes the temporary Allow rule
+
+This is required on zones with **Bot Fight Mode (Free)**: that product cannot be skipped with path-based WAF custom rules (Managed Challenge still returns 403 HTML to curl). Cloudflare evaluates IP Access Rules **before** Bot Fight Mode, so a short-lived runner Allow is the smallest Free-plan exception that still requires a real origin 200.
+
+`CLOUDFLARE_API_TOKEN` needs at least:
+
+- Zone → Zone → Read
+- Zone → Firewall Services → Edit (IP Access Rules)
+
+(or account-scoped equivalents that cover the `orangecloud.vn` zone)
+
 ### Staging
 
 Prefers custom domain; may fall back to workers.dev with a warning.
 
-### Cloudflare WAF / Bot Fight — smallest health-path exception
+### Cloudflare Bot Fight / WAF notes
 
-Configure a **path-specific** exception so GitHub Actions (and ops probes) can reach health without weakening site-wide bot protection:
+| Plan / product                  | Path Skip for `/api/health`?                                                                         | What deploy smoke uses                                         |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Bot Fight Mode (Free)**       | **No** — Skip/WAF rules do not bypass BFM                                                            | Temporary IP Access Allow for runner IP                        |
+| **Super Bot Fight Mode (Pro+)** | Yes — Custom rule Skip → All Super Bot Fight Mode rules for `http.request.uri.path eq "/api/health"` | Same temp IP Allow (still works); optional permanent Skip rule |
+| Global disable of Bot Fight     | Works but weakens the whole zone                                                                     | Avoid                                                          |
 
-1. Exact path: `/api/health` (method GET)
-2. Bypass: Managed Challenge / Bot Fight Challenge for that path only
-3. Keep the endpoint **uncached** (Worker response already sets health dynamically)
-4. Do **not** expose secrets, user data, or internal IDs on `/api/health` (current payload: `ok`, `service`, `environment`, `tagline`)
+Keep `/api/health` **uncached** and free of secrets/user data (payload: `ok`, `service`, `environment`, `tagline` only).
 
-Do **not** disable WAF/Bot Fight globally.
+Do **not** treat Wrangler deployment existence as health.
 
 ## Trigger
 
