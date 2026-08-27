@@ -389,6 +389,27 @@ describe("force fold / leave / deferred ledger", () => {
       );
     }
   });
+
+  it("flush deferred leaves before startHand prevents leaver from next deal", () => {
+    const state = createInitialGameState(cfg(100, 1));
+    seatMany(state, [
+      ["a", "A", 0],
+      ["b", "B", 1],
+    ]);
+    startHand(state, 1_000);
+    const leave = unseatPlayer(state, "b", 1_100);
+    expect(leave.ok).toBe(true);
+    if (leave.ok && leave.deferred) {
+      // Simulate hand completion while leaver seat is retained.
+      state.street = "waiting";
+      state.actionSeat = null;
+      expect(state.seats.some((s) => s.playerId === "b")).toBe(true);
+      flushDeferredLeaves(state, ["b"]);
+      expect(state.seats.every((s) => s.playerId !== "b")).toBe(true);
+      startHand(state, 2_000);
+      expect(state.seats.every((s) => s.playerId !== "b")).toBe(true);
+    }
+  });
 });
 
 describe("time bank validation and pause", () => {

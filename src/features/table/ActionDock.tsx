@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { buildGameAction } from "./gameAction";
 
 export interface LegalActionsView {
   canFold: boolean;
@@ -8,6 +9,7 @@ export interface LegalActionsView {
   callIsAllIn?: boolean;
   canBet: boolean;
   canRaise: boolean;
+  canShortAllInRaise?: boolean;
   minBet: number;
   maxBet: number;
   minRaiseTo: number;
@@ -19,6 +21,8 @@ export interface LegalActionsView {
 export interface ActionDockProps {
   legal: LegalActionsView;
   pot: number;
+  /** Current street bet level (needed for raise presets). */
+  currentBet: number;
   sequence: number | undefined;
   disabled: boolean;
   onSend: (payload: unknown) => void;
@@ -42,6 +46,7 @@ function withinRaiseRange(amount: number, min: number, max: number): boolean {
 export function ActionDock({
   legal,
   pot,
+  currentBet,
   sequence,
   disabled,
   onSend,
@@ -68,28 +73,30 @@ export function ActionDock({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
   }, [legal.minRaiseTo, legal.minBet]);
 
-  const sendAction = (action: string, amount?: number) => {
+  const sendAction = (
+    action: "fold" | "check" | "call" | "bet" | "raise" | "all_in",
+    amount?: number,
+  ) => {
     if (disabled) return;
-    onSend({
-      type: "action",
-      action,
-      ...(amount !== undefined ? { amount } : {}),
-      expectedVersion: sequence,
-      idempotencyKey: crypto.randomUUID(),
-    });
+    const payload = buildGameAction(sequence, action, amount);
+    if (!payload) return;
+    onSend(payload);
   };
 
   const presets = useMemo(() => {
     if (!canSize) return [];
-    // Preset amounts are absolute bet / raise-to values; only show if legal.
+    const raiseBy = (fraction: number) =>
+      legal.canBet
+        ? Math.floor(pot * fraction)
+        : currentBet + legal.callAmount + Math.floor(pot * fraction);
     const candidates: Array<{ label: string; amount: number }> = [
-      { label: "½ Pot", amount: Math.floor(pot / 2) },
-      { label: "Pot", amount: pot },
-      { label: "2× Pot", amount: pot * 2 },
+      { label: "½ Pot", amount: raiseBy(0.5) },
+      { label: "Pot", amount: raiseBy(1) },
+      { label: "2× Pot", amount: raiseBy(2) },
       { label: "All-in", amount: maxTo },
     ];
     return candidates.filter((c) => withinRaiseRange(c.amount, minTo, maxTo));
-  }, [canSize, pot, minTo, maxTo]);
+  }, [canSize, pot, currentBet, legal.canBet, legal.callAmount, minTo, maxTo]);
 
   const callLabel = legal.callIsAllIn
     ? `ALL-IN ${legal.callAmount}`

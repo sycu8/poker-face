@@ -13,6 +13,7 @@ import { SeatMicIndicator } from "../voice/SeatMicIndicator";
 import { VoicePanel } from "../voice/VoicePanel";
 import { VoiceSessionProvider } from "../voice/VoiceSession";
 import { ActionDock } from "./ActionDock";
+import { buildGameAction } from "./gameAction";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
@@ -56,6 +57,7 @@ interface GameView {
   street: string;
   board: string[];
   pot: number;
+  currentBet: number;
   sequence: number;
   handNumber: number;
   dealerSeat?: number;
@@ -81,6 +83,7 @@ interface GameView {
     callIsAllIn?: boolean;
     canBet: boolean;
     canRaise: boolean;
+    canShortAllInRaise?: boolean;
     minBet: number;
     maxBet: number;
     minRaiseTo: number;
@@ -351,7 +354,16 @@ export function TablePage({ user }: { user: User }) {
     };
   }, [refreshAccess]);
 
-  const actionsLocked = !actionsEnabled || connectionState === "reconnecting";
+  const actionsLocked =
+    !actionsEnabled || connectionState === "reconnecting" || view?.sequence == null;
+
+  const sendGameAction = useCallback(
+    (action: "fold" | "check" | "call" | "bet" | "raise" | "all_in", amount?: number) => {
+      const payload = buildGameAction(view?.sequence, action, amount);
+      if (payload) send(payload);
+    },
+    [send, view?.sequence],
+  );
 
   const legal = view?.legalActions;
   useEffect(() => {
@@ -1253,14 +1265,7 @@ export function TablePage({ user }: { user: User }) {
                     className="btn btn-danger"
                     type="button"
                     disabled={actionsLocked}
-                    onClick={() =>
-                      send({
-                        type: "action",
-                        action: "fold",
-                        expectedVersion: view?.sequence,
-                        idempotencyKey: crypto.randomUUID(),
-                      })
-                    }
+                    onClick={() => sendGameAction("fold")}
                   >
                     Fold
                   </button>
@@ -1270,14 +1275,7 @@ export function TablePage({ user }: { user: User }) {
                     className="btn btn-secondary"
                     type="button"
                     disabled={actionsLocked}
-                    onClick={() =>
-                      send({
-                        type: "action",
-                        action: "check",
-                        expectedVersion: view?.sequence,
-                        idempotencyKey: crypto.randomUUID(),
-                      })
-                    }
+                    onClick={() => sendGameAction("check")}
                   >
                     Check
                   </button>
@@ -1287,14 +1285,7 @@ export function TablePage({ user }: { user: User }) {
                     className="btn btn-secondary"
                     type="button"
                     disabled={actionsLocked}
-                    onClick={() =>
-                      send({
-                        type: "action",
-                        action: "call",
-                        expectedVersion: view?.sequence,
-                        idempotencyKey: crypto.randomUUID(),
-                      })
-                    }
+                    onClick={() => sendGameAction("call")}
                   >
                     {legal.callIsAllIn
                       ? `All-in ${legal.callAmount}`
@@ -1320,13 +1311,7 @@ export function TablePage({ user }: { user: User }) {
                       type="button"
                       disabled={actionsLocked}
                       onClick={() =>
-                        send({
-                          type: "action",
-                          action: legal.canBet ? "bet" : "raise",
-                          amount: raiseTo,
-                          expectedVersion: view?.sequence,
-                          idempotencyKey: crypto.randomUUID(),
-                        })
+                        sendGameAction(legal.canBet ? "bet" : "raise", raiseTo)
                       }
                     >
                       {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
@@ -1338,14 +1323,7 @@ export function TablePage({ user }: { user: User }) {
                     className="btn btn-secondary"
                     type="button"
                     disabled={actionsLocked}
-                    onClick={() =>
-                      send({
-                        type: "action",
-                        action: "all_in",
-                        expectedVersion: view?.sequence,
-                        idempotencyKey: crypto.randomUUID(),
-                      })
-                    }
+                    onClick={() => sendGameAction("all_in")}
                   >
                     All-in
                   </button>
@@ -1355,6 +1333,7 @@ export function TablePage({ user }: { user: User }) {
                 className="action-dock--mobile"
                 legal={legal}
                 pot={view?.pot ?? 0}
+                currentBet={view?.currentBet ?? 0}
                 sequence={view?.sequence}
                 disabled={actionsLocked}
                 onSend={send}

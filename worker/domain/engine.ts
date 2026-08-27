@@ -1378,14 +1378,7 @@ export function rabbitHunt(
     }
   }
   // Only the newly revealed cards (undealt streets).
-  const revealed = cards.slice(cards.length - need);
-  // If board was empty we'd have dealt 5; need already accounts for that.
-  const rabbit =
-    cards.length === need
-      ? cards
-      : revealed.length === need
-        ? revealed
-        : cards.slice(-need);
+  const rabbit = cards.slice(-need);
   state.rabbitCards = rabbit;
   state.sequence += 1;
   return { ok: true, events: [{ type: "rabbit", cards: rabbit }], cards: rabbit };
