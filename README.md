@@ -24,7 +24,7 @@ If Poker Faces helps your group play online, you can [buy me a coffee](https://b
 - Single Worker for static assets + HTTP APIs
 - SQLite-backed Durable Object per room (hibernatable WebSockets)
 - D1 (users, sessions, rooms, hand summaries)
-- KV / R2 / Queues / Analytics Engine / Rate Limiting / Turnstile
+- KV / R2 / Queues / Analytics Engine / Rate Limiting
 - Username + email + password auth (PBKDF2) with cookie sessions; signed-in password change
 - Host-approved private tables, text chat, optional voice
 - PWA manifest + service worker shell cache

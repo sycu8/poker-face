@@ -24,16 +24,15 @@ Browser (React SPA/PWA)
 
 ## B. Existing tests
 
-| Suite                            | Coverage                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------ |
-| `tests/domain/engine.test.ts`    | cards, hand ranks, side pots, privacy, HU fold, leave/rebuy/away, pause, time bank, rabbit |
-| `tests/domain/ledger.test.ts`    | buy-in/out, CSV injection                                                                  |
-| `tests/domain/password.test.ts`  | PBKDF2                                                                                     |
-| `tests/domain/turnstile.test.ts` | fail-open/closed                                                                           |
-| `tests/domain/*`                 | bots, join coalesce, realtimekit parse, seat layout, voice status                          |
-| `tests/ui/*`                     | playing card, seat layout, win celebration                                                 |
+| Suite                           | Coverage                                                                                   |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `tests/domain/engine.test.ts`   | cards, hand ranks, side pots, privacy, HU fold, leave/rebuy/away, pause, time bank, rabbit |
+| `tests/domain/ledger.test.ts`   | buy-in/out, CSV injection                                                                  |
+| `tests/domain/password.test.ts` | PBKDF2                                                                                     |
+| `tests/domain/*`                | bots, join coalesce, realtimekit parse, seat layout, voice status                          |
+| `tests/ui/*`                    | playing card, seat layout, win celebration                                                 |
 
-**Gaps:** heads-up blinds, raise reopen / short all-in, legal call-all-in, short BB, force-fold leave, deferred leave settlement, WS validation, Turnstile single-use guest+join, CI lint/format, production smoke false-green.
+**Gaps:** heads-up blinds, raise reopen / short all-in, legal call-all-in, short BB, force-fold leave, deferred leave settlement, WS validation, CI lint/format, production smoke false-green.
 
 ## C. Current authoritative state model
 
@@ -50,8 +49,8 @@ Browser (React SPA/PWA)
 
 - Engine: `worker/domain/engine.ts`, `pots.ts`, `cards.ts`, `handRank.ts`, `ledger.ts`, `config.ts`
 - DO: `worker/room/RoomDurableObject.ts`
-- HTTP: `worker/index.ts`, `worker/routes/rooms.ts`, `worker/auth/*`, `worker/lib/turnstile.ts`, `worker/voice/realtimekit.ts`
-- Frontend: `TablePage.tsx`, `HomePage.tsx`, `AuthPage.tsx`, `TurnstileWidget.tsx`, `api.ts`, `public/sw.js`
+- HTTP: `worker/index.ts`, `worker/routes/rooms.ts`, `worker/auth/*`, `worker/voice/realtimekit.ts`
+- Frontend: `TablePage.tsx`, `HomePage.tsx`, `AuthPage.tsx`, `api.ts`, `public/sw.js`
 - Ops: `wrangler.jsonc`, `.github/workflows/{ci,deploy}.yml`, `scripts/ci-*.mjs`, `migrations/*`
 - Docs: `ARCHITECTURE.md` (stale reset-password), `GAME_RULES.md`, `GITHUB_ACTIONS_DEPLOY.md`
 
@@ -60,7 +59,7 @@ Browser (React SPA/PWA)
 **Phase 1:** `engine.ts`, `pots.ts`, `cards.ts`, `tests/domain/engine*.test.ts`, `RoomDurableObject.ts` (leave/close/ledger)  
 **Phase 2:** `RoomDurableObject.ts` (WS schema, idempotency, chat RL, alarms)  
 **Phase 3:** `rooms.ts`, consistency doc, join-decision idempotency  
-**Phase 4:** `turnstile.ts`, `passwordAuth.ts`, `password.ts`, `session.ts`, guest join endpoint, `HomePage.tsx`  
+**Phase 4:** `passwordAuth.ts`, `password.ts`, `session.ts`, guest join endpoint, `HomePage.tsx`  
 **Phase 5:** `ci.yml`, `deploy.yml`, `wrangler.jsonc`, secrets scripts  
 **Phase 6:** `realtimekit.ts`, deploy secret fallback removal  
 **Phase 7:** analytics/logging, retention cron, docs  
@@ -74,7 +73,6 @@ Browser (React SPA/PWA)
 | ---------------------------------------------------- | ----------- |
 | Engine raise/HU/side-pot bugs → chip-wrong play      | **BLOCKER** |
 | Deferred leave records buyout 0 / never              | **BLOCKER** |
-| Turnstile token reused guest→join                    | **BLOCKER** |
 | SESSION_SECRET generated per deploy                  | **BLOCKER** |
 | Production smoke false-green via workers.dev         | **BLOCKER** |
 | Stale/duplicate WS actions; unbounded idem Map       | HIGH        |

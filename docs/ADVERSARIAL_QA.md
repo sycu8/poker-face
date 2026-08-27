@@ -31,18 +31,16 @@ Legend: **Auto** = covered by automated tests or CI; **Manual** = requires scrip
 
 ## HTTP / auth / join
 
-| Scenario                                      | Expected safe behavior                                                      | Invariant                                 | Status                                                          |
-| --------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------- |
-| **Cross-origin POST with session cookie**     | `403 Origin not allowed` when `Origin` present and ≠ `APP_ORIGIN`           | Cookies not usable from arbitrary origins | **Auto** — `tests/domain/origin.test.ts`                        |
-| **Missing Origin** (curl, CI scripts)         | Request allowed                                                             | Non-browser tooling still works           | **Auto** — origin tests                                         |
-| **Turnstile replay** (reuse token guest→join) | Single verify on combined guest+join; production fail-closed without secret | One human proof per sensitive flow        | **Auto** — `tests/domain/turnstile.test.ts`; guest join path    |
-| **Turnstile hostname mismatch**               | Verification fails when hostname ≠ `APP_ORIGIN` host                        | Tokens bound to deployed origin           | **Auto** — turnstile tests                                      |
-| **Join-request double submit**                | Same `idempotencyKey` → identical response; coalesce pending                | No duplicate pending rows for same user   | **Auto** — join coalesce tests; **Manual** — QA script          |
-| **Join-decision retry**                       | Same host `idempotencyKey` → stored D1 response; no double seat             | Host approve/reject at-most-once          | **Auto** — D1 scope `join-decision:{hostId}` (this branch)      |
-| **Non-host join-decision**                    | 403                                                                         | Only host decides                         | **Manual** — QA script                                          |
-| **SESSION_SECRET missing / rotated wrong**    | Deploy fails; sessions invalid                                              | No ephemeral secret in prod deploy        | **Auto** — deploy workflow guard; **Manual** — dashboard secret |
-| **Password reset takeover**                   | Endpoint disabled 403                                                       | No email-less account takeover            | **Auto** — auth route                                           |
-| **Guest creates table**                       | 403                                                                         | Guests cannot host                        | **Auto** — rooms route                                          |
+| Scenario                                   | Expected safe behavior                                            | Invariant                                 | Status                                                          |
+| ------------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------- |
+| **Cross-origin POST with session cookie**  | `403 Origin not allowed` when `Origin` present and ≠ `APP_ORIGIN` | Cookies not usable from arbitrary origins | **Auto** — `tests/domain/origin.test.ts`                        |
+| **Missing Origin** (curl, CI scripts)      | Request allowed                                                   | Non-browser tooling still works           | **Auto** — origin tests                                         |
+| **Join-request double submit**             | Same `idempotencyKey` → identical response; coalesce pending      | No duplicate pending rows for same user   | **Auto** — join coalesce tests; **Manual** — QA script          |
+| **Join-decision retry**                    | Same host `idempotencyKey` → stored D1 response; no double seat   | Host approve/reject at-most-once          | **Auto** — D1 scope `join-decision:{hostId}` (this branch)      |
+| **Non-host join-decision**                 | 403                                                               | Only host decides                         | **Manual** — QA script                                          |
+| **SESSION_SECRET missing / rotated wrong** | Deploy fails; sessions invalid                                    | No ephemeral secret in prod deploy        | **Auto** — deploy workflow guard; **Manual** — dashboard secret |
+| **Password reset takeover**                | Endpoint disabled 403                                             | No email-less account takeover            | **Auto** — auth route                                           |
+| **Guest creates table**                    | 403                                                               | Guests cannot host                        | **Auto** — rooms route                                          |
 
 ---
 

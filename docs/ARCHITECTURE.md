@@ -7,15 +7,15 @@
 - **KV (`CONFIG_KV`):** Non-authoritative flags/copy (`copy:*`, `flag:*`) for `/api/config`.
 - **R2 + Queues:** Async hand archival / replay JSON.
 - **Analytics Engine:** Aggregate events without PII.
-- **Rate limits + Turnstile:** Registration, login, guest join, and join abuse paths.
+- **Rate limits:** Registration, login, guest join, and join abuse paths.
 - **Cron (staging/production):** `0 */6 * * *` runs `purgeExpiredSessions` (expired sessions + revoked older than 7 days).
 - **Origin validation:** For `POST /api/*` and `/ws/rooms/:id` upgrades, if the browser sends an `Origin` header it must match `APP_ORIGIN`. Missing `Origin` is allowed (curl, CI scripts). See `worker/lib/origin.ts`.
 
 ### Auth (password)
 
-- **Register** (`POST /api/auth/register`): username, email, password (+ optional displayName / Turnstile). Email is stored normalized (trim + lowercase) with a unique index.
+- **Register** (`POST /api/auth/register`): username, email, password (+ optional displayName). Email is stored normalized (trim + lowercase) with a unique index.
 - **Login** (`POST /api/auth/login`): username + password. PBKDF2 hashes use 300k iterations (Workers-compatible middle ground); successful login transparently rehashes when stored iters are lower.
 - **Password reset** (`POST /api/auth/reset-password`): **disabled** (account-takeover risk without SMTP). Logged-in users change passwords via `POST /api/auth/change-password` (current + new password); sibling sessions are revoked and a fresh session cookie is issued.
-- **Guest join** (`POST /api/rooms/join-as-guest`): creates a guest session and join request in one call (Turnstile verified once).
+- **Guest join** (`POST /api/rooms/join-as-guest`): creates a guest session and join request in one call.
 
 Privacy: `projectForPlayer` strips foreign hole cards. Voice failure never blocks game actions.

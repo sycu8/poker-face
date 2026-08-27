@@ -82,7 +82,6 @@ export const api = {
   config: () =>
     fetch("/api/config").then((r) =>
       parse<{
-        turnstileSiteKey: string;
         environment?: string;
         appOrigin?: string;
         flags?: {
@@ -103,7 +102,6 @@ export const api = {
     email: string;
     password: string;
     displayName?: string;
-    turnstileToken?: string;
   }) =>
     fetch("/api/auth/register", {
       method: "POST",
@@ -111,26 +109,21 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
-  login: (body: { username: string; password: string; turnstileToken?: string }) =>
+  login: (body: { username: string; password: string }) =>
     fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
-  guest: (body: { displayName: string; turnstileToken?: string }) =>
+  guest: (body: { displayName: string }) =>
     fetch("/api/auth/guest", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User; privacyNote?: string }>(r)),
-  resetPassword: (_body: {
-    username: string;
-    email: string;
-    newPassword: string;
-    turnstileToken?: string;
-  }) =>
+  resetPassword: (_body: { username: string; email: string; newPassword: string }) =>
     fetch("/api/auth/reset-password", {
       method: "POST",
       credentials: "include",
@@ -172,7 +165,6 @@ export const api = {
     inviteCode: string;
     idempotencyKey: string;
     displayName?: string;
-    turnstileToken?: string;
   }) =>
     fetch("/api/rooms/join-request", {
       method: "POST",
@@ -182,12 +174,11 @@ export const api = {
     }).then((r) =>
       parse<{ status: string; roomId?: string; requestId?: string; message?: string }>(r),
     ),
-  /** Combined guest session + join request (verifies Turnstile once). */
+  /** Combined guest session + join request. */
   joinAsGuest: (body: {
     inviteCode: string;
     displayName: string;
     idempotencyKey: string;
-    turnstileToken?: string;
   }) =>
     fetch("/api/rooms/join-as-guest", {
       method: "POST",

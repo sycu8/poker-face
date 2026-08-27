@@ -11,7 +11,6 @@ import { validateConfigInput } from "../domain/config";
 import { writeAnalytics } from "../lib/analytics";
 import { requireActiveMember } from "../lib/membership";
 import { applyMembershipOrEnqueue, flushMembershipOps } from "../lib/membershipOps";
-import { verifyTurnstile } from "../lib/turnstile";
 import { coalesceJoinRequest } from "../lib/joinCoalesce";
 import { errorJson, inviteCode, json, randomId, readJson } from "../lib/http";
 
@@ -26,13 +25,11 @@ const joinRequestSchema = z.object({
   inviteCode: z.string().trim().min(4).max(12),
   displayName: z.string().trim().min(2).max(32).optional(),
   idempotencyKey: z.string().min(8).max(80),
-  turnstileToken: z.string().optional(),
 });
 
 const joinAsGuestSchema = z.object({
   inviteCode: z.string().trim().min(4).max(12),
   displayName: z.string().trim().min(2).max(32),
-  turnstileToken: z.string().min(1).optional(),
   idempotencyKey: z.string().min(8).max(80),
 });
 
@@ -56,7 +53,7 @@ async function ensureJoinRequestInDo(
   }
 }
 
-/** Shared join-request create/coalesce (Turnstile already verified by caller). */
+/** Shared join-request create/coalesce. */
 async function submitJoinRequest(
   env: Env,
   user: { id: string; displayName: string },
@@ -371,8 +368,7 @@ export async function handleRooms(
         .first<{ response_json: string }>();
 
       if (cachedGuest) {
-        // Retry after successful Turnstile+create: reuse guest identity, mint session.
-        // Do NOT re-verify Turnstile (token already consumed).
+        // Retry after successful create: reuse guest identity, mint session.
         const prior = JSON.parse(cachedGuest.response_json) as {
           userId: string;
           displayName: string;
@@ -436,15 +432,6 @@ export async function handleRooms(
         .bind(parsed.data.inviteCode.toUpperCase())
         .first<{ id: string }>();
       if (!roomPreview) return errorJson(404, "Table not found.");
-
-      // Verify Turnstile exactly once for the combined guest+join flow.
-      const okTurnstile = await verifyTurnstile(
-        env,
-        parsed.data.turnstileToken,
-        request.headers.get("cf-connecting-ip"),
-        "join-as-guest",
-      );
-      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
       const guest = await createGuestUserAndSession(env, parsed.data.displayName);
       const joinRes = await submitJoinRequest(
@@ -519,14 +506,6 @@ export async function handleRooms(
 
     const parsed = await readJson(request, joinRequestSchema);
     if (!parsed.ok) return parsed.response;
-
-    const okTurnstile = await verifyTurnstile(
-      env,
-      parsed.data.turnstileToken,
-      request.headers.get("cf-connecting-ip"),
-      "join",
-    );
-    if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
     return submitJoinRequest(env, auth.user, parsed.data);
   }

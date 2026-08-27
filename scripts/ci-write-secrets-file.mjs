@@ -2,19 +2,13 @@
 /**
  * Write a temporary secrets file for `wrangler secret bulk` from CI env vars.
  * Never logs secret values.
- *
- * Set REQUIRE_TURNSTILE=1 to require TURNSTILE_SECRET_KEY (production).
  */
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 
 const out = process.argv[2] || ".ci-secrets.json";
 const required = ["SESSION_SECRET"];
-if (process.env.REQUIRE_TURNSTILE === "1") {
-  required.push("TURNSTILE_SECRET_KEY");
-}
 const optional = [
-  "TURNSTILE_SECRET_KEY",
   "REALTIMEKIT_API_TOKEN",
   "REALTIMEKIT_APP_ID",
   "REALTIMEKIT_PRESET_NAME",

@@ -1,7 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type MyRoom, type User } from "../../lib/api";
-import { TurnstileWidget } from "../auth/TurnstileWidget";
 import { PlayingCard } from "../table/PlayingCard";
 
 export function HomePage({
@@ -23,28 +22,12 @@ export function HomePage({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [myRooms, setMyRooms] = useState<MyRoom[]>([]);
-  const [siteKey, setSiteKey] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-  const [turnstileReset, setTurnstileReset] = useState(0);
   const [guestBusy, setGuestBusy] = useState(false);
-  const onToken = useCallback((token: string | null) => setTurnstileToken(token), []);
-
-  function resetTurnstile() {
-    setTurnstileToken(null);
-    setTurnstileReset((n) => n + 1);
-  }
 
   useEffect(() => {
     const fromUrl = searchParams.get("invite");
     if (fromUrl) setInvite(fromUrl.trim().toUpperCase());
   }, [searchParams]);
-
-  useEffect(() => {
-    void api
-      .config()
-      .then((cfg) => setSiteKey(cfg.turnstileSiteKey || null))
-      .catch(() => setSiteKey(null));
-  }, []);
 
   useEffect(() => {
     if (!user) {
@@ -79,12 +62,10 @@ export function HomePage({
         inviteCode: invite.trim().toUpperCase(),
         idempotencyKey: crypto.randomUUID(),
         displayName: user?.isGuest ? user.displayName : undefined,
-        turnstileToken: turnstileToken ?? undefined,
       });
       setMessage(res.message ?? "Waiting for the host");
       if (res.roomId) navigate(`/table/${res.roomId}`);
     } catch (e) {
-      resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not ask to join.");
     }
   }
@@ -97,13 +78,11 @@ export function HomePage({
         inviteCode: invite.trim().toUpperCase(),
         displayName: guestName.trim(),
         idempotencyKey: crypto.randomUUID(),
-        turnstileToken: turnstileToken ?? undefined,
       });
       onAuthed(result.user);
       setMessage(result.join.message ?? result.privacyNote ?? "Waiting for the host");
       if (result.join.roomId) navigate(`/table/${result.join.roomId}`);
     } catch (e) {
-      resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not join as guest.");
     } finally {
       setGuestBusy(false);
@@ -187,12 +166,6 @@ export function HomePage({
                 maxLength={32}
               />
             </div>
-            <TurnstileWidget
-              siteKey={siteKey}
-              onToken={onToken}
-              resetKey={turnstileReset}
-              action="join-as-guest"
-            />
             <div className="home-panel-actions">
               <button
                 className="btn btn-primary"
@@ -304,12 +277,6 @@ export function HomePage({
                   placeholder="ABC123"
                 />
               </div>
-              <TurnstileWidget
-                siteKey={siteKey}
-                onToken={onToken}
-                resetKey={turnstileReset}
-                action="join"
-              />
               <div className="home-panel-actions">
                 <button
                   className="btn btn-secondary"
