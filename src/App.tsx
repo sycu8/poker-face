@@ -1,10 +1,23 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
 import { api, type User } from "./lib/api";
 import { HomePage } from "./features/lobby/HomePage";
-import { AuthPage } from "./features/auth/AuthPage";
-import { TablePage } from "./features/table/TablePage";
 import { BuyMeACoffeeLink } from "./components/BuyMeACoffeeLink";
+
+const AuthPage = lazy(() =>
+  import("./features/auth/AuthPage").then((m) => ({ default: m.AuthPage })),
+);
+const TablePage = lazy(() =>
+  import("./features/table/TablePage").then((m) => ({ default: m.TablePage })),
+);
+
+function RouteFallback() {
+  return (
+    <div className="app-shell">
+      <p className="muted">Loading…</p>
+    </div>
+  );
+}
 
 type ThemeId = "felt" | "midnight" | "sunset";
 
@@ -58,7 +71,11 @@ export function App() {
   return (
     <div className="app-shell">
       <header className="app-header">
-        <Link to="/" className="brand-lockup" style={{ textDecoration: "none", color: "inherit" }}>
+        <Link
+          to="/"
+          className="brand-lockup"
+          style={{ textDecoration: "none", color: "inherit" }}
+        >
           <img src="/logo/poker-faces-mark.svg" alt="" width={48} height={48} />
           <div>
             <strong style={{ fontSize: "1.15rem" }}>Poker Faces</strong>
@@ -116,14 +133,19 @@ export function App() {
         </div>
       </header>
 
-      <Routes>
-        <Route path="/" element={<HomePage user={user} copy={copy} onAuthed={setUser} />} />
-        <Route path="/auth" element={<AuthPage onAuthed={setUser} />} />
-        <Route
-          path="/table/:roomId"
-          element={user ? <TablePage user={user} /> : <Navigate to="/auth" replace />}
-        />
-      </Routes>
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route
+            path="/"
+            element={<HomePage user={user} copy={copy} onAuthed={setUser} />}
+          />
+          <Route path="/auth" element={<AuthPage onAuthed={setUser} />} />
+          <Route
+            path="/table/:roomId"
+            element={user ? <TablePage user={user} /> : <Navigate to="/auth" replace />}
+          />
+        </Routes>
+      </Suspense>
 
       <footer className="app-footer">
         <p className="muted app-footer-copy">
