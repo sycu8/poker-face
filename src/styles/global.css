@@ -1202,6 +1202,7 @@ button {
 
 .actions .btn {
   flex: 0 1 auto;
+  min-height: 44px;
 }
 
 .actions input[type="number"] {
@@ -1213,6 +1214,150 @@ button {
   color: var(--ivory);
   padding: 0.5rem 0.75rem;
   text-align: center;
+}
+
+/* —— Mobile action dock —— */
+.action-dock {
+  display: none;
+}
+
+.action-dock__meta {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: var(--gold);
+  text-align: center;
+  margin-bottom: 0.45rem;
+}
+
+.action-dock__primary {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.action-dock__btn {
+  min-height: 44px;
+  min-width: 44px;
+  flex: 1 1 auto;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.action-dock__sizing {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+}
+
+.action-dock__input {
+  min-height: 44px;
+  width: 100%;
+  border-radius: 12px;
+  border: 1px solid #ffffff22;
+  background: #06140f;
+  color: var(--ivory);
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.action-dock__presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.action-dock__preset {
+  min-height: 44px;
+  flex: 1 1 calc(25% - 0.35rem);
+  font-size: 0.82rem;
+  font-weight: 700;
+  padding: 0.35rem 0.5rem;
+}
+
+.action-dock[data-disabled="true"] {
+  opacity: 0.72;
+}
+
+/* Dense rail for 7–10 player tables */
+.seats--dense .seat--rail {
+  max-width: 112px;
+  padding: 0.22rem 0.3rem;
+  gap: 0.08rem;
+}
+
+.seats--dense .seat--rail .name {
+  font-size: 0.72rem;
+  gap: 0.2rem;
+}
+
+.seats--dense .seat--rail .seat-name-text {
+  max-width: 4.6rem;
+  font-size: 0.7rem;
+}
+
+.seats--dense .seat--rail .stack {
+  font-size: 0.68rem;
+}
+
+.seats--dense .seat--rail .seat-status {
+  display: none;
+}
+
+.seats--dense .seat-host-actions {
+  display: none;
+}
+
+.seats--dense .seat--rail .playing-card--sm {
+  width: clamp(30px, 3.8vw, 40px);
+  height: clamp(44px, 5.4vw, 56px);
+}
+
+.table-page--dense .seat-host-actions {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .actions--desktop {
+    display: none;
+  }
+
+  .action-dock--mobile {
+    display: block;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 40;
+    margin: 0;
+    padding: 0.65rem max(0.75rem, env(safe-area-inset-left, 0px))
+      calc(0.65rem + env(safe-area-inset-bottom, 0px)) max(0.75rem, env(safe-area-inset-right, 0px));
+    background: linear-gradient(180deg, #0a1a14f2 0%, #07140ff8 40%, #07100dfc 100%);
+    border-top: 1px solid #f4bc5633;
+    box-shadow: 0 -12px 28px #0008;
+    backdrop-filter: blur(8px);
+  }
+
+  .table-page--dock {
+    padding-bottom: calc(8.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .table-page--dock .table-side-grid {
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
+  }
+
+  .table-page--dock .table-side-grid .panel {
+    /* Keep chat / voice / ledger / history clear of the sticky dock */
+    scroll-margin-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .table-felt {
+    margin-bottom: 1.25rem;
+  }
 }
 
 .app-header {

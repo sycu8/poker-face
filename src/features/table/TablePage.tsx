@@ -5,10 +5,12 @@ import { isBotUserId } from "../../lib/bots";
 import { SeatMicIndicator } from "../voice/SeatMicIndicator";
 import { VoicePanel } from "../voice/VoicePanel";
 import { VoiceSessionProvider } from "../voice/VoiceSession";
+import { ActionDock } from "./ActionDock";
 import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
 import { seatRingStyle, visualSeatIndex, seatRingPercents, dealOrderSeatIndexes } from "./seatLayout";
+import { useRoomSocket } from "./useRoomSocket";
 import {
   WinCelebration,
   winningBestFiveCodes,
@@ -68,6 +70,7 @@ interface GameView {
     canCheck: boolean;
     canCall: boolean;
     callAmount: number;
+    callIsAllIn?: boolean;
     canBet: boolean;
     canRaise: boolean;
     minBet: number;
@@ -75,6 +78,7 @@ interface GameView {
     minRaiseTo: number;
     maxRaiseTo: number;
     canAllIn: boolean;
+    allInAmount?: number;
   } | null;
   config: {
     smallBlind: number;
@@ -162,10 +166,10 @@ export function TablePage({ user }: { user: User }) {
     dealerSeat: number;
     targets: number[];
   } | null>(null);
-  const wsRef = useRef<WebSocket | null>(null);
   const lastAskAtRef = useRef(0);
   const prevHandRef = useRef(0);
   const dealPrimedRef = useRef(false);
+  const disconnectRef = useRef<() => void>(() => {});
   const turnLeft = useTurnSeconds(view?.turnDeadlineMs ?? null);
 
   const refreshAccess = useCallback(async () => {
@@ -199,26 +203,14 @@ export function TablePage({ user }: { user: User }) {
     return "rejected" as const;
   }, [roomId]);
 
-  const connect = useCallback(() => {
-    const proto = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${proto}://${location.host}/ws/rooms/${roomId}`);
-    wsRef.current = ws;
-    ws.onopen = () => setStatus("Connected");
-    ws.onclose = () => {
-      setStatus("Rejoining your seat…");
-      setTimeout(() => {
-        void refreshAccess().then((a) => {
-          if (a === "member") connect();
-        });
-      }, 1200);
-    };
-    ws.onmessage = (ev) => {
-      const msg = JSON.parse(ev.data as string) as {
+  const handleSocketMessage = useCallback(
+    (data: unknown) => {
+      const msg = data as {
         type: string;
         view?: GameView;
         meta?: RoomMeta;
         chat?: ChatMessage[];
-        pendingJoins?: typeof pendingJoins;
+        pendingJoins?: Array<{ requestId: string; userId: string; displayName: string }>;
         startRequests?: {
           count: number;
           latestDisplayName: string | null;
@@ -240,9 +232,6 @@ export function TablePage({ user }: { user: User }) {
         if (msg.meta) setMeta((m) => ({ ...m, ...msg.meta! }));
         if (msg.chat) setChat(msg.chat);
         if (msg.pendingJoins) setPendingJoins(msg.pendingJoins);
-        else if (msg.pendingJoins === undefined && msg.meta?.hostUserId !== user.id) {
-          /* keep */
-        }
         if (msg.startRequests) setStartRequests(msg.startRequests);
         else if (msg.view.street !== "waiting") {
           setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
@@ -256,7 +245,7 @@ export function TablePage({ user }: { user: User }) {
       if (msg.type === "table_closed") {
         setStatus(typeof msg.message === "string" ? msg.message : "Table closed.");
         setAccess("rejected");
-        ws.close();
+        disconnectRef.current();
         return;
       }
       if (msg.type === "chat" && msg.message) {
@@ -298,8 +287,28 @@ export function TablePage({ user }: { user: User }) {
         }
       }
       if (msg.type === "error" && msg.error) setStatus(msg.error);
-    };
-  }, [roomId, refreshAccess, user.id]);
+    },
+    [user.id],
+  );
+
+  const beforeReconnect = useCallback(async () => {
+    setStatus("Rejoining your seat…");
+    const a = await refreshAccess();
+    return a === "member";
+  }, [refreshAccess]);
+
+  const { connectionState, actionsEnabled, send, disconnect } = useRoomSocket({
+    roomId,
+    enabled: access === "member",
+    onMessage: handleSocketMessage,
+    beforeReconnect,
+  });
+  disconnectRef.current = disconnect;
+
+  useEffect(() => {
+    if (connectionState === "reconnecting") setStatus("Rejoining your seat…");
+    else if (connectionState === "offline" && access === "member") setStatus("Connecting…");
+  }, [connectionState, access]);
 
   useEffect(() => {
     let cancelled = false;
@@ -308,13 +317,12 @@ export function TablePage({ user }: { user: User }) {
       try {
         const a = await refreshAccess();
         if (cancelled) return;
-        if (a === "member") connect();
         if (a === "pending") {
           poll = window.setInterval(() => {
             void refreshAccess().then((next) => {
-              if (next === "member") {
+              if (next === "member" || next === "rejected") {
                 if (poll) window.clearInterval(poll);
-                connect();
+                poll = undefined;
               }
             });
           }, 2000);
@@ -329,13 +337,10 @@ export function TablePage({ user }: { user: User }) {
     return () => {
       cancelled = true;
       if (poll) window.clearInterval(poll);
-      wsRef.current?.close();
     };
-  }, [connect, refreshAccess]);
+  }, [refreshAccess]);
 
-  const send = (payload: unknown) => {
-    wsRef.current?.send(JSON.stringify(payload));
-  };
+  const actionsLocked = !actionsEnabled || connectionState === "reconnecting";
 
   const legal = view?.legalActions;
   useEffect(() => {
@@ -664,7 +669,15 @@ export function TablePage({ user }: { user: User }) {
 
   return (
     <VoiceSessionProvider roomId={roomId!}>
-    <section>
+    <section
+      className={[
+        "table-page",
+        legal ? "table-page--dock" : "",
+        seatCount >= 7 ? "table-page--dense" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <div className="table-top">
         <div className="table-top-meta">
           <h1>{meta?.roomName ?? "Private table"}</h1>
@@ -988,7 +1001,10 @@ export function TablePage({ user }: { user: User }) {
               })}
             </div>
           ) : null}
-          <div className="seats" role="list">
+          <div
+            className={["seats", seatCount >= 7 ? "seats--dense" : ""].filter(Boolean).join(" ")}
+            role="list"
+          >
             {seats.map((seat) => {
               const visual = visualSeatIndex(seat.seatIndex, seatCount, anchorSeatIndex);
               const isHero = seat.isViewer;
@@ -1126,102 +1142,120 @@ export function TablePage({ user }: { user: User }) {
         </div>
 
         {legal ? (
-          <div className="actions actions--hero" aria-label="Your actions">
-            {legal.canFold ? (
-              <button
-                className="btn btn-danger"
-                type="button"
-                onClick={() =>
-                  send({
-                    type: "action",
-                    action: "fold",
-                    expectedVersion: view?.sequence,
-                    idempotencyKey: crypto.randomUUID(),
-                  })
-                }
-              >
-                Fold
-              </button>
-            ) : null}
-            {legal.canCheck ? (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() =>
-                  send({
-                    type: "action",
-                    action: "check",
-                    expectedVersion: view?.sequence,
-                    idempotencyKey: crypto.randomUUID(),
-                  })
-                }
-              >
-                Check
-              </button>
-            ) : null}
-            {legal.canCall ? (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() =>
-                  send({
-                    type: "action",
-                    action: "call",
-                    expectedVersion: view?.sequence,
-                    idempotencyKey: crypto.randomUUID(),
-                  })
-                }
-              >
-                Call {legal.callAmount}
-              </button>
-            ) : null}
-            {legal.canBet || legal.canRaise ? (
-              <>
-                <label className="sr-only" htmlFor="raiseTo">
-                  Raise to
-                </label>
-                <input
-                  id="raiseTo"
-                  type="number"
-                  min={legal.canBet ? legal.minBet : legal.minRaiseTo}
-                  max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
-                  value={raiseTo}
-                  onChange={(e) => setRaiseTo(Number(e.target.value))}
-                />
+          <>
+            <div className="actions actions--hero actions--desktop" aria-label="Your actions">
+              {legal.canFold ? (
                 <button
-                  className="btn btn-primary"
+                  className="btn btn-danger"
                   type="button"
+                  disabled={actionsLocked}
                   onClick={() =>
                     send({
                       type: "action",
-                      action: legal.canBet ? "bet" : "raise",
-                      amount: raiseTo,
+                      action: "fold",
                       expectedVersion: view?.sequence,
                       idempotencyKey: crypto.randomUUID(),
                     })
                   }
                 >
-                  {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
+                  Fold
                 </button>
-              </>
-            ) : null}
-            {legal.canAllIn ? (
-              <button
-                className="btn btn-secondary"
-                type="button"
-                onClick={() =>
-                  send({
-                    type: "action",
-                    action: "all_in",
-                    expectedVersion: view?.sequence,
-                    idempotencyKey: crypto.randomUUID(),
-                  })
-                }
-              >
-                All-in
-              </button>
-            ) : null}
-          </div>
+              ) : null}
+              {legal.canCheck ? (
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={actionsLocked}
+                  onClick={() =>
+                    send({
+                      type: "action",
+                      action: "check",
+                      expectedVersion: view?.sequence,
+                      idempotencyKey: crypto.randomUUID(),
+                    })
+                  }
+                >
+                  Check
+                </button>
+              ) : null}
+              {legal.canCall ? (
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={actionsLocked}
+                  onClick={() =>
+                    send({
+                      type: "action",
+                      action: "call",
+                      expectedVersion: view?.sequence,
+                      idempotencyKey: crypto.randomUUID(),
+                    })
+                  }
+                >
+                  {legal.callIsAllIn ? `All-in ${legal.callAmount}` : `Call ${legal.callAmount}`}
+                </button>
+              ) : null}
+              {legal.canBet || legal.canRaise ? (
+                <>
+                  <label className="sr-only" htmlFor="raiseTo">
+                    Raise to
+                  </label>
+                  <input
+                    id="raiseTo"
+                    type="number"
+                    min={legal.canBet ? legal.minBet : legal.minRaiseTo}
+                    max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
+                    value={raiseTo}
+                    disabled={actionsLocked}
+                    onChange={(e) => setRaiseTo(Number(e.target.value))}
+                  />
+                  <button
+                    className="btn btn-primary"
+                    type="button"
+                    disabled={actionsLocked}
+                    onClick={() =>
+                      send({
+                        type: "action",
+                        action: legal.canBet ? "bet" : "raise",
+                        amount: raiseTo,
+                        expectedVersion: view?.sequence,
+                        idempotencyKey: crypto.randomUUID(),
+                      })
+                    }
+                  >
+                    {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
+                  </button>
+                </>
+              ) : null}
+              {legal.canAllIn ? (
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  disabled={actionsLocked}
+                  onClick={() =>
+                    send({
+                      type: "action",
+                      action: "all_in",
+                      expectedVersion: view?.sequence,
+                      idempotencyKey: crypto.randomUUID(),
+                    })
+                  }
+                >
+                  All-in
+                </button>
+              ) : null}
+            </div>
+            <ActionDock
+              className="action-dock--mobile"
+              legal={legal}
+              pot={view?.pot ?? 0}
+              sequence={view?.sequence}
+              disabled={actionsLocked}
+              onSend={send}
+              raiseTo={raiseTo}
+              onRaiseToChange={setRaiseTo}
+            />
+          </>
         ) : null}
       </div>
 
