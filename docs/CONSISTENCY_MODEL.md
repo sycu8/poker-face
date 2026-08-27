@@ -18,7 +18,7 @@ Gameplay state MUST NOT move to D1.
 
 Mutating flows that touch both stores:
 
-1. **Validate** auth + rate limits + Turnstile (Worker).
+1. **Validate** auth + rate limits (Worker).
 2. **Idempotency claim** in D1 when the operation has a client key.
 3. **Durable Object mutation** (authoritative gameplay / seat / leave / kick / join card).
 4. **D1 metadata update** via `applyMembershipOrEnqueue` (seat / spectator / leave / kick).
@@ -51,7 +51,7 @@ Mutating flows that touch both stores:
 ## 4. Retry / reconciliation
 
 - Client retries use the same `idempotencyKey`.
-- Guest `/join-as-guest` scopes identity under `guest-join` + key (no duplicate guests; Turnstile verified once).
+- Guest `/join-as-guest` scopes identity under `guest-join` + key (no duplicate guests).
 - Cron (`scheduled`) flushes bounded `membership_ops`.
 - Poison pills drop after 8 failed attempts.
 

@@ -10,7 +10,7 @@ Evidence baseline: `npm test` → **124 passed** · lint / format / typecheck / 
 | Poker correctness           |      25 |
 | State integrity & realtime  |      20 |
 | Security & abuse resistance |      15 |
-| Auth & Turnstile            |      10 |
+| Auth                        |      10 |
 | CI/CD & rollback            |      10 |
 | Observability & operations  |       8 |
 | Mobile UX                   |       7 |
@@ -36,8 +36,8 @@ Statuses:
 | --------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------- |
 | Poker correctness           | 23 / 25 | HU, short all-in, side pots, TDA odd chip, 3→2 HU, `validateAndResolveAction` zero-mutation rejects                                      |
 | State integrity & realtime  | 17 / 20 | Join re-ensure, approve idempotent, `membership_ops` outbox, `safeSend`, voice single-flight                                             |
-| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; Turnstile preserved                                                                         |
-| Auth & Turnstile            |  9 / 10 | Live site key on `/api/config`; dummy PBKDF2=300k; guest idempotency; secret values not readable via API (owner attested)                |
+| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; rate limits + Origin checks                                                                 |
+| Auth                        |  8 / 10 | Dummy PBKDF2=300k; guest idempotency; Turnstile removed (rate limits remain); secret values not readable via API (owner attested)        |
 | CI/CD & rollback            |  9 / 10 | Full CI in deploy validate; **canonical health verified 200** (no Wrangler false-green path); Environment required reviewers still empty |
 | Observability & operations  |   5 / 8 | Analytics + session purge + membership flush cron; limited alerting                                                                      |
 | Mobile UX                   |   5 / 7 | Existing table UX unchanged this pass                                                                                                    |
@@ -53,13 +53,12 @@ Capped verdict (remaining P0): **STAGING READY, NOT PRODUCTION READY**.
 
 ## Manual actions verification (2026-08-27)
 
-| Action                                               | Owner claim | Agent verification                                                                                               |
-| ---------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
-| WAF / Bot exception for exact `GET /api/health`      | Completed   | **VERIFIED indirectly** — `https://poker.orangecloud.vn/api/health` → HTTP 200 + `ok` + `environment:production` |
-| Canonical health must succeed                        | Completed   | **VERIFIED** — body `{"ok":true,"service":"poker-faces","environment":"production",...}`                         |
-| Production Turnstile site key                        | Completed   | **VERIFIED** — `/api/config` returns non-empty `turnstileSiteKey`                                                |
-| `SESSION_SECRET` / `TURNSTILE_SECRET_KEY` in Actions | Completed   | **NOT READABLE** — Actions secrets API returns 403 for this token; owner attestation only                        |
-| GitHub Environment `production` required reviewers   | Completed   | **NOT VERIFIED** — API shows `protection_rules: []` and `deployment_branch_policy: null`                         |
+| Action                                             | Owner claim | Agent verification                                                                                               |
+| -------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| WAF / Bot exception for exact `GET /api/health`    | Completed   | **VERIFIED indirectly** — `https://poker.orangecloud.vn/api/health` → HTTP 200 + `ok` + `environment:production` |
+| Canonical health must succeed                      | Completed   | **VERIFIED** — body `{"ok":true,"service":"poker-faces","environment":"production",...}`                         |
+| `SESSION_SECRET` in Actions                        | Completed   | **NOT READABLE** — Actions secrets API returns 403 for this token; owner attestation only                        |
+| GitHub Environment `production` required reviewers | Completed   | **NOT VERIFIED** — API shows `protection_rules: []` and `deployment_branch_policy: null`                         |
 
 ### Remaining P0
 
@@ -89,5 +88,5 @@ Until that rule is visible, production promotion is not gated by a human approva
 - [x] Cloudflare WAF path exception for `/api/health` only (inferred from successful probe)
 - [x] Canonical `https://poker.orangecloud.vn/api/health` returns 200 + `ok` + `environment:production`
 - [ ] Production Environment required reviewers enabled (**API still empty**)
-- [x] Production secrets present (SESSION, Turnstile) — **owner attested; agent cannot list secrets**
+- [x] Production secrets present (SESSION) — **owner attested; agent cannot list secrets**
 - [ ] Explicit product owner approval to promote

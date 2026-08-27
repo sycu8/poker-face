@@ -11,7 +11,6 @@
   "vars": {
     "ENVIRONMENT": "local",
     "APP_ORIGIN": "http://localhost:5173",
-    "TURNSTILE_SITE_KEY": "1x00000000000000000000AA",
     "REALTIMEKIT_APP_ID": "6867ec48-6a1e-43b9-b940-a542afad90d3",
     "REALTIMEKIT_PRESET_NAME": "group_call_participant",
     "TURN_KEY_ID": "c07d4ea34ad3c340d3c96ab9781dd477",
@@ -80,7 +79,6 @@
       "vars": {
         "ENVIRONMENT": "staging",
         "APP_ORIGIN": "https://staging.poker.orangecloud.vn",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAAEdr8aPRBkAqIMjOkY-PC2URMow",
         "REALTIMEKIT_APP_ID": "6867ec48-6a1e-43b9-b940-a542afad90d3",
         "REALTIMEKIT_PRESET_NAME": "group_call_participant",
         "TURN_KEY_ID": "c07d4ea34ad3c340d3c96ab9781dd477",
@@ -141,7 +139,6 @@
       "vars": {
         "ENVIRONMENT": "production",
         "APP_ORIGIN": "https://poker.orangecloud.vn",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAAEdr8aPRBkAqIMjOkY-PC2URMow",
         "REALTIMEKIT_APP_ID": "6867ec48-6a1e-43b9-b940-a542afad90d3",
         "REALTIMEKIT_PRESET_NAME": "group_call_participant",
         "TURN_KEY_ID": "c07d4ea34ad3c340d3c96ab9781dd477",

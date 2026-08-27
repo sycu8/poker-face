@@ -1778,7 +1778,3 @@ html[data-theme="sunset"] {
   animation: rise 280ms ease both;
   border-color: #f4bc5644;
 }
-
-.turnstile-wrap {
-  min-height: 65px;
-}

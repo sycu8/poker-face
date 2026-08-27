@@ -9,14 +9,11 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | `CLOUDFLARE_API_TOKEN`                                                     | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit)                                                                                            |
 | `CLOUDFLARE_ACCOUNT_ID`                                                    | Cloudflare account id                                                                                                                                           |
 | `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. **Production deploy fails** if missing (no ephemeral generation). Staging may skip bulk and retain existing Worker secrets with a warning. |
-| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify. **Required for production deploy.**                                                                                                       |
-| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars.                                                                                                           |
 
 ## Recommended secrets
 
 | Secret                                                   | Purpose                                                                                                                   |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `TURNSTILE_SECRET_KEY_STAGING`                           | Staging Turnstile siteverify                                                                                              |
 | `REALTIMEKIT_API_TOKEN`                                  | Voice: dedicated Cloudflare API token with **Realtime Admin**. Do **not** fall back to the deploy `CLOUDFLARE_API_TOKEN`. |
 | `REALTIMEKIT_APP_ID`                                     | RealtimeKit app id (can also be a variable; also set as Wrangler var)                                                     |
 | `REALTIMEKIT_PRESET_NAME`                                | RealtimeKit preset for participants (default `group_call_participant`)                                                    |
@@ -30,13 +27,12 @@ Voice setup details: [`docs/VOICE_SETUP.md`](VOICE_SETUP.md).
 
 ## Optional repository / environment variables
 
-| Variable                                     | Default                                |
-| -------------------------------------------- | -------------------------------------- |
-| `APP_ORIGIN_STAGING`                         | `https://staging.poker.orangecloud.vn` |
-| `APP_ORIGIN_PRODUCTION`                      | `https://poker.orangecloud.vn`         |
-| `TURNSTILE_SITE_KEY_STAGING` / `_PRODUCTION` | production must be non-empty           |
-| `REALTIMEKIT_APP_ID`                         | —                                      |
-| `REALTIMEKIT_PRESET_NAME`                    | `group_call_participant`               |
+| Variable                  | Default                                |
+| ------------------------- | -------------------------------------- |
+| `APP_ORIGIN_STAGING`      | `https://staging.poker.orangecloud.vn` |
+| `APP_ORIGIN_PRODUCTION`   | `https://poker.orangecloud.vn`         |
+| `REALTIMEKIT_APP_ID`      | —                                      |
+| `REALTIMEKIT_PRESET_NAME` | `group_call_participant`               |
 
 ## GitHub Environments
 

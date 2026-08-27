@@ -28,7 +28,7 @@ Static assets ship with the Worker bundle (Vite + `@cloudflare/vite-plugin`); ro
 
 ## Secrets & vars
 
-Rollback **does not** revert secrets. If a bad deploy changed only code, secrets (`SESSION_SECRET`, Turnstile, RealtimeKit) stay as configured.
+Rollback **does not** revert secrets. If a bad deploy changed only code, secrets (`SESSION_SECRET`, RealtimeKit) stay as configured.
 
 Verify after rollback:
 

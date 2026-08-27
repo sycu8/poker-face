@@ -15,7 +15,7 @@ Thanks for helping improve Poker Faces. This project is open source under the [M
 - Run `npm run typecheck`, `npm run test`, and `npm run lint`.
 - Keep changes focused — one logical fix or feature per PR.
 - Match existing code style and naming in the files you touch.
-- Do not commit secrets (`.dev.vars`, API tokens, Turnstile keys).
+- Do not commit secrets (`.dev.vars`, API tokens).
 
 ## Scope notes
 

@@ -2,7 +2,7 @@
 /**
  * CI helper: ensure Cloudflare resources exist and patch wrangler.jsonc IDs.
  * Requires CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID.
- * Optional: D1_DATABASE_ID, KV_NAMESPACE_ID, TURNSTILE_SITE_KEY, APP_ORIGIN
+ * Optional: D1_DATABASE_ID, KV_NAMESPACE_ID, APP_ORIGIN
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -208,7 +208,6 @@ configText = configText
   .replaceAll(names.placeholderD1, d1Id)
   .replaceAll(names.placeholderKv, kvId);
 
-const turnstileSiteKey = process.env.TURNSTILE_SITE_KEY ?? "";
 const appOrigin = process.env.APP_ORIGIN;
 
 if (appOrigin) {
@@ -216,20 +215,6 @@ if (appOrigin) {
     new RegExp(`("ENVIRONMENT": "${envName}"[\\s\\S]*?"APP_ORIGIN": ")([^"]*)(")`),
     `$1${appOrigin}$3`,
   );
-}
-if (turnstileSiteKey) {
-  // Replace only within the target env block.
-  const envMarker = `"ENVIRONMENT": "${envName}"`;
-  const idx = configText.indexOf(envMarker);
-  if (idx !== -1) {
-    const before = configText.slice(0, idx);
-    let after = configText.slice(idx);
-    after = after.replace(
-      `"TURNSTILE_SITE_KEY": ""`,
-      `"TURNSTILE_SITE_KEY": ${JSON.stringify(turnstileSiteKey)}`,
-    );
-    configText = before + after;
-  }
 }
 
 writeFileSync(wranglerPath, configText);

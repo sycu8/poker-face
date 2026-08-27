@@ -7,7 +7,7 @@ Play-money Texas Hold’em improvements aimed at Poker Now–style friend tables
 Friends can join from an invite **without a full account**:
 
 1. Open the home page (optionally `/?invite=CODE`) or `/auth?mode=guest&invite=CODE`.
-2. Enter a **display name** and continue as guest (Turnstile when configured).
+2. Enter a **display name** and continue as guest.
 3. Server creates a short-lived guest user (`users.is_guest = 1`) and a **24h** session cookie (`pf_session`).
 4. Guest asks to join with the invite code; host approves to a seat or as **spectator**.
 5. Guests can play chips, chat, and voice when configured.
