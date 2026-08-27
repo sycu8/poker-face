@@ -8,9 +8,9 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`                                                     | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit)                                                  |
 | `CLOUDFLARE_ACCOUNT_ID`                                                    | Cloudflare account id                                                                                                 |
-| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. **Required** — deploy fails if missing (no ephemeral generation).                                |
-| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify (**required for production**)                                                                    |
-| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars (**required for production**; empty after prepare fails the job) |
+| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. When set, deploy uploads it via `wrangler secret bulk`. When unset, deploy **skips** secret bulk and retains existing Worker secrets (never generates ephemeral values). |
+| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify. Recommended for production; if unset, existing Worker secret is retained.                                                                    |
+| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars. Empty values warn but no longer hard-fail the job.                                                          |
 
 ## Recommended secrets
 
