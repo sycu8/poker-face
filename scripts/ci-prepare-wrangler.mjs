@@ -204,16 +204,16 @@ ensureQueue(names.queue);
 ensureQueue(names.dlq);
 
 let configText = readFileSync(wranglerPath, "utf8");
-configText = configText.replaceAll(names.placeholderD1, d1Id).replaceAll(names.placeholderKv, kvId);
+configText = configText
+  .replaceAll(names.placeholderD1, d1Id)
+  .replaceAll(names.placeholderKv, kvId);
 
 const turnstileSiteKey = process.env.TURNSTILE_SITE_KEY ?? "";
 const appOrigin = process.env.APP_ORIGIN;
 
 if (appOrigin) {
   configText = configText.replace(
-    new RegExp(
-      `("ENVIRONMENT": "${envName}"[\\s\\S]*?"APP_ORIGIN": ")([^"]*)(")`,
-    ),
+    new RegExp(`("ENVIRONMENT": "${envName}"[\\s\\S]*?"APP_ORIGIN": ")([^"]*)(")`),
     `$1${appOrigin}$3`,
   );
 }
@@ -224,7 +224,10 @@ if (turnstileSiteKey) {
   if (idx !== -1) {
     const before = configText.slice(0, idx);
     let after = configText.slice(idx);
-    after = after.replace(`"TURNSTILE_SITE_KEY": ""`, `"TURNSTILE_SITE_KEY": ${JSON.stringify(turnstileSiteKey)}`);
+    after = after.replace(
+      `"TURNSTILE_SITE_KEY": ""`,
+      `"TURNSTILE_SITE_KEY": ${JSON.stringify(turnstileSiteKey)}`,
+    );
     configText = before + after;
   }
 }

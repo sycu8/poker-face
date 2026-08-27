@@ -2,10 +2,11 @@ import type { Env } from "./env";
 import { handleAuth } from "./auth/passwordAuth";
 import { handleRooms } from "./routes/rooms";
 import { handleVoice } from "./voice/realtimekit";
-import { requireUser } from "./auth/session";
+import { purgeExpiredSessions, requireUser } from "./auth/session";
 import { readPublicConfig } from "./lib/configKv";
 import { requireActiveMember } from "./lib/membership";
 import { errorJson, json } from "./lib/http";
+import { rejectDisallowedOrigin, requiresOriginCheck } from "./lib/origin";
 import { RoomDurableObject } from "./room/RoomDurableObject";
 
 export { RoomDurableObject };
@@ -43,10 +44,7 @@ function withSecurityHeaders(response: Response): Response {
   });
 }
 
-async function handleArchiveBatch(
-  batch: MessageBatch,
-  env: Env,
-): Promise<void> {
+async function handleArchiveBatch(batch: MessageBatch, env: Env): Promise<void> {
   for (const msg of batch.messages) {
     try {
       const body = msg.body as {
@@ -124,6 +122,11 @@ export default {
       );
     }
 
+    if (requiresOriginCheck(request, url.pathname)) {
+      const originReject = rejectDisallowedOrigin(request, env.APP_ORIGIN);
+      if (originReject) return withSecurityHeaders(originReject);
+    }
+
     if (url.pathname === "/api/config") {
       const cfg = await readPublicConfig(env);
       return withSecurityHeaders(json(cfg));
@@ -164,5 +167,26 @@ export default {
 
   async queue(batch: MessageBatch, env: Env): Promise<void> {
     await handleArchiveBatch(batch, env);
+  },
+
+  /**
+   * Cron: purge expired / old-revoked sessions.
+   * Production/staging triggers every 6 hours (see wrangler.jsonc crons).
+   */
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    void ctx;
+    try {
+      const result = await purgeExpiredSessions(env, 100);
+      console.log("purgeExpiredSessions", result.deleted);
+    } catch (err) {
+      console.error(
+        "purgeExpiredSessions failed",
+        err instanceof Error ? err.message : err,
+      );
+    }
   },
 } satisfies ExportedHandler<Env>;

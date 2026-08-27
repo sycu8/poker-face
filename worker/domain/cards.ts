@@ -45,8 +45,11 @@ export function buildDeck(): Card[] {
   return deck;
 }
 
-/** Unbiased Fisher–Yates using crypto.getRandomValues. */
-export function shuffleDeck(deck: Card[], randomBytes?: (n: number) => Uint32Array): Card[] {
+/** Unbiased Fisher–Yates using crypto.getRandomValues (or injected source for tests). */
+export function shuffleDeck(
+  deck: Card[],
+  randomBytes?: (n: number) => Uint32Array,
+): Card[] {
   const out = [...deck];
   const get =
     randomBytes ??
@@ -55,17 +58,13 @@ export function shuffleDeck(deck: Card[], randomBytes?: (n: number) => Uint32Arr
       crypto.getRandomValues(buf);
       return buf;
     });
-  const rand = get(out.length);
   for (let i = out.length - 1; i > 0; i--) {
-    // Rejection sampling for unbiased index in [0, i]
+    // Rejection sampling for unbiased index in [0, i] — all draws use `get`.
     const max = 0x100000000;
     const limit = max - (max % (i + 1));
-    let x = rand[i]!;
-    // If out of range, draw again (rare); fall back to modulo only after re-draw
-    if (x >= limit) {
-      const extra = new Uint32Array(1);
-      crypto.getRandomValues(extra);
-      x = extra[0]!;
+    let x = get(1)[0]!;
+    while (x >= limit) {
+      x = get(1)[0]!;
     }
     const j = x % (i + 1);
     const tmp = out[i]!;

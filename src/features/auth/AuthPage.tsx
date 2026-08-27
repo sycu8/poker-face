@@ -129,7 +129,11 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
     <section className="hero" style={{ justifyItems: "center", textAlign: "center" }}>
       <h1>{title}</h1>
       <p style={{ marginInline: "auto" }}>{subtitle}</p>
-      <form className="panel auth-panel" onSubmit={(e) => void submit(e)} style={{ textAlign: "left" }}>
+      <form
+        className="panel auth-panel"
+        onSubmit={(e) => void submit(e)}
+        style={{ textAlign: "left" }}
+      >
         {mode !== "reset" && mode !== "guest" ? (
           <div className="cta-row auth-mode-tabs" role="tablist" aria-label="Auth mode">
             <button
@@ -169,12 +173,15 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
               minLength={2}
               maxLength={32}
             />
-            <span className="muted">Guest names are not accounts. Session lasts 24 hours.</span>
+            <span className="muted">
+              Guest names are not accounts. Session lasts 24 hours.
+            </span>
           </div>
         ) : mode === "reset" ? (
           <p className="muted" role="status">
-            For security, passwords can no longer be changed with only a username and email.
-            Sign in with your current password, or create a new account if you lost access.
+            For security, passwords can no longer be changed with only a username and
+            email. Sign in with your current password, or create a new account if you lost
+            access.
           </p>
         ) : (
           <>
@@ -244,7 +251,9 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             </div>
           </>
         )}
-        {mode !== "reset" ? <TurnstileWidget siteKey={siteKey} onToken={onToken} /> : null}
+        {mode !== "reset" ? (
+          <TurnstileWidget siteKey={siteKey} onToken={onToken} />
+        ) : null}
         {error ? (
           <p role="alert" style={{ color: "var(--danger)", textAlign: "center" }}>
             {error}
@@ -292,7 +301,11 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             </p>
             <p className="muted auth-switch">
               New here?{" "}
-              <button type="button" disabled={busy} onClick={() => switchMode("register")}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => switchMode("register")}
+              >
                 Sign up
               </button>
             </p>

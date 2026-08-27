@@ -26,10 +26,18 @@ export function VoicePanel() {
           </button>
         ) : (
           <>
-            <button className="btn btn-secondary" type="button" onClick={() => void toggleMute()}>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => void toggleMute()}
+            >
               {muted ? "Unmute" : "Mute"}
             </button>
-            <button className="btn btn-secondary" type="button" onClick={() => void leaveVoice()}>
+            <button
+              className="btn btn-secondary"
+              type="button"
+              onClick={() => void leaveVoice()}
+            >
               Leave voice
             </button>
           </>

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { Env } from "../env";
-import { requireUser } from "../auth/session";
+import { createGuestUserAndSession } from "../auth/passwordAuth";
+import { GUEST_SESSION_TTL_MS, requireUser, sessionCookieHeader } from "../auth/session";
 import { validateConfigInput } from "../domain/config";
 import { writeAnalytics } from "../lib/analytics";
 import { requireActiveMember } from "../lib/membership";
@@ -21,6 +22,121 @@ const joinRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
   turnstileToken: z.string().optional(),
 });
+
+const joinAsGuestSchema = z.object({
+  inviteCode: z.string().trim().min(4).max(12),
+  displayName: z.string().trim().min(2).max(32),
+  turnstileToken: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(8).max(80),
+});
+
+/** Shared join-request create/coalesce (Turnstile already verified by caller). */
+async function submitJoinRequest(
+  env: Env,
+  user: { id: string; displayName: string },
+  data: {
+    inviteCode: string;
+    displayName?: string;
+    idempotencyKey: string;
+  },
+): Promise<Response> {
+  const existing = await env.DB.prepare(
+    `SELECT response_json FROM idempotency_keys WHERE scope = ? AND key = ?`,
+  )
+    .bind(`join:${user.id}`, data.idempotencyKey)
+    .first<{ response_json: string }>();
+  if (existing) return json(JSON.parse(existing.response_json));
+
+  const room = await env.DB.prepare(
+    `SELECT * FROM rooms WHERE invite_code = ? AND status = 'open'`,
+  )
+    .bind(data.inviteCode.toUpperCase())
+    .first<{
+      id: string;
+      host_user_id: string;
+      name: string;
+    }>();
+  if (!room) return errorJson(404, "Table not found.");
+
+  const member = await env.DB.prepare(
+    `SELECT status FROM room_members WHERE room_id = ? AND user_id = ?`,
+  )
+    .bind(room.id, user.id)
+    .first<{ status: string }>();
+
+  const pendingExisting = await env.DB.prepare(
+    `SELECT id FROM join_requests
+     WHERE room_id = ? AND user_id = ? AND status = 'pending'
+     ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(room.id, user.id)
+    .first<{ id: string }>();
+
+  const requestId = randomId("jr");
+  const coalesced = coalesceJoinRequest({
+    memberStatus: member?.status,
+    pendingRequestId: pendingExisting?.id,
+    newRequestId: requestId,
+  });
+  const now = Date.now();
+  const displayName = data.displayName ?? user.displayName;
+
+  if (coalesced.status === "approved") {
+    return json({ status: "approved", roomId: room.id, message: coalesced.message });
+  }
+
+  if (pendingExisting && coalesced.requestId === pendingExisting.id) {
+    const payload = {
+      status: "pending" as const,
+      requestId: pendingExisting.id,
+      roomId: room.id,
+      message: coalesced.message,
+    };
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO idempotency_keys (scope, key, response_json, created_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+      .bind(`join:${user.id}`, data.idempotencyKey, JSON.stringify(payload), now)
+      .run();
+    return json(payload);
+  }
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO join_requests
+       (id, room_id, user_id, display_name, status, idempotency_key, created_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+    )
+      .bind(requestId, room.id, user.id, displayName, data.idempotencyKey, now)
+      .run();
+  } catch {
+    return errorJson(409, "Duplicate join request.");
+  }
+
+  const stub = env.ROOM.get(env.ROOM.idFromName(room.id));
+  await stub.fetch("https://room/join-request", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      requestId,
+      userId: user.id,
+      displayName,
+    }),
+  });
+
+  const payload = {
+    status: "pending",
+    requestId,
+    roomId: room.id,
+    message: "Waiting for the host",
+  };
+  await env.DB.prepare(
+    `INSERT INTO idempotency_keys (scope, key, response_json, created_at) VALUES (?, ?, ?, ?)`,
+  )
+    .bind(`join:${user.id}`, data.idempotencyKey, JSON.stringify(payload), now)
+    .run();
+  return json(payload);
+}
 
 const decideSchema = z.object({
   requestId: z.string().min(1),
@@ -189,6 +305,71 @@ export async function handleRooms(
     });
   }
 
+  if (path === "/api/rooms/join-as-guest" && request.method === "POST") {
+    try {
+      if (!env.SESSION_SECRET) {
+        return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
+      }
+      const ip = request.headers.get("cf-connecting-ip") ?? "anon";
+      const limited = await env.JOIN_RATE_LIMIT.limit({ key: `guest-join:${ip}` });
+      if (!limited.success) return errorJson(429, "Too many join requests.");
+
+      const parsed = await readJson(request, joinAsGuestSchema);
+      if (!parsed.ok) return parsed.response;
+
+      // Verify Turnstile exactly once for the combined guest+join flow.
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
+
+      const guest = await createGuestUserAndSession(env, parsed.data.displayName);
+      const joinRes = await submitJoinRequest(
+        env,
+        {
+          id: guest.userId,
+          displayName: guest.displayName,
+        },
+        {
+          inviteCode: parsed.data.inviteCode,
+          displayName: guest.displayName,
+          idempotencyKey: parsed.data.idempotencyKey,
+        },
+      );
+
+      const joinBody = await joinRes.json();
+      return new Response(
+        JSON.stringify({
+          user: {
+            id: guest.userId,
+            displayName: guest.displayName,
+            username: null,
+            isGuest: true,
+          },
+          join: joinBody,
+          privacyNote:
+            "Guest names are not accounts. Create a full account to host tables or keep your handle.",
+        }),
+        {
+          status: joinRes.status >= 400 ? joinRes.status : 201,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": sessionCookieHeader(
+              guest.token,
+              env.APP_ORIGIN,
+              GUEST_SESSION_TTL_MS / 1000,
+            ),
+          },
+        },
+      );
+    } catch (err) {
+      console.error("join-as-guest failed", err instanceof Error ? err.message : err);
+      return errorJson(500, "Guest join failed. Try again shortly.");
+    }
+  }
+
   if (path === "/api/rooms/join-request" && request.method === "POST") {
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
@@ -205,102 +386,7 @@ export async function handleRooms(
     );
     if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
-    const existing = await env.DB.prepare(
-      `SELECT response_json FROM idempotency_keys WHERE scope = ? AND key = ?`,
-    )
-      .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey)
-      .first<{ response_json: string }>();
-    if (existing) return json(JSON.parse(existing.response_json));
-
-    const room = await env.DB.prepare(
-      `SELECT * FROM rooms WHERE invite_code = ? AND status = 'open'`,
-    )
-      .bind(parsed.data.inviteCode.toUpperCase())
-      .first<{
-        id: string;
-        host_user_id: string;
-        name: string;
-      }>();
-    if (!room) return errorJson(404, "Table not found.");
-
-    const member = await env.DB.prepare(
-      `SELECT status FROM room_members WHERE room_id = ? AND user_id = ?`,
-    )
-      .bind(room.id, auth.user.id)
-      .first<{ status: string }>();
-
-    const pendingExisting = await env.DB.prepare(
-      `SELECT id FROM join_requests
-       WHERE room_id = ? AND user_id = ? AND status = 'pending'
-       ORDER BY created_at DESC LIMIT 1`,
-    )
-      .bind(room.id, auth.user.id)
-      .first<{ id: string }>();
-
-    const requestId = randomId("jr");
-    const coalesced = coalesceJoinRequest({
-      memberStatus: member?.status,
-      pendingRequestId: pendingExisting?.id,
-      newRequestId: requestId,
-    });
-    const now = Date.now();
-    const displayName = parsed.data.displayName ?? auth.user.displayName;
-
-    if (coalesced.status === "approved") {
-      return json({ status: "approved", roomId: room.id, message: coalesced.message });
-    }
-
-    if (pendingExisting && coalesced.requestId === pendingExisting.id) {
-      const payload = {
-        status: "pending" as const,
-        requestId: pendingExisting.id,
-        roomId: room.id,
-        message: coalesced.message,
-      };
-      await env.DB.prepare(
-        `INSERT OR IGNORE INTO idempotency_keys (scope, key, response_json, created_at)
-         VALUES (?, ?, ?, ?)`,
-      )
-        .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey, JSON.stringify(payload), now)
-        .run();
-      return json(payload);
-    }
-
-    try {
-      await env.DB.prepare(
-        `INSERT INTO join_requests
-         (id, room_id, user_id, display_name, status, idempotency_key, created_at)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
-      )
-        .bind(requestId, room.id, auth.user.id, displayName, parsed.data.idempotencyKey, now)
-        .run();
-    } catch {
-      return errorJson(409, "Duplicate join request.");
-    }
-
-    const stub = env.ROOM.get(env.ROOM.idFromName(room.id));
-    await stub.fetch("https://room/join-request", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        requestId,
-        userId: auth.user.id,
-        displayName,
-      }),
-    });
-
-    const payload = {
-      status: "pending",
-      requestId,
-      roomId: room.id,
-      message: "Waiting for the host",
-    };
-    await env.DB.prepare(
-      `INSERT INTO idempotency_keys (scope, key, response_json, created_at) VALUES (?, ?, ?, ?)`,
-    )
-      .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey, JSON.stringify(payload), now)
-      .run();
-    return json(payload);
+    return submitJoinRequest(env, auth.user, parsed.data);
   }
 
   if (path === "/api/rooms/join-decision" && request.method === "POST") {
@@ -308,9 +394,18 @@ export async function handleRooms(
     if (!auth.ok) return errorJson(auth.status, auth.error);
     const parsed = await readJson(request, decideSchema);
     if (!parsed.ok) return parsed.response;
+    const body = parsed.data;
+
+    const decisionScope = `join-decision:${auth.user.id}`;
+    const cachedDecision = await env.DB.prepare(
+      `SELECT response_json FROM idempotency_keys WHERE scope = ? AND key = ?`,
+    )
+      .bind(decisionScope, body.idempotencyKey)
+      .first<{ response_json: string }>();
+    if (cachedDecision) return json(JSON.parse(cachedDecision.response_json));
 
     const jr = await env.DB.prepare(`SELECT * FROM join_requests WHERE id = ?`)
-      .bind(parsed.data.requestId)
+      .bind(body.requestId)
       .first<{
         id: string;
         room_id: string;
@@ -327,7 +422,34 @@ export async function handleRooms(
     }
 
     const now = Date.now();
-    if (!parsed.data.approve) {
+
+    async function storeDecisionResponse(
+      payload: Record<string, unknown>,
+    ): Promise<Response> {
+      await env.DB.prepare(
+        `INSERT OR IGNORE INTO idempotency_keys (scope, key, response_json, created_at)
+         VALUES (?, ?, ?, ?)`,
+      )
+        .bind(decisionScope, body.idempotencyKey, JSON.stringify(payload), now)
+        .run();
+      return json(payload);
+    }
+
+    if (jr.status !== "pending") {
+      const settled =
+        jr.status === "approved"
+          ? {
+              status: "approved" as const,
+              message: "Join request was already approved.",
+            }
+          : {
+              status: "rejected" as const,
+              message: "Join request was already declined.",
+            };
+      return storeDecisionResponse(settled);
+    }
+
+    if (!body.approve) {
       await env.DB.prepare(
         `UPDATE join_requests SET status = 'rejected', decided_at = ? WHERE id = ?`,
       )
@@ -339,11 +461,13 @@ export async function handleRooms(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ requestId: jr.id, userId: jr.user_id }),
       });
-      return json({ status: "rejected", message: "Join request declined." });
+      return storeDecisionResponse({
+        status: "rejected",
+        message: "Join request declined.",
+      });
     }
 
-    const asSpectator =
-      parsed.data.asSpectator === true || parsed.data.seatIndex === null;
+    const asSpectator = body.asSpectator === true || body.seatIndex === null;
 
     const stub = env.ROOM.get(env.ROOM.idFromName(jr.room_id));
     const seatRes = await stub.fetch("https://room/approve", {
@@ -352,7 +476,7 @@ export async function handleRooms(
       body: JSON.stringify({
         userId: jr.user_id,
         displayName: jr.display_name,
-        seatIndex: asSpectator ? null : parsed.data.seatIndex,
+        seatIndex: asSpectator ? null : body.seatIndex,
         asSpectator,
         requestId: jr.id,
       }),
@@ -411,7 +535,7 @@ export async function handleRooms(
       });
     }
 
-    return json({
+    return storeDecisionResponse({
       status: "approved",
       seatIndex: seatBody.spectator ? null : seatBody.seatIndex,
       spectator: Boolean(seatBody.spectator),
@@ -431,7 +555,10 @@ export async function handleRooms(
       .first<{ role: string }>();
     if (!member) return errorJson(404, "You are not at this table.");
     if (member.role === "host") {
-      return errorJson(400, "Host cannot leave while hosting. Transfer host or close the table.");
+      return errorJson(
+        400,
+        "Host cannot leave while hosting. Transfer host or close the table.",
+      );
     }
 
     const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
@@ -575,7 +702,11 @@ export async function handleRooms(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ hostUserId: auth.user.id, paused: parsed.data.paused }),
     });
-    const doBody = (await doRes.json()) as { ok: boolean; paused?: boolean; error?: string };
+    const doBody = (await doRes.json()) as {
+      ok: boolean;
+      paused?: boolean;
+      error?: string;
+    };
     if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not pause.");
     return json({
       status: "ok",
@@ -608,7 +739,12 @@ export async function handleRooms(
        WHERE m.room_id = ? AND m.user_id = ? AND m.status IN ('seated', 'away', 'spectator')`,
     )
       .bind(roomId, parsed.data.targetUserId)
-      .first<{ id: string; display_name: string; is_guest: number | null; status: string }>();
+      .first<{
+        id: string;
+        display_name: string;
+        is_guest: number | null;
+        status: string;
+      }>();
     if (!target) return errorJson(404, "That player is not at this table.");
     if (target.is_guest) {
       return errorJson(400, "Host can only transfer to a registered account.");
@@ -629,11 +765,9 @@ export async function handleRooms(
 
     const now = Date.now();
     await env.DB.batch([
-      env.DB.prepare(`UPDATE rooms SET host_user_id = ?, updated_at = ? WHERE id = ?`).bind(
-        target.id,
-        now,
-        roomId,
-      ),
+      env.DB.prepare(
+        `UPDATE rooms SET host_user_id = ?, updated_at = ? WHERE id = ?`,
+      ).bind(target.id, now, roomId),
       env.DB.prepare(
         `UPDATE room_members SET role = 'player', updated_at = ? WHERE room_id = ? AND user_id = ?`,
       ).bind(now, roomId, auth.user.id),
@@ -668,15 +802,18 @@ export async function handleRooms(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ hostUserId: auth.user.id }),
     });
-    const doBody = (await doRes.json()) as { ok: boolean; error?: string };
-    if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not close table.");
+    const doBody = (await doRes.json()) as { ok: boolean; error?: string; code?: string };
+    if (!doBody.ok) {
+      const status =
+        doRes.status === 409 || doBody.code === "hand_in_progress" ? 409 : 400;
+      return errorJson(status, doBody.error ?? "Could not close table.");
+    }
 
     const now = Date.now();
     await env.DB.batch([
-      env.DB.prepare(`UPDATE rooms SET status = 'closed', updated_at = ? WHERE id = ?`).bind(
-        now,
-        roomId,
-      ),
+      env.DB.prepare(
+        `UPDATE rooms SET status = 'closed', updated_at = ? WHERE id = ?`,
+      ).bind(now, roomId),
       env.DB.prepare(
         `UPDATE room_members SET status = 'left', seat_index = NULL, updated_at = ?
          WHERE room_id = ? AND status IN ('seated', 'away', 'spectator')`,
@@ -697,7 +834,8 @@ export async function handleRooms(
     const url = new URL(request.url);
     const format = url.searchParams.get("format");
     const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
-    const doUrl = format === "csv" ? "https://room/ledger?format=csv" : "https://room/ledger";
+    const doUrl =
+      format === "csv" ? "https://room/ledger?format=csv" : "https://room/ledger";
     const doRes = await stub.fetch(doUrl);
     if (format === "csv") {
       const text = await doRes.text();
@@ -708,7 +846,11 @@ export async function handleRooms(
         },
       });
     }
-    const doBody = (await doRes.json()) as { ok: boolean; ledger?: unknown; error?: string };
+    const doBody = (await doRes.json()) as {
+      ok: boolean;
+      ledger?: unknown;
+      error?: string;
+    };
     if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not load ledger.");
     return json({ ledger: doBody.ledger });
   }
@@ -735,9 +877,16 @@ export async function handleRooms(
       .first<{ user_id: string; display_name: string; status: string }>();
     if (!target) return errorJson(404, "Player not at this table.");
     if (target.status === "kicked" || target.status === "left") {
-      return errorJson(403, "That player left or was removed. They must ask to join again.");
+      return errorJson(
+        403,
+        "That player left or was removed. They must ask to join again.",
+      );
     }
-    if (target.status !== "spectator" && target.status !== "seated" && target.status !== "away") {
+    if (
+      target.status !== "spectator" &&
+      target.status !== "seated" &&
+      target.status !== "away"
+    ) {
       return errorJson(403, "That player cannot be seated from their current status.");
     }
 
@@ -751,7 +900,11 @@ export async function handleRooms(
         seatIndex: parsed.data.seatIndex,
       }),
     });
-    const doBody = (await doRes.json()) as { ok: boolean; seatIndex?: number; error?: string };
+    const doBody = (await doRes.json()) as {
+      ok: boolean;
+      seatIndex?: number;
+      error?: string;
+    };
     if (!doBody.ok) return errorJson(409, doBody.error ?? "Could not seat player.");
 
     const now = Date.now();
@@ -783,7 +936,11 @@ export async function handleRooms(
 
     const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
     const openRes = await stub.fetch("https://room/open-seats");
-    const openBody = (await openRes.json()) as { ok?: boolean; openSeats?: number[]; error?: string };
+    const openBody = (await openRes.json()) as {
+      ok?: boolean;
+      openSeats?: number[];
+      error?: string;
+    };
     if (!openBody.ok || !openBody.openSeats) {
       return errorJson(400, openBody.error ?? "Could not read open seats.");
     }
@@ -806,7 +963,8 @@ export async function handleRooms(
       return errorJson(409, "No open seats to fill.");
     }
 
-    const seated: Array<{ botUserId: string; displayName: string; seatIndex: number }> = [];
+    const seated: Array<{ botUserId: string; displayName: string; seatIndex: number }> =
+      [];
     const now = Date.now();
 
     for (const seatIndex of targets) {
@@ -850,7 +1008,13 @@ export async function handleRooms(
         displayName: doBody.displayName,
         seatIndex: doBody.seatIndex,
       });
-      writeAnalytics(env, "bot_seated", roomId, [doBody.seatIndex], [botUserId.slice(0, 8)]);
+      writeAnalytics(
+        env,
+        "bot_seated",
+        roomId,
+        [doBody.seatIndex],
+        [botUserId.slice(0, 8)],
+      );
     }
 
     return json({
@@ -877,7 +1041,12 @@ export async function handleRooms(
        ORDER BY hand_number DESC LIMIT 50`,
     )
       .bind(roomId)
-      .all<{ id: string; hand_number: number; summary_json: string; created_at: number }>();
+      .all<{
+        id: string;
+        hand_number: number;
+        summary_json: string;
+        created_at: number;
+      }>();
 
     return json({
       hands: (rows.results ?? []).map((h) => {
@@ -911,7 +1080,12 @@ export async function handleRooms(
        FROM hand_summaries WHERE room_id = ? AND hand_number = ?`,
     )
       .bind(roomId, handNumber)
-      .first<{ id: string; hand_number: number; summary_json: string; created_at: number }>();
+      .first<{
+        id: string;
+        hand_number: number;
+        summary_json: string;
+        created_at: number;
+      }>();
 
     let summary: unknown = null;
     const r2Key = `replays/${roomId}/hand-${handNumber}.json`;
@@ -953,7 +1127,11 @@ export async function handleRooms(
     }
     const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
     const doRes = await stub.fetch("https://room/open-seats");
-    const doBody = (await doRes.json()) as { ok: boolean; openSeats?: number[]; error?: string };
+    const doBody = (await doRes.json()) as {
+      ok: boolean;
+      openSeats?: number[];
+      error?: string;
+    };
     if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not load seats.");
     return json({ openSeats: doBody.openSeats ?? [] });
   }
@@ -999,7 +1177,11 @@ export async function handleRooms(
         timeBankSeconds: parsed.data.timeBankSeconds,
       }),
     });
-    const doBody = (await doRes.json()) as { ok: boolean; error?: string; pending?: boolean };
+    const doBody = (await doRes.json()) as {
+      ok: boolean;
+      error?: string;
+      pending?: boolean;
+    };
     if (!doBody.ok) return errorJson(400, doBody.error ?? "Could not update rules.");
 
     await env.DB.prepare(
@@ -1061,7 +1243,12 @@ export async function handleRooms(
       }>();
 
     // Kicked / left rows must not retain invite codes or table access.
-    if (member && (member.status === "seated" || member.status === "away" || member.status === "spectator")) {
+    if (
+      member &&
+      (member.status === "seated" ||
+        member.status === "away" ||
+        member.status === "spectator")
+    ) {
       return json({
         access: "member",
         room: {

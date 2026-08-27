@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { dealOrderSeatIndexes, seatRingPercents, visualSeatIndex } from "../../src/features/table/seatLayout";
+import {
+  dealOrderSeatIndexes,
+  seatRingPercents,
+  visualSeatIndex,
+} from "../../src/features/table/seatLayout";
 
 describe("seatLayout deal helpers", () => {
   it("places visual 0 at bottom of the ellipse", () => {

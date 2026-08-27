@@ -1,0 +1,58 @@
+/**
+
+- D1 ↔ Durable Object consistency model
+-
+- ## 1. Authoritative stores by category
+-
+- | State | Authority | Replica / metadata |
+- |---|---|---|
+- | Hand, stacks, bets, cards, timers, chat (live), ledger | Room Durable Object | — |
+- | Users, sessions, room rows, membership, join requests | D1 | DO may mirror pending joins |
+- | Hand summaries / replay JSON | R2 (via archive queue); D1 summary row | Queue idempotent |
+- | Public config flags/copy | KV (non-authoritative) | — |
+-
+- Gameplay state MUST NOT move to D1.
+-
+- ## 2. Operation ordering (preferred)
+-
+- Mutating flows that touch both stores:
+-
+- 1.  **Validate** auth + rate limits + Turnstile (Worker).
+- 2.  **Idempotency claim** in D1 when the operation has a client key
+- (insert-or-return existing result).
+- 3.  **Durable Object mutation** (authoritative gameplay / seat / close).
+- 4.  **D1 metadata update** (membership status, room closed, etc.).
+- 5.  On D1 failure after DO success: leave a reconciliation marker
+- (`operation_outbox` or retry the D1 write); DO state remains truth.
+-
+- Join approve is special: D1 membership should be written **before** seating
+- when possible so HTTP GET /rooms/:id agrees; if DO seat fails, mark membership
+- for retry / host can re-approve (idempotent).
+-
+- ## 3. Partial failure behavior
+-
+- - **DO ok, D1 fail:** Gameplay is correct; membership/room metadata may lag.
+- Next read path or scheduled reconcile repairs D1 from DO snapshot where safe
+- (e.g. closed flag, seated user ids). Failures emit
+- `room_state_reconciliation_failed`.
+- - **D1 ok, DO fail:** Client receives error; retry with same idempotency key
+- is safe. D1 pending join / membership must be coalescing / reversible.
+- - **Never** invent mid-hand chip refunds across stores.
+-
+- ## 4. Retry / reconciliation
+-
+- - Client retries use the same `idempotencyKey`.
+- - Worker stores `{key → response digest}` in D1 `idempotency_keys`.
+- - DO stores a **bounded** in-memory action cache keyed by idempotency key +
+- payload hash (cleared across hands / LRU).
+- - Periodic / on-demand: compare D1 `room_members` active set with DO seats +
+- spectators; repair obvious divergences (orphan pending joins, closed rooms).
+-
+- ## 5. Duplicate requests
+-
+- - Same key + same payload → return prior success (no double seat / double act).
+- - Same key + different payload → 409 conflict.
+- - Missing key on state-changing poker WS action → reject (required).
+    */
+
+export {};

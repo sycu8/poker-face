@@ -20,7 +20,11 @@ export async function readPublicConfig(env: Env): Promise<{
   turnstileSiteKey: string;
   environment: string;
   appOrigin: string;
-  flags: { handHistoryEnabled: boolean; themesEnabled: boolean; passkeysEnabled: boolean };
+  flags: {
+    handHistoryEnabled: boolean;
+    themesEnabled: boolean;
+    passkeysEnabled: boolean;
+  };
   copy: PublicCopy;
 }> {
   const copy = { ...DEFAULT_COPY };

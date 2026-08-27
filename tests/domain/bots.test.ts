@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { chooseBotAction, isBotUserId, nextBotDisplayName } from "../../worker/domain/bots";
+import {
+  chooseBotAction,
+  isBotUserId,
+  nextBotDisplayName,
+} from "../../worker/domain/bots";
 import type { LegalActions } from "../../worker/domain/engine";
 
 function legal(partial: Partial<LegalActions>): LegalActions {
@@ -8,13 +12,16 @@ function legal(partial: Partial<LegalActions>): LegalActions {
     canCheck: false,
     canCall: false,
     callAmount: 0,
+    callIsAllIn: false,
     canBet: false,
     canRaise: false,
+    canShortAllInRaise: false,
     minBet: 2,
     maxBet: 100,
     minRaiseTo: 4,
     maxRaiseTo: 100,
     canAllIn: true,
+    allInAmount: 100,
     ...partial,
   };
 }
@@ -38,22 +45,26 @@ describe("bots helpers", () => {
   });
 
   it("calls modest bets and folds big ones", () => {
-    expect(
-      chooseBotAction(legal({ canCall: true, callAmount: 4, minBet: 2 })),
-    ).toEqual({ action: "call" });
-    expect(
-      chooseBotAction(legal({ canCall: true, callAmount: 40, minBet: 2 })),
-    ).toEqual({ action: "fold" });
+    expect(chooseBotAction(legal({ canCall: true, callAmount: 4, minBet: 2 }))).toEqual({
+      action: "call",
+    });
+    expect(chooseBotAction(legal({ canCall: true, callAmount: 40, minBet: 2 }))).toEqual({
+      action: "fold",
+    });
   });
 });
 
 describe("bot seat flow (domain)", () => {
   it("bots can be seated in open seats and act until humans", async () => {
-    const { createInitialGameState, seatPlayer, startHand, applyAction, getLegalActions } =
-      await import("../../worker/domain/engine");
-    const { chooseBotAction, isBotUserId, nextBotDisplayName } = await import(
-      "../../worker/domain/bots"
-    );
+    const {
+      createInitialGameState,
+      seatPlayer,
+      startHand,
+      applyAction,
+      getLegalActions,
+    } = await import("../../worker/domain/engine");
+    const { chooseBotAction, isBotUserId, nextBotDisplayName } =
+      await import("../../worker/domain/bots");
 
     const state = createInitialGameState({
       smallBlind: 1,

@@ -5,6 +5,8 @@ import { requireUser } from "../auth/session";
 /** Default RealtimeKit preset — must exist on the app (override with REALTIMEKIT_PRESET_NAME). */
 export const DEFAULT_REALTIMEKIT_PRESET = "group_call_participant";
 
+const REALTIMEKIT_HTTP_TIMEOUT_MS = 10_000;
+
 /** Pull a string id from common RealtimeKit / Cloudflare API envelope shapes. */
 export function extractRealtimeId(body: unknown): string | null {
   if (!body || typeof body !== "object") return null;
@@ -14,13 +16,20 @@ export function extractRealtimeId(body: unknown): string | null {
     root.meetingId,
     (root.result as Record<string, unknown> | undefined)?.id,
     (root.result as Record<string, unknown> | undefined)?.meetingId,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.id,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.meetingId,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.id,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.meetingId,
     (root.data as Record<string, unknown> | undefined)?.id,
     (root.data as Record<string, unknown> | undefined)?.meetingId,
-    ((root.data as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)?.id,
+    (
+      (root.data as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.id,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.length > 0) return c;
@@ -37,14 +46,20 @@ export function extractRealtimeToken(body: unknown): string | null {
     root.authToken,
     (root.result as Record<string, unknown> | undefined)?.token,
     (root.result as Record<string, unknown> | undefined)?.authToken,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.token,
-    ((root.result as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.authToken,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.token,
+    (
+      (root.result as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.authToken,
     (root.data as Record<string, unknown> | undefined)?.token,
     (root.data as Record<string, unknown> | undefined)?.authToken,
-    ((root.data as Record<string, unknown> | undefined)?.data as Record<string, unknown> | undefined)
-      ?.token,
+    (
+      (root.data as Record<string, unknown> | undefined)?.data as
+        Record<string, unknown> | undefined
+    )?.token,
   ];
   for (const c of candidates) {
     if (typeof c === "string" && c.length > 0) return c;
@@ -66,13 +81,68 @@ function apiErrorDetail(body: unknown, status: number): string {
   return `HTTP ${status}`;
 }
 
+function realtimeKitBase(env: Env): string {
+  return `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/realtime/kit/${env.REALTIMEKIT_APP_ID}`;
+}
+
+/** HTTP call to RealtimeKit with a hard ~10s timeout. */
+export async function realtimeKitFetch(
+  url: string,
+  init: RequestInit & { token: string },
+): Promise<Response> {
+  const { token, ...rest } = init;
+  const headers = new Headers(rest.headers);
+  headers.set("authorization", `Bearer ${token}`);
+  if (!headers.has("content-type") && rest.body) {
+    headers.set("content-type", "application/json");
+  }
+  return fetch(url, {
+    ...rest,
+    headers,
+    signal: AbortSignal.timeout(REALTIMEKIT_HTTP_TIMEOUT_MS),
+  });
+}
+
+/**
+ * Create a RealtimeKit meeting. Used by the room DO single-flight path.
+ * Returns null on failure (caller returns degraded voice payload).
+ */
+export async function createRealtimeKitMeeting(
+  env: Env,
+  title: string,
+): Promise<{ meetingId: string } | { error: string }> {
+  if (
+    !env.REALTIMEKIT_API_TOKEN ||
+    !env.REALTIMEKIT_APP_ID ||
+    !env.CLOUDFLARE_ACCOUNT_ID
+  ) {
+    return { error: "not_configured" };
+  }
+  try {
+    const created = await realtimeKitFetch(`${realtimeKitBase(env)}/meetings`, {
+      method: "POST",
+      token: env.REALTIMEKIT_API_TOKEN,
+      body: JSON.stringify({ title }),
+    });
+    const body: unknown = await created.json();
+    const meetingId = extractRealtimeId(body);
+    if (!meetingId) {
+      return { error: apiErrorDetail(body, created.status) };
+    }
+    return { meetingId };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "meeting_create_failed" };
+  }
+}
+
 /**
  * RealtimeKit voice provisioning. Degraded mode: if credentials are missing,
  * return a structured unavailable payload so the game continues.
  *
  * Requires Worker secrets: REALTIMEKIT_APP_ID, REALTIMEKIT_API_TOKEN (Realtime Admin
- * Cloudflare token), CLOUDFLARE_ACCOUNT_ID. Calls TURN keys are separate — the client
- * gets media connectivity via the participant token; see docs/VOICE_SETUP.md.
+ * API token dedicated to RealtimeKit — do not reuse unrelated deploy tokens),
+ * CLOUDFLARE_ACCOUNT_ID. Calls TURN keys are separate — the client gets media
+ * connectivity via the participant token; see docs/VOICE_SETUP.md.
  */
 export async function handleVoice(
   request: Request,
@@ -104,8 +174,7 @@ export async function handleVoice(
     return json({
       available: false,
       reason: "not_configured",
-      message:
-        "Voice isn’t configured on this deployment. The game stays connected.",
+      message: "Voice isn’t configured on this deployment. The game stays connected.",
     });
   }
 
@@ -114,52 +183,46 @@ export async function handleVoice(
     .first<{ id: string; realtimekit_meeting_id: string | null; name: string }>();
   if (!room) return errorJson(404, "Table not found.");
 
-  let meetingId = room.realtimekit_meeting_id;
-  const base = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/realtime/kit/${env.REALTIMEKIT_APP_ID}`;
   const presetName = env.REALTIMEKIT_PRESET_NAME || DEFAULT_REALTIMEKIT_PRESET;
 
   try {
-    if (!meetingId) {
-      const created = await fetch(`${base}/meetings`, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${env.REALTIMEKIT_API_TOKEN}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({ title: room.name }),
+    // Single-flight meeting create/get via room DO (serialized + synced to D1).
+    const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
+    const ensureRes = await stub.fetch("https://room/ensure-voice-meeting", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ roomName: room.name }),
+    });
+    const ensureBody = (await ensureRes.json()) as {
+      ok: boolean;
+      meetingId?: string;
+      error?: string;
+    };
+    const meetingId = ensureBody.meetingId;
+    if (!ensureBody.ok || !meetingId) {
+      console.error("voice meeting ensure failed", ensureBody.error ?? ensureRes.status);
+      return json({
+        available: false,
+        reason: "meeting_create_failed",
+        message: "Could not create a voice room. The game is still connected.",
       });
-      const body: unknown = await created.json();
-      meetingId = extractRealtimeId(body);
-      if (!meetingId) {
-        console.error("voice meeting create failed", apiErrorDetail(body, created.status));
-        return json({
-          available: false,
-          reason: "meeting_create_failed",
-          message: "Could not create a voice room. The game is still connected.",
-        });
-      }
-      await env.DB.prepare(
-        `UPDATE rooms SET realtimekit_meeting_id = ?, updated_at = ? WHERE id = ?`,
-      )
-        .bind(meetingId, Date.now(), roomId)
-        .run();
     }
 
     // App user id maps seats → mute/speaking indicators (not PII).
     const customParticipantId = auth.user.id;
 
-    const participantRes = await fetch(`${base}/meetings/${meetingId}/participants`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${env.REALTIMEKIT_API_TOKEN}`,
-        "content-type": "application/json",
+    const participantRes = await realtimeKitFetch(
+      `${realtimeKitBase(env)}/meetings/${meetingId}/participants`,
+      {
+        method: "POST",
+        token: env.REALTIMEKIT_API_TOKEN!,
+        body: JSON.stringify({
+          name: auth.user.displayName,
+          preset_name: presetName,
+          custom_participant_id: customParticipantId,
+        }),
       },
-      body: JSON.stringify({
-        name: auth.user.displayName,
-        preset_name: presetName,
-        custom_participant_id: customParticipantId,
-      }),
-    });
+    );
     const participantBody: unknown = await participantRes.json();
     const token = extractRealtimeToken(participantBody);
     if (!token) {

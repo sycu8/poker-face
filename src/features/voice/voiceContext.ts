@@ -19,7 +19,9 @@ export function useVoiceControls(): VoiceControls | null {
   return useContext(VoiceControlsContext);
 }
 
-export function useSeatVoiceStatus(playerId: string | null | undefined): SeatVoiceStatus | null {
+export function useSeatVoiceStatus(
+  playerId: string | null | undefined,
+): SeatVoiceStatus | null {
   const map = useContext(VoiceStatusContext);
   if (!playerId) return null;
   return map[playerId] ?? null;

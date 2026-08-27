@@ -16,7 +16,12 @@ export function SeatMicIndicator({ playerId }: { playerId: string | null }) {
       : "seat-mic--live";
 
   return (
-    <span className={`seat-mic ${stateClass}`} title={label} aria-label={label} role="img">
+    <span
+      className={`seat-mic ${stateClass}`}
+      title={label}
+      aria-label={label}
+      role="img"
+    >
       {status.muted ? (
         <svg className="seat-mic-icon" viewBox="0 0 24 24" aria-hidden="true">
           <path

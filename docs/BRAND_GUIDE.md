@@ -7,18 +7,18 @@ Poker Faces is not a casino. It is a private digital table where friends play, t
 
 ## Color tokens
 
-| Token | Hex | Use |
-| --- | --- | --- |
-| Night | `#07100D` | Main background |
-| Ink Green | `#0B2118` | Raised dark surfaces |
-| Felt | `#0F4C35` | Poker table / primary brand field |
-| Felt Bright | `#176B49` | Hover, active, positive accents |
-| Gold | `#F4BC56` | Primary CTA, focus, important chip values |
-| Gold Deep | `#B87822` | Light-background gold text |
-| Ivory | `#F6F2E7` | Cards and primary text |
-| Mist | `#A7B8AF` | Secondary text |
-| Danger | `#F06A6A` | Destructive / connection failure |
-| Info | `#72B7FF` | Neutral system notice |
+| Token       | Hex       | Use                                       |
+| ----------- | --------- | ----------------------------------------- |
+| Night       | `#07100D` | Main background                           |
+| Ink Green   | `#0B2118` | Raised dark surfaces                      |
+| Felt        | `#0F4C35` | Poker table / primary brand field         |
+| Felt Bright | `#176B49` | Hover, active, positive accents           |
+| Gold        | `#F4BC56` | Primary CTA, focus, important chip values |
+| Gold Deep   | `#B87822` | Light-background gold text                |
+| Ivory       | `#F6F2E7` | Cards and primary text                    |
+| Mist        | `#A7B8AF` | Secondary text                            |
+| Danger      | `#F06A6A` | Destructive / connection failure          |
+| Info        | `#72B7FF` | Neutral system notice                     |
 
 Never use red as the main brand color.
 
@@ -46,14 +46,14 @@ When “cash game” could be misunderstood, say “continuous table” or “on
 
 ## Microcopy
 
-| Situation | Copy |
-| --- | --- |
-| Host creates room | Create your table |
-| Guest submits request | Ask to join |
-| Pending approval | Waiting for the host |
-| Approved | You have a seat |
-| Room is full | This table is full |
-| Rule changed | New table rules start next hand |
-| Voice unavailable | Voice is unavailable. The game is still connected. |
-| Reconnecting | Rejoining your seat… |
-| No monetary value | Virtual chips only. No purchases or cash-out. |
+| Situation             | Copy                                               |
+| --------------------- | -------------------------------------------------- |
+| Host creates room     | Create your table                                  |
+| Guest submits request | Ask to join                                        |
+| Pending approval      | Waiting for the host                               |
+| Approved              | You have a seat                                    |
+| Room is full          | This table is full                                 |
+| Rule changed          | New table rules start next hand                    |
+| Voice unavailable     | Voice is unavailable. The game is still connected. |
+| Reconnecting          | Rejoining your seat…                               |
+| No monetary value     | Virtual chips only. No purchases or cash-out.      |

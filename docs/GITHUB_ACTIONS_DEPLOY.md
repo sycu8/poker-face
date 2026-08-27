@@ -4,42 +4,46 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 
 ## Required repository secrets
 
-| Secret | Purpose |
-| --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit) |
-| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account id |
-| `SESSION_SECRET` | Shared session HMAC secret (or use per-env overrides below). If unset, CI generates an ephemeral value each deploy (sessions reset). |
+| Secret                                                                     | Purpose                                                                                                               |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                                                     | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit)                                                  |
+| `CLOUDFLARE_ACCOUNT_ID`                                                    | Cloudflare account id                                                                                                 |
+| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. **Required** — deploy fails if missing (no ephemeral generation).                                |
+| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify (**required for production**)                                                                    |
+| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars (**required for production**; empty after prepare fails the job) |
 
 ## Recommended secrets
 
-| Secret | Purpose |
-| --- | --- |
-| `TURNSTILE_SECRET_KEY` | Turnstile siteverify |
-| `REALTIMEKIT_API_TOKEN` | Voice: Cloudflare API token with **Realtime Admin** (not a Calls TURN key token). Optional if `CLOUDFLARE_API_TOKEN` already includes Realtime Admin — Deploy falls back to that token. |
+| Secret                                                   | Purpose                                                                                                                   |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `TURNSTILE_SECRET_KEY_STAGING`                           | Staging Turnstile siteverify                                                                                              |
+| `REALTIMEKIT_API_TOKEN`                                  | Voice: dedicated Cloudflare API token with **Realtime Admin**. Do **not** fall back to the deploy `CLOUDFLARE_API_TOKEN`. |
+| `REALTIMEKIT_APP_ID`                                     | RealtimeKit app id (can also be a variable; also set as Wrangler var)                                                     |
+| `REALTIMEKIT_PRESET_NAME`                                | RealtimeKit preset for participants (default `group_call_participant`)                                                    |
+| `D1_DATABASE_ID_STAGING` / `D1_DATABASE_ID_PRODUCTION`   | Optional; auto-created if omitted                                                                                         |
+| `KV_NAMESPACE_ID_STAGING` / `KV_NAMESPACE_ID_PRODUCTION` | Optional; auto-created if omitted                                                                                         |
+| `TURN_KEY_ID` / `TURN_KEY_API_TOKEN`                     | Optional Calls TURN key (ops only; RealtimeKit voice does not need them)                                                  |
 
-**Voice secret must be visible to Deploy jobs:** prefer a Secret named exactly `REALTIMEKIT_API_TOKEN` (repo or Environments **`staging`** / **`production`**). If you only expanded permissions on the existing **`CLOUDFLARE_API_TOKEN`**, Deploy now copies it into the Worker as `REALTIMEKIT_API_TOKEN`. After deploy, logs should show `REALTIMEKIT_API_TOKEN is present … (len=N)` and more than 2 Worker secrets uploaded.
-
-| `REALTIMEKIT_APP_ID` | RealtimeKit app id (can also be a variable; also set as Wrangler var) |
-| `REALTIMEKIT_PRESET_NAME` | RealtimeKit preset for participants (default `group_call_participant`) |
-| `SESSION_SECRET_STAGING` / `SESSION_SECRET_PRODUCTION` | Per-environment session secrets |
-| `TURNSTILE_SECRET_KEY_STAGING` / `TURNSTILE_SECRET_KEY_PRODUCTION` | Per-environment Turnstile |
-| `D1_DATABASE_ID_STAGING` / `D1_DATABASE_ID_PRODUCTION` | Optional; auto-created if omitted |
-| `KV_NAMESPACE_ID_STAGING` / `KV_NAMESPACE_ID_PRODUCTION` | Optional; auto-created if omitted |
-| `TURN_KEY_ID` / `TURN_KEY_API_TOKEN` | Optional Calls TURN key (ops only; RealtimeKit voice does not need them) |
+**Voice:** set `REALTIMEKIT_API_TOKEN` (repo or Environments **`staging`** / **`production`**). Deploy does **not** copy `CLOUDFLARE_API_TOKEN` into the Worker as a RealtimeKit token.
 
 Voice setup details: [`docs/VOICE_SETUP.md`](VOICE_SETUP.md).
 
 ## Optional repository / environment variables
 
-| Variable | Default |
-| --- | --- |
-| `APP_ORIGIN_STAGING` | `https://staging.poker.orangecloud.vn` |
-| `APP_ORIGIN_PRODUCTION` | `https://poker.orangecloud.vn` |
-| `TURNSTILE_SITE_KEY_STAGING` / `_PRODUCTION` | empty until widgets exist |
-| `REALTIMEKIT_APP_ID` | — |
-| `REALTIMEKIT_PRESET_NAME` | `group_call_participant` |
+| Variable                                     | Default                                |
+| -------------------------------------------- | -------------------------------------- |
+| `APP_ORIGIN_STAGING`                         | `https://staging.poker.orangecloud.vn` |
+| `APP_ORIGIN_PRODUCTION`                      | `https://poker.orangecloud.vn`         |
+| `TURNSTILE_SITE_KEY_STAGING` / `_PRODUCTION` | production must be non-empty           |
+| `REALTIMEKIT_APP_ID`                         | —                                      |
+| `REALTIMEKIT_PRESET_NAME`                    | `group_call_participant`               |
 
 Create GitHub Environments named `staging` and `production` (workflow references them). Add protection rules on `production` if desired.
+
+## Smoke checks
+
+- **Production:** only `APP_ORIGIN_PRODUCTION` (default `https://poker.orangecloud.vn`) `/api/health` — job **fails** if the canonical origin is unreachable (no workers.dev success path).
+- **Staging:** prefers custom domain; may fall back to workers.dev with a warning.
 
 ## Trigger
 

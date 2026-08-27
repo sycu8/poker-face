@@ -57,7 +57,9 @@ function cookieJar() {
       const raw = res.headers.getSetCookie?.() ?? [];
       const list = raw.length
         ? raw
-        : (res.headers.get("set-cookie") ? [res.headers.get("set-cookie")] : []);
+        : res.headers.get("set-cookie")
+          ? [res.headers.get("set-cookie")]
+          : [];
       for (const c of list) {
         const part = c.split(";")[0];
         const name = part.split("=")[0];
@@ -176,7 +178,12 @@ async function main() {
   // --- Auth: register host + players ---
   let host, p2, p3, p4, spectator;
   try {
-    host = await register(`qa_host_${stamp}`, `qa_host_${stamp}@example.test`, password, "QA Host");
+    host = await register(
+      `qa_host_${stamp}`,
+      `qa_host_${stamp}@example.test`,
+      password,
+      "QA Host",
+    );
     log("auth.register.host", true, host.user.id);
   } catch (e) {
     log("auth.register.host", false, String(e));
@@ -193,9 +200,24 @@ async function main() {
   }
 
   try {
-    p2 = await register(`qa_p2_${stamp}`, `qa_p2_${stamp}@example.test`, password, "QA Player Two");
-    p3 = await register(`qa_p3_${stamp}`, `qa_p3_${stamp}@example.test`, password, "QA Player Three");
-    p4 = await register(`qa_p4_${stamp}`, `qa_p4_${stamp}@example.test`, password, "QA Player Four");
+    p2 = await register(
+      `qa_p2_${stamp}`,
+      `qa_p2_${stamp}@example.test`,
+      password,
+      "QA Player Two",
+    );
+    p3 = await register(
+      `qa_p3_${stamp}`,
+      `qa_p3_${stamp}@example.test`,
+      password,
+      "QA Player Three",
+    );
+    p4 = await register(
+      `qa_p4_${stamp}`,
+      `qa_p4_${stamp}@example.test`,
+      password,
+      "QA Player Four",
+    );
     spectator = await register(
       `qa_spec_${stamp}`,
       `qa_spec_${stamp}@example.test`,
@@ -299,28 +321,55 @@ async function main() {
   {
     const { data } = await api(host.jar, "/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ name: `QA Active ${stamp}`, smallBlind: 1, startingStack: 100 }),
+      body: JSON.stringify({
+        name: `QA Active ${stamp}`,
+        smallBlind: 1,
+        startingStack: 100,
+      }),
     });
     roomA = data.room;
-    seed.rooms.push({ id: roomA.id, name: roomA.name, invite: roomA.inviteCode, kind: "active" });
+    seed.rooms.push({
+      id: roomA.id,
+      name: roomA.name,
+      invite: roomA.inviteCode,
+      kind: "active",
+    });
     log("rooms.create.A", true, `${roomA.id} invite=${roomA.inviteCode}`);
   }
   {
     const { data } = await api(host.jar, "/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ name: `QA Waiting ${stamp}`, smallBlind: 2, startingStack: 200 }),
+      body: JSON.stringify({
+        name: `QA Waiting ${stamp}`,
+        smallBlind: 2,
+        startingStack: 200,
+      }),
     });
     roomB = data.room;
-    seed.rooms.push({ id: roomB.id, name: roomB.name, invite: roomB.inviteCode, kind: "waiting" });
+    seed.rooms.push({
+      id: roomB.id,
+      name: roomB.name,
+      invite: roomB.inviteCode,
+      kind: "waiting",
+    });
     log("rooms.create.B", true, roomB.id);
   }
   {
     const { data } = await api(p2.jar, "/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ name: `QA OtherHost ${stamp}`, smallBlind: 5, startingStack: 500 }),
+      body: JSON.stringify({
+        name: `QA OtherHost ${stamp}`,
+        smallBlind: 5,
+        startingStack: 500,
+      }),
     });
     roomC = data.room;
-    seed.rooms.push({ id: roomC.id, name: roomC.name, invite: roomC.inviteCode, kind: "other_host" });
+    seed.rooms.push({
+      id: roomC.id,
+      name: roomC.name,
+      invite: roomC.inviteCode,
+      kind: "other_host",
+    });
     log("rooms.create.C", true, roomC.id);
   }
 
@@ -486,7 +535,9 @@ async function main() {
   }
 
   // Chat
-  hostWs.ws.send(JSON.stringify({ type: "chat", text: "QA host says hello — virtual chips only." }));
+  hostWs.ws.send(
+    JSON.stringify({ type: "chat", text: "QA host says hello — virtual chips only." }),
+  );
   p2Ws.ws.send(JSON.stringify({ type: "chat", text: "QA p2 checking in." }));
   await sleep(400);
   seed.chatMessages += 2;
@@ -650,7 +701,11 @@ async function main() {
       method: "POST",
       body: JSON.stringify({ smallBlind: 2, startingStack: 150, potCapMultiplier: 3 }),
     });
-    log("config.update", data.status === "ok" || data.pending === true, JSON.stringify(data));
+    log(
+      "config.update",
+      data.status === "ok" || data.pending === true,
+      JSON.stringify(data),
+    );
   } catch (e) {
     log("config.update", false, String(e));
   }
@@ -720,7 +775,11 @@ async function main() {
     if (data.hands?.length) {
       const hn = data.hands[0].handNumber;
       const detail = await api(host.jar, `/api/rooms/${roomA.id}/hands/${hn}`);
-      log("history.detail", Boolean(detail.data.summary), `hand=${hn} source=${detail.data.source}`);
+      log(
+        "history.detail",
+        Boolean(detail.data.summary),
+        `hand=${hn} source=${detail.data.source}`,
+      );
     } else {
       log("history.detail", true, "no archived hands yet (queue lag OK)");
     }
@@ -748,7 +807,11 @@ async function main() {
     log(
       "voice.degraded",
       degradedOk || data.available === true,
-      JSON.stringify({ available: data.available, reason: data.reason, message: data.message }),
+      JSON.stringify({
+        available: data.available,
+        reason: data.reason,
+        message: data.message,
+      }),
     );
     if (!degradedOk && data.available !== true) {
       bug({
@@ -796,8 +859,14 @@ async function main() {
 
   // Leave as p2
   try {
-    const { data } = await api(p2.jar, `/api/rooms/${roomA.id}/leave`, { method: "POST" });
-    log("leave.player", data.status === "ok" || Boolean(data.message), JSON.stringify(data));
+    const { data } = await api(p2.jar, `/api/rooms/${roomA.id}/leave`, {
+      method: "POST",
+    });
+    log(
+      "leave.player",
+      data.status === "ok" || Boolean(data.message),
+      JSON.stringify(data),
+    );
   } catch (e) {
     log("leave.player", false, String(e));
     bug({
@@ -832,7 +901,11 @@ async function main() {
     if (feat.id === "time_bank") {
       // turn timer exists; dedicated time-bank button does not
       present = false;
-      log("feature.turn_timer", Boolean(hostWs.state.view?.config), "turnDeadline field exists in views when acting");
+      log(
+        "feature.turn_timer",
+        Boolean(hostWs.state.view?.config),
+        "turnDeadline field exists in views when acting",
+      );
     }
     if (feat.id === "ledger") {
       const res = await fetch(`${BASE}/api/rooms/${roomA.id}/ledger`, {
@@ -881,7 +954,9 @@ async function main() {
   // Logout
   try {
     await api(host.jar, "/api/auth/logout", { method: "POST" });
-    const me = await fetch(`${BASE}/api/auth/me`, { headers: { cookie: host.jar.cookie } });
+    const me = await fetch(`${BASE}/api/auth/me`, {
+      headers: { cookie: host.jar.cookie },
+    });
     const body = await me.json();
     log("auth.logout", me.status === 401 || body.user === null, `status=${me.status}`);
   } catch (e) {

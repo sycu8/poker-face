@@ -4,20 +4,20 @@ Poker Faces voice uses **Cloudflare RealtimeKit**. The Worker mints a participan
 
 ## Credential mapping
 
-| What you have in the dashboard | Env / secret name | Used by |
-| --- | --- | --- |
-| RealtimeKit **App ID** | `REALTIMEKIT_APP_ID` | Worker `/api/rooms/:id/voice-token` |
-| Cloudflare API token with **Realtime Admin** | `REALTIMEKIT_API_TOKEN` | Same (Bearer to `…/realtime/kit/…`) |
-| Cloudflare **account id** | `CLOUDFLARE_ACCOUNT_ID` | Same (already set on Workers via deploy) |
-| RealtimeKit **preset** name (must exist on the app) | `REALTIMEKIT_PRESET_NAME` | Participant create (`preset_name`). Default: `group_call_participant` |
-| Calls **TURN** key id | `TURN_KEY_ID` (optional) | Ops / custom WebRTC only — not required for RealtimeKit voice |
-| TURN key **API token** | `TURN_KEY_API_TOKEN` (optional) | `POST …/turn/keys/$ID/credentials/generate-ice-servers` |
-| TURN key **name** (e.g. `poker-call`) | — | Dashboard label only; do **not** set as `REALTIMEKIT_PRESET_NAME` unless you also created a RealtimeKit preset with that exact name |
+| What you have in the dashboard                      | Env / secret name               | Used by                                                                                                                             |
+| --------------------------------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| RealtimeKit **App ID**                              | `REALTIMEKIT_APP_ID`            | Worker `/api/rooms/:id/voice-token`                                                                                                 |
+| Cloudflare API token with **Realtime Admin**        | `REALTIMEKIT_API_TOKEN`         | Same (Bearer to `…/realtime/kit/…`)                                                                                                 |
+| Cloudflare **account id**                           | `CLOUDFLARE_ACCOUNT_ID`         | Same (already set on Workers via deploy)                                                                                            |
+| RealtimeKit **preset** name (must exist on the app) | `REALTIMEKIT_PRESET_NAME`       | Participant create (`preset_name`). Default: `group_call_participant`                                                               |
+| Calls **TURN** key id                               | `TURN_KEY_ID` (optional)        | Ops / custom WebRTC only — not required for RealtimeKit voice                                                                       |
+| TURN key **API token**                              | `TURN_KEY_API_TOKEN` (optional) | `POST …/turn/keys/$ID/credentials/generate-ice-servers`                                                                             |
+| TURN key **name** (e.g. `poker-call`)               | —                               | Dashboard label only; do **not** set as `REALTIMEKIT_PRESET_NAME` unless you also created a RealtimeKit preset with that exact name |
 
 ## Required for voice to leave `not_configured`
 
 1. `REALTIMEKIT_APP_ID` — shipped as a Wrangler **var** (app `6867ec48-6a1e-43b9-b940-a542afad90d3`)
-2. `REALTIMEKIT_API_TOKEN` — Cloudflare API token with **Realtime Admin** (secret; **not** the TURN key API token). If unset, Deploy Cloudflare falls back to **`CLOUDFLARE_API_TOKEN`** when that token includes Realtime Admin.
+2. `REALTIMEKIT_API_TOKEN` — Cloudflare API token with **Realtime Admin** (secret; **not** the TURN key API token, and **not** the Wrangler deploy `CLOUDFLARE_API_TOKEN`). Set this secret explicitly.
 3. `CLOUDFLARE_ACCOUNT_ID` — Worker secret (already uploaded by Deploy Cloudflare CI)
 
 Without (2), `/api/rooms/:id/voice-token` returns `{ available: false, reason: "not_configured", missing: [...] }` and the table still works.

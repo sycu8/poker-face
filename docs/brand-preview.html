@@ -1,163 +1,198 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Poker Faces — Brand preview</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Manrope:wght@500;700&display=swap" rel="stylesheet" />
-  <style>
-    :root {
-      --night: #07100D;
-      --ink-green: #0B2118;
-      --felt: #0F4C35;
-      --felt-bright: #176B49;
-      --gold: #F4BC56;
-      --gold-deep: #B87822;
-      --ivory: #F6F2E7;
-      --mist: #A7B8AF;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: Manrope, system-ui, sans-serif;
-      background:
-        radial-gradient(ellipse 80% 50% at 20% 0%, #176B4933, transparent),
-        linear-gradient(160deg, var(--night), var(--ink-green) 55%, var(--felt));
-      color: var(--ivory);
-      min-height: 100vh;
-      padding: 2.5rem 1.5rem 4rem;
-    }
-    h1 {
-      font-family: Fraunces, Georgia, serif;
-      font-weight: 600;
-      font-size: clamp(1.75rem, 4vw, 2.5rem);
-      margin: 0 0 0.35rem;
-    }
-    .tag { color: var(--gold); margin: 0 0 2rem; font-weight: 500; }
-    section {
-      margin-bottom: 2.5rem;
-    }
-    h2 {
-      font-size: 0.75rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--mist);
-      margin: 0 0 1rem;
-      font-weight: 700;
-    }
-    .row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 1.25rem;
-      align-items: center;
-    }
-    .swatch {
-      width: 4.5rem;
-      height: 4.5rem;
-      border-radius: 0.5rem;
-      border: 1px solid #ffffff22;
-      display: flex;
-      align-items: flex-end;
-      padding: 0.35rem;
-      font-size: 0.55rem;
-      font-weight: 700;
-    }
-    .panel {
-      background: #07100D88;
-      border: 1px solid #A7B8AF33;
-      border-radius: 0.75rem;
-      padding: 1.25rem;
-    }
-    .panel.light {
-      background: var(--ivory);
-      color: var(--night);
-    }
-    .sizes img, .sizes object { display: block; }
-    .size-label { font-size: 0.7rem; color: var(--mist); margin-top: 0.35rem; }
-    .mark-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
-      gap: 1rem;
-      max-width: 28rem;
-    }
-    .mark-cell {
-      text-align: center;
-    }
-    .mark-cell img {
-      width: var(--s, 64px);
-      height: var(--s, 64px);
-      image-rendering: auto;
-    }
-  </style>
-</head>
-<body>
-  <h1>Poker Faces</h1>
-  <p class="tag">Your table. Your people.</p>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Poker Faces — Brand preview</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&family=Manrope:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --night: #07100d;
+        --ink-green: #0b2118;
+        --felt: #0f4c35;
+        --felt-bright: #176b49;
+        --gold: #f4bc56;
+        --gold-deep: #b87822;
+        --ivory: #f6f2e7;
+        --mist: #a7b8af;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: Manrope, system-ui, sans-serif;
+        background:
+          radial-gradient(ellipse 80% 50% at 20% 0%, #176b4933, transparent),
+          linear-gradient(160deg, var(--night), var(--ink-green) 55%, var(--felt));
+        color: var(--ivory);
+        min-height: 100vh;
+        padding: 2.5rem 1.5rem 4rem;
+      }
+      h1 {
+        font-family: Fraunces, Georgia, serif;
+        font-weight: 600;
+        font-size: clamp(1.75rem, 4vw, 2.5rem);
+        margin: 0 0 0.35rem;
+      }
+      .tag {
+        color: var(--gold);
+        margin: 0 0 2rem;
+        font-weight: 500;
+      }
+      section {
+        margin-bottom: 2.5rem;
+      }
+      h2 {
+        font-size: 0.75rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--mist);
+        margin: 0 0 1rem;
+        font-weight: 700;
+      }
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.25rem;
+        align-items: center;
+      }
+      .swatch {
+        width: 4.5rem;
+        height: 4.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid #ffffff22;
+        display: flex;
+        align-items: flex-end;
+        padding: 0.35rem;
+        font-size: 0.55rem;
+        font-weight: 700;
+      }
+      .panel {
+        background: #07100d88;
+        border: 1px solid #a7b8af33;
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+      }
+      .panel.light {
+        background: var(--ivory);
+        color: var(--night);
+      }
+      .sizes img,
+      .sizes object {
+        display: block;
+      }
+      .size-label {
+        font-size: 0.7rem;
+        color: var(--mist);
+        margin-top: 0.35rem;
+      }
+      .mark-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+        gap: 1rem;
+        max-width: 28rem;
+      }
+      .mark-cell {
+        text-align: center;
+      }
+      .mark-cell img {
+        width: var(--s, 64px);
+        height: var(--s, 64px);
+        image-rendering: auto;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Poker Faces</h1>
+    <p class="tag">Your table. Your people.</p>
 
-  <section>
-    <h2>Mark sizes</h2>
-    <div class="panel mark-grid">
-      <div class="mark-cell" style="--s:64px">
-        <img src="../logo/poker-faces-mark.svg" alt="Mark 64" width="64" height="64" />
-        <div class="size-label">64px</div>
+    <section>
+      <h2>Mark sizes</h2>
+      <div class="panel mark-grid">
+        <div class="mark-cell" style="--s: 64px">
+          <img src="../logo/poker-faces-mark.svg" alt="Mark 64" width="64" height="64" />
+          <div class="size-label">64px</div>
+        </div>
+        <div class="mark-cell" style="--s: 48px">
+          <img src="../logo/poker-faces-mark.svg" alt="Mark 48" width="48" height="48" />
+          <div class="size-label">48px</div>
+        </div>
+        <div class="mark-cell" style="--s: 32px">
+          <img src="../logo/poker-faces-mark.svg" alt="Mark 32" width="32" height="32" />
+          <div class="size-label">32px</div>
+        </div>
+        <div class="mark-cell" style="--s: 24px">
+          <img src="../logo/poker-faces-mark.svg" alt="Mark 24" width="24" height="24" />
+          <div class="size-label">24px</div>
+        </div>
       </div>
-      <div class="mark-cell" style="--s:48px">
-        <img src="../logo/poker-faces-mark.svg" alt="Mark 48" width="48" height="48" />
-        <div class="size-label">48px</div>
-      </div>
-      <div class="mark-cell" style="--s:32px">
-        <img src="../logo/poker-faces-mark.svg" alt="Mark 32" width="32" height="32" />
-        <div class="size-label">32px</div>
-      </div>
-      <div class="mark-cell" style="--s:24px">
-        <img src="../logo/poker-faces-mark.svg" alt="Mark 24" width="24" height="24" />
-        <div class="size-label">24px</div>
-      </div>
-    </div>
-  </section>
+    </section>
 
-  <section>
-    <h2>Wordmark — dark</h2>
-    <div class="panel">
-      <img src="../logo/poker-faces-wordmark-dark.svg" alt="Wordmark dark" height="72" />
-    </div>
-  </section>
-
-  <section>
-    <h2>Wordmark — light</h2>
-    <div class="panel light">
-      <img src="../logo/poker-faces-wordmark-light.svg" alt="Wordmark light" height="72" />
-    </div>
-  </section>
-
-  <section>
-    <h2>Monochrome</h2>
-    <div class="row">
-      <div class="panel" style="color:#F6F2E7">
-        <img src="../logo/poker-faces-monochrome.svg" alt="Mono on dark" width="64" height="64" style="color:#F6F2E7; filter: invert(1);" />
-        <div class="size-label">inverted on night</div>
+    <section>
+      <h2>Wordmark — dark</h2>
+      <div class="panel">
+        <img
+          src="../logo/poker-faces-wordmark-dark.svg"
+          alt="Wordmark dark"
+          height="72"
+        />
       </div>
+    </section>
+
+    <section>
+      <h2>Wordmark — light</h2>
       <div class="panel light">
-        <img src="../logo/poker-faces-monochrome.svg" alt="Mono on light" width="64" height="64" />
-        <div class="size-label">night on ivory</div>
+        <img
+          src="../logo/poker-faces-wordmark-light.svg"
+          alt="Wordmark light"
+          height="72"
+        />
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section>
-    <h2>Palette</h2>
-    <div class="row">
-      <div class="swatch" style="background:#07100D">Night</div>
-      <div class="swatch" style="background:#0B2118">Ink</div>
-      <div class="swatch" style="background:#0F4C35">Felt</div>
-      <div class="swatch" style="background:#176B49">Felt+</div>
-      <div class="swatch" style="background:#F4BC56;color:#07100D">Gold</div>
-      <div class="swatch" style="background:#B87822">Gold+</div>
-      <div class="swatch" style="background:#F6F2E7;color:#07100D">Ivory</div>
-      <div class="swatch" style="background:#A7B8AF;color:#07100D">Mist</div>
-    </div>
-  </section>
-</body>
+    <section>
+      <h2>Monochrome</h2>
+      <div class="row">
+        <div class="panel" style="color: #f6f2e7">
+          <img
+            src="../logo/poker-faces-monochrome.svg"
+            alt="Mono on dark"
+            width="64"
+            height="64"
+            style="color: #f6f2e7; filter: invert(1)"
+          />
+          <div class="size-label">inverted on night</div>
+        </div>
+        <div class="panel light">
+          <img
+            src="../logo/poker-faces-monochrome.svg"
+            alt="Mono on light"
+            width="64"
+            height="64"
+          />
+          <div class="size-label">night on ivory</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Palette</h2>
+      <div class="row">
+        <div class="swatch" style="background: #07100d">Night</div>
+        <div class="swatch" style="background: #0b2118">Ink</div>
+        <div class="swatch" style="background: #0f4c35">Felt</div>
+        <div class="swatch" style="background: #176b49">Felt+</div>
+        <div class="swatch" style="background: #f4bc56; color: #07100d">Gold</div>
+        <div class="swatch" style="background: #b87822">Gold+</div>
+        <div class="swatch" style="background: #f6f2e7; color: #07100d">Ivory</div>
+        <div class="swatch" style="background: #a7b8af; color: #07100d">Mist</div>
+      </div>
+    </section>
+  </body>
 </html>
