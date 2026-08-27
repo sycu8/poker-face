@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DUMMY_PASSWORD_HASH,
   hashPassword,
   needsRehash,
   PBKDF2_ITERS,
@@ -32,6 +33,12 @@ describe("password hashing", () => {
     expect(needsRehash("pbkdf2$100000$salt$hash")).toBe(true);
     expect(needsRehash(`pbkdf2$${PBKDF2_ITERS}$salt$hash`)).toBe(false);
     expect(needsRehash("not-a-hash")).toBe(true);
+  });
+
+  it("dummy hash iteration count stays aligned with PBKDF2_ITERS", () => {
+    expect(DUMMY_PASSWORD_HASH.startsWith(`pbkdf2$${PBKDF2_ITERS}$`)).toBe(true);
+    const iters = Number(DUMMY_PASSWORD_HASH.split("$")[1]);
+    expect(iters).toBe(PBKDF2_ITERS);
   });
 
   it("still verifies legacy 100k hashes", async () => {

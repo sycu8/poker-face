@@ -76,6 +76,38 @@ describe("heads-up blinds and action order", () => {
     expect(state.seats[2]!.betThisStreet).toBe(10); // BB
     expect(state.actionSeat).toBe(0); // UTG
   });
+
+  it("3 → 2 transition uses heads-up blinds and action order", () => {
+    const state = createInitialGameState(cfg(200, 5));
+    seatMany(state, [
+      ["a", "A", 0],
+      ["b", "B", 1],
+      ["c", "C", 2],
+    ]);
+    state.dealerSeat = 2;
+    startHand(state, 1_000);
+    expect(state.dealerSeat).toBe(0);
+    // Fold everyone but one to end the hand
+    expect(applyAction(state, 0, "fold", undefined, 1_100, "f0").ok).toBe(true);
+    expect(applyAction(state, 1, "fold", undefined, 1_200, "f1").ok).toBe(true);
+    expect(state.street).toBe("waiting");
+    // C leaves between hands
+    expect(unseatPlayer(state, "c", 2_000).ok).toBe(true);
+    expect(state.seats.filter((s) => s.playerId).length).toBe(2);
+
+    // Next hand: remaining A (0) and B (1) — heads-up rules
+    // Previous dealer was 0; advance to next occupied → 1
+    startHand(state, 3_000);
+    expect(state.dealerSeat).toBe(1);
+    expect(state.seats[1]!.betThisStreet).toBe(5); // button posts SB
+    expect(state.seats[0]!.betThisStreet).toBe(10); // BB
+    expect(state.actionSeat).toBe(1); // button/SB acts first preflop
+
+    expect(applyAction(state, 1, "call", undefined, 3_100, "hu2-c").ok).toBe(true);
+    expect(applyAction(state, 0, "check", undefined, 3_200, "hu2-k").ok).toBe(true);
+    expect(state.street).toBe("flop");
+    expect(state.actionSeat).toBe(0); // BB first postflop
+  });
 });
 
 describe("short big blind", () => {
@@ -435,6 +467,70 @@ describe("time bank validation and pause", () => {
     expect(state.seats[seatIdx]!.timeBankMs).toBe(seatBank);
   });
 
+  it("rejected raise during time bank leaves entire GameState unchanged", () => {
+    const state = createInitialGameState(cfg(100, 1));
+    state.config = { ...state.config, timeBankSeconds: 30 };
+    seatMany(state, [
+      ["a", "A", 0],
+      ["b", "B", 1],
+    ]);
+    startHand(state, 1_000);
+    const seatIdx = state.actionSeat!;
+    onTurnTimerExpired(state, 2_000);
+    // A) raise when currentBet=0 is illegal (should be bet / all_in)
+    state.currentBet = 0;
+    state.minRaise = 2;
+    const before = structuredClone(state);
+    expect(applyAction(state, seatIdx, "raise", 10, 2_500, "bad-raise").ok).toBe(false);
+    expect(state).toEqual(before);
+  });
+
+  it("below-min bet during time bank leaves entire GameState unchanged", () => {
+    const state = createInitialGameState(cfg(100, 1));
+    state.config = { ...state.config, timeBankSeconds: 30 };
+    seatMany(state, [
+      ["a", "A", 0],
+      ["b", "B", 1],
+    ]);
+    startHand(state, 1_000);
+    // Advance to flop so bet is legal form
+    const actor = state.actionSeat!;
+    expect(applyAction(state, actor, "call", undefined, 1_100, "c1").ok).toBe(true);
+    expect(
+      applyAction(state, actor === 0 ? 1 : 0, "check", undefined, 1_200, "k1").ok,
+    ).toBe(true);
+    expect(state.street).toBe("flop");
+    onTurnTimerExpired(state, 2_000);
+    const seatIdx = state.actionSeat!;
+    const before = structuredClone(state);
+    expect(applyAction(state, seatIdx, "bet", 1, 2_500, "tiny-bet").ok).toBe(false);
+    expect(state).toEqual(before);
+  });
+
+  it("generic raise rejects when only canAllIn is open (no raise bypass)", () => {
+    const state = createInitialGameState(cfg(200, 5));
+    seatMany(state, [
+      ["a", "A", 0],
+      ["b", "B", 1],
+      ["c", "C", 2],
+    ]);
+    state.dealerSeat = 2;
+    startHand(state, 1_000);
+    expect(applyAction(state, 0, "raise", 40, 1_100, "open").ok).toBe(true);
+    expect(applyAction(state, 1, "fold", undefined, 1_200, "sb-f").ok).toBe(true);
+    // BB short: canAllIn for call, not canRaise
+    state.seats[2]!.stack = 5;
+    state.seats[2]!.betThisStreet = 10;
+    state.actionSeat = 2;
+    const legal = getLegalActions(state, 2)!;
+    expect(legal.canAllIn).toBe(true);
+    expect(legal.canRaise).toBe(false);
+    const before = structuredClone(state);
+    expect(applyAction(state, 2, "raise", 15, 1_300, "raise-ai").ok).toBe(false);
+    expect(state).toEqual(before);
+    expect(applyAction(state, 2, "all_in", undefined, 1_400, "ai-ok").ok).toBe(true);
+  });
+
   it("pause freezes time-bank wall clock", () => {
     const state = createInitialGameState(cfg(100, 1));
     state.config = { ...state.config, timeBankSeconds: 30 };
@@ -499,9 +595,9 @@ describe("odd chips and tied best-five", () => {
     expect(winners[0]!.hand!.bestFive).not.toBe(winners[1]!.hand!.bestFive);
     const total = winners.reduce((s, w) => s + w.amount, 0);
     expect(total).toBe(21);
-    // Odd chip → button (seat 0 / player a)
-    expect(winners.find((w) => w.playerId === "a")!.amount).toBe(11);
-    expect(winners.find((w) => w.playerId === "b")!.amount).toBe(10);
+    // Odd chip → left of button (seat 1 / player b), not the button
+    expect(winners.find((w) => w.playerId === "b")!.amount).toBe(11);
+    expect(winners.find((w) => w.playerId === "a")!.amount).toBe(10);
   });
 
   it("odd chip prefers first clockwise seat when button is not tied", () => {

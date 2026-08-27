@@ -16,25 +16,31 @@ export const wsActionTypeSchema = z.enum([
 ]);
 
 export const wsClientMessageSchema = z.discriminatedUnion("type", [
-  z.object({ type: z.literal("ping") }),
-  z.object({
-    type: z.literal("chat"),
-    text: z.string().max(280),
-  }),
-  z.object({
-    type: z.literal("pause"),
-    paused: z.boolean(),
-  }),
-  z.object({ type: z.literal("rabbit") }),
-  z.object({ type: z.literal("request_start") }),
-  z.object({ type: z.literal("start_hand") }),
-  z.object({
-    type: z.literal("action"),
-    action: wsActionTypeSchema,
-    amount: finiteNumber.optional(),
-    expectedVersion: nonNegInt,
-    idempotencyKey: z.string().trim().min(8).max(128),
-  }),
+  z.object({ type: z.literal("ping") }).strict(),
+  z
+    .object({
+      type: z.literal("chat"),
+      text: z.string().max(280),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("pause"),
+      paused: z.boolean(),
+    })
+    .strict(),
+  z.object({ type: z.literal("rabbit") }).strict(),
+  z.object({ type: z.literal("request_start") }).strict(),
+  z.object({ type: z.literal("start_hand") }).strict(),
+  z
+    .object({
+      type: z.literal("action"),
+      action: wsActionTypeSchema,
+      amount: finiteNumber.optional(),
+      expectedVersion: nonNegInt,
+      idempotencyKey: z.string().trim().min(8).max(128),
+    })
+    .strict(),
 ]);
 
 export type WsClientMessage = z.infer<typeof wsClientMessageSchema>;
@@ -52,7 +58,8 @@ export function parseWsClientMessage(
       return { ok: false, error: "Invalid message encoding." };
     }
   }
-  if (raw.length > WS_MAX_MESSAGE_BYTES) {
+  const utf8Bytes = new TextEncoder().encode(raw).byteLength;
+  if (utf8Bytes > WS_MAX_MESSAGE_BYTES) {
     return { ok: false, error: "Message too large.", close: true };
   }
   let json: unknown;

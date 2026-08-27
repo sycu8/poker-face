@@ -1,73 +1,93 @@
 # Production scorecard — Poker Faces
 
-Date: 2026-08-27 · Branch: `main`  
-Evidence baseline: `npm test` → **109 passed** · CI lint/format/typecheck/build · Deploy Cloudflare on `main`
+Date: 2026-08-27 · Branch: `cursor/prod-hardening-pass-4c45`  
+Evidence baseline: `npm test` → **124 passed** · lint / format / typecheck / build green
 
-Scoring: each category **0–10** × weight → weighted sum / 100.  
-Verdict thresholds: **≥ 85** Production ready · **70–84** Production candidate · **55–69** Staging ready · **< 55** Not production ready.
+## Scoring model (fixed)
 
-**Cap rule:** any **P0 blocker requiring Cloudflare/GitHub dashboard config** not verified in this environment → verdict capped at **NOT PRODUCTION READY** regardless of code score.
+| Category                    |     Max |
+| --------------------------- | ------: |
+| Poker correctness           |      25 |
+| State integrity & realtime  |      20 |
+| Security & abuse resistance |      15 |
+| Auth & Turnstile            |      10 |
+| CI/CD & rollback            |      10 |
+| Observability & operations  |       8 |
+| Mobile UX                   |       7 |
+| Performance/PWA             |       5 |
+| **TOTAL**                   | **100** |
+
+Statuses:
+
+| Range  | Verdict                             |
+| ------ | ----------------------------------- |
+| 0–69   | NOT STAGING READY                   |
+| 70–84  | STAGING READY, NOT PRODUCTION READY |
+| 85–94  | PRODUCTION CANDIDATE                |
+| 95–100 | PRODUCTION READY                    |
+
+**Cap rule:** any unresolved P0/blocker → **NOT PRODUCTION READY** (even if uncapped score ≥ 85).
 
 ---
 
 ## Category scores
 
-| #   | Category                                                               | Weight | Score | Evidence / notes                                                                        |
-| --- | ---------------------------------------------------------------------- | -----: | ----: | --------------------------------------------------------------------------------------- |
-| 1   | **Engine correctness**                                                 |     15 |     9 | HU/side pots/leave/deferred settlement fixes; domain correctness suite green            |
-| 2   | **Realtime safety** (WS schema, version, idempotency, chat RL, alarms) |     15 |     8 | `wsProtocol.ts`, DO hardening; hand_complete archive on leave/kick/start_hand           |
-| 3   | **Auth & sessions**                                                    |     10 |     8 | PBKDF2 rehash, guest TTL, reset disabled, cron purge; set stable `SESSION_SECRET` in GH |
-| 4   | **Abuse controls** (Turnstile, rate limits, Origin)                    |     10 |     7 | Turnstile hostname bind; Origin check on POST/WS; prod Turnstile keys **manual**        |
-| 5   | **Join / membership consistency**                                      |     10 |     7 | D1 idempotency join + join-decision; away coalesce; full reconcile job not shipped      |
-| 6   | **Deploy & CI**                                                        |     10 |     8 | CI lint/format/test/build; secret bulk skips if unset (retains Worker secrets)          |
-| 7   | **Observability & ops**                                                |      5 |     6 | Analytics events; session purge cron; no formal alert runbooks in repo                  |
-| 8   | **PWA / client perf**                                                  |      5 |     7 | SW v3 no API cache; lazy Auth/Table routes; voice bundled in Table chunk                |
-| 9   | **Voice (optional)**                                                   |      5 |     6 | RealtimeKit isolated token; degrades safe; `REALTIMEKIT_API_TOKEN` **manual**           |
-| 10  | **Documentation & QA**                                                 |      5 |     8 | DISCOVERY, CONSISTENCY, ADVERSARIAL_QA, ROLLBACK; QA scripts exist, not in CI           |
-| 11  | **Secrets & infra separation**                                         |     10 |     5 | Wrangler template placeholders; staging/prod IDs & secrets **dashboard**                |
+| Category                    |   Score | Notes                                                                                                                                    |
+| --------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Poker correctness           | 23 / 25 | HU, short all-in, side pots, TDA odd chip, 3→2 HU, `validateAndResolveAction` zero-mutation rejects                                      |
+| State integrity & realtime  | 17 / 20 | Join re-ensure, approve idempotent, `membership_ops` outbox, `safeSend`, voice single-flight                                             |
+| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; Turnstile preserved                                                                         |
+| Auth & Turnstile            |  9 / 10 | Live site key on `/api/config`; dummy PBKDF2=300k; guest idempotency; secret values not readable via API (owner attested)                |
+| CI/CD & rollback            |  9 / 10 | Full CI in deploy validate; **canonical health verified 200** (no Wrangler false-green path); Environment required reviewers still empty |
+| Observability & operations  |   5 / 8 | Analytics + session purge + membership flush cron; limited alerting                                                                      |
+| Mobile UX                   |   5 / 7 | Existing table UX unchanged this pass                                                                                                    |
+| Performance/PWA             |   3 / 5 | VoicePanel + HandHistory lazy; Table chunk still ~680KB                                                                                  |
 
-**Weighted total:** `(9×15 + 8×15 + 8×10 + 7×10 + 7×10 + 8×10 + 6×5 + 7×5 + 6×5 + 8×5 + 5×10) / 100`  
-= `(135 + 120 + 80 + 70 + 70 + 80 + 30 + 35 + 30 + 40 + 50) / 100` = **740 / 100 = 74.0**
+**Weighted total: 84 / 100**
 
-Uncapped verdict: **PRODUCTION CANDIDATE** (70–84).
+Uncapped band: **STAGING READY, NOT PRODUCTION READY**.
+
+Capped verdict (remaining P0): **STAGING READY, NOT PRODUCTION READY**.
 
 ---
 
-## P0 blockers (manual / dashboard)
+## Manual actions verification (2026-08-27)
 
-These are **not** proven by code-only review in this agent run:
+| Action                                               | Owner claim | Agent verification                                                                                               |
+| ---------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| WAF / Bot exception for exact `GET /api/health`      | Completed   | **VERIFIED indirectly** — `https://poker.orangecloud.vn/api/health` → HTTP 200 + `ok` + `environment:production` |
+| Canonical health must succeed                        | Completed   | **VERIFIED** — body `{"ok":true,"service":"poker-faces","environment":"production",...}`                         |
+| Production Turnstile site key                        | Completed   | **VERIFIED** — `/api/config` returns non-empty `turnstileSiteKey`                                                |
+| `SESSION_SECRET` / `TURNSTILE_SECRET_KEY` in Actions | Completed   | **NOT READABLE** — Actions secrets API returns 403 for this token; owner attestation only                        |
+| GitHub Environment `production` required reviewers   | Completed   | **NOT VERIFIED** — API shows `protection_rules: []` and `deployment_branch_policy: null`                         |
 
-| Blocker                                                            | Owner action                                                         |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| `SESSION_SECRET` (or `_PRODUCTION`) set in GitHub Actions secrets  | Recommended so CI can refresh Worker secrets; unset retains existing |
-| Production `TURNSTILE_SECRET_KEY` + non-empty `TURNSTILE_SITE_KEY` | Turnstile fail-closed in prod when secret missing on Worker          |
-| `APP_ORIGIN_PRODUCTION` matches live custom domain                 | Smoke check + Origin validation                                      |
-| D1/KV/R2/Queue IDs patched via `ci-prepare-wrangler.mjs`           | First deploy or secret vars                                          |
-| Custom domain / route for `poker.orangecloud.vn`                   | Cloudflare dashboard                                                 |
-| Optional: `REALTIMEKIT_API_TOKEN` for voice                        | Voice works degraded without                                         |
+### Remaining P0
 
-Because ≥1 P0 item requires production dashboard verification **outside this branch**, the **capped verdict is NOT PRODUCTION READY** until a human confirms secrets, domain, and smoke on production.
+1. **Enable required reviewers** on GitHub Environment `production`  
+   Settings → Environments → production → **Required reviewers** (at least one reviewer).  
+   Current API snapshot still has zero protection rules.
 
-**Recommended staged verdict after manual checklist:** **STAGING READY → PRODUCTION CANDIDATE** once staging deploy + QA script pass; **PRODUCTION READY** only after production secrets + smoke + explicit approval (see README deploy gate).
+Until that rule is visible, production promotion is not gated by a human approval gate in GitHub.
 
 ---
 
-## What improved on this branch
+## What improved on this pass
 
-- Engine blockers (raise/HU/leave/ledger) and expanded domain tests
-- WS protocol validation, bounded idempotency, chat rate limit, alarm guards
-- Turnstile single-use guest join, password/session hardening, Origin validation
-- Join-decision D1 idempotency, consistency model doc
-- PWA cache hygiene, lazy table/auth routes, rollback doc
-- Deploy smoke false-green removed for production
+- D1/DO join/approve/leave/kick convergence + docs
+- Invalid actions cannot settle time bank / mutate state
+- Production smoke cannot succeed on Wrangler metadata alone
+- Deploy gate runs lint + format + typecheck + full test + build
+- Voice provision no longer globally blocks the room DO
+- PBKDF2 dummy cost aligned; guest join identity-idempotent; UTF-8 WS limit
+- Canonical production health now reachable (verified)
 
 ---
 
 ## Sign-off checklist (human)
 
-- [ ] Staging deploy green with real D1/KV IDs
-- [ ] `scripts/qa-seed-and-pass.mjs` against staging
-- [ ] Production secrets present (SESSION, Turnstile)
-- [ ] `/api/health` on canonical origin
-- [ ] Adversarial manual passes § ADVERSARIAL_QA (at least WS + join + Origin)
+- [ ] Staging deploy green with real D1/KV IDs + migration `0008_membership_ops`
+- [x] Cloudflare WAF path exception for `/api/health` only (inferred from successful probe)
+- [x] Canonical `https://poker.orangecloud.vn/api/health` returns 200 + `ok` + `environment:production`
+- [ ] Production Environment required reviewers enabled (**API still empty**)
+- [x] Production secrets present (SESSION, Turnstile) — **owner attested; agent cannot list secrets**
 - [ ] Explicit product owner approval to promote

@@ -665,9 +665,11 @@ function awardOddChipsClockwise(
     const seatB = state.seats.find((s) => s.playerId === b)!.seatIndex;
     const distA = (seatA - state.dealerSeat + n) % n;
     const distB = (seatB - state.dealerSeat + n) % n;
-    // First odd chip goes to the first seat clockwise from the button
-    // (smallest positive distance; distance 0 = button gets odd chip first).
-    return distA - distB;
+    // TDA / standard Hold'em: first odd chip goes to the first eligible
+    // tied winner clockwise LEFT of the button (positive distance).
+    // Distance 0 (button) sorts last for odd-chip priority.
+    const rank = (d: number) => (d === 0 ? n : d);
+    return rank(distA) - rank(distB);
   });
   const share = Math.floor(potAmount / ordered.length);
   let remainder = potAmount - share * ordered.length;
@@ -798,6 +800,121 @@ function applyWagerIncrease(state: GameState, seat: SeatState, paid: number): vo
   if (seat.stack === 0) seat.status = "all_in";
 }
 
+type NormalizedActionPlan = {
+  resolved: ActionType;
+  paid: number;
+  /** How chips are applied after time-bank settle. */
+  kind: "fold" | "check" | "call" | "wager_increase" | "call_all_in";
+};
+
+/**
+ * Pure validation + resolution. MUST run before settleTimeBankOnAction.
+ * Any rejection leaves GameState untouched.
+ */
+function validateAndResolveAction(
+  legal: LegalActions,
+  seat: SeatState,
+  state: GameState,
+  action: ActionType,
+  amount: number | undefined,
+): { ok: true; plan: NormalizedActionPlan } | { ok: false; error: string } {
+  switch (action) {
+    case "fold":
+      return { ok: true, plan: { resolved: "fold", paid: 0, kind: "fold" } };
+    case "check":
+      if (!legal.canCheck) return { ok: false, error: "Cannot check." };
+      return { ok: true, plan: { resolved: "check", paid: 0, kind: "check" } };
+    case "call": {
+      if (!legal.canCall) return { ok: false, error: "Cannot call." };
+      const paid = Math.min(legal.callAmount, seat.stack);
+      const resolved: ActionType = paid >= seat.stack ? "all_in" : "call";
+      return { ok: true, plan: { resolved, paid, kind: "call" } };
+    }
+    case "bet": {
+      if (!legal.canBet && !(legal.canAllIn && state.currentBet === 0)) {
+        return { ok: false, error: "Cannot bet." };
+      }
+      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
+        return { ok: false, error: "Invalid bet amount." };
+      }
+      const target = amount ?? legal.minBet;
+      const wantAllIn = amount !== undefined && amount >= seat.stack + seat.betThisStreet;
+      let paid: number;
+      if (wantAllIn || (amount !== undefined && amount >= seat.stack)) {
+        paid = seat.stack;
+      } else {
+        const capped = Math.min(target, legal.maxBet, seat.stack);
+        if (capped < legal.minBet && capped < seat.stack) {
+          return { ok: false, error: "Bet below minimum." };
+        }
+        paid = capped;
+      }
+      if (paid <= 0) return { ok: false, error: "Invalid bet." };
+      const resolved: ActionType = paid >= seat.stack ? "all_in" : "bet";
+      return { ok: true, plan: { resolved, paid, kind: "wager_increase" } };
+    }
+    case "raise": {
+      // Generic raise is illegal when there is nothing to raise (open action uses bet).
+      if (state.currentBet <= 0) {
+        return { ok: false, error: "Cannot raise." };
+      }
+      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
+        return { ok: false, error: "Invalid raise amount." };
+      }
+      const raiseTo = amount ?? legal.minRaiseTo;
+      const maxStackTo = seat.betThisStreet + seat.stack;
+      const wantAllIn = raiseTo >= maxStackTo;
+
+      // Do not let generic raise bypass all-in semantics when only canAllIn is open.
+      if (!legal.canRaise && !legal.canShortAllInRaise) {
+        return { ok: false, error: "Cannot raise." };
+      }
+
+      let paid: number;
+      if (wantAllIn) {
+        // Short all-in raise allowed only when canShortAllInRaise (or full canRaise).
+        if (!legal.canRaise && !legal.canShortAllInRaise) {
+          return { ok: false, error: "Cannot raise." };
+        }
+        paid = seat.stack;
+      } else {
+        if (!legal.canRaise) return { ok: false, error: "Cannot raise." };
+        if (raiseTo < legal.minRaiseTo) {
+          return { ok: false, error: "Raise below minimum." };
+        }
+        const target = Math.min(raiseTo, legal.maxRaiseTo);
+        paid = target - seat.betThisStreet;
+      }
+      if (paid <= 0) return { ok: false, error: "Invalid raise." };
+      const resolved: ActionType =
+        paid >= seat.stack || seat.stack - paid === 0 ? "all_in" : "raise";
+      // After paying, stack becomes 0 iff paid === seat.stack
+      const resolvedFinal: ActionType = paid >= seat.stack ? "all_in" : "raise";
+      void resolved;
+      return {
+        ok: true,
+        plan: { resolved: resolvedFinal, paid, kind: "wager_increase" },
+      };
+    }
+    case "all_in": {
+      if (!legal.canAllIn) return { ok: false, error: "All-in not allowed." };
+      const paid = seat.stack;
+      if (paid <= 0) return { ok: false, error: "Nothing to shove." };
+      const toCall = Math.max(0, state.currentBet - seat.betThisStreet);
+      if (paid <= toCall) {
+        return { ok: true, plan: { resolved: "all_in", paid, kind: "call_all_in" } };
+      }
+      // Increase all-in requires raise rights (already gated by canAllIn).
+      if (toCall > 0 && !raiseRightsOpen(state, seat)) {
+        return { ok: false, error: "All-in not allowed." };
+      }
+      return { ok: true, plan: { resolved: "all_in", paid, kind: "wager_increase" } };
+    }
+    default:
+      return { ok: false, error: "Unknown action." };
+  }
+}
+
 export function applyAction(
   state: GameState,
   seatIndex: number,
@@ -811,104 +928,47 @@ export function applyAction(
   void idempotencyKey;
   if (state.paused) return { ok: false, error: "The table is paused." };
 
-  // Validate FIRST — invalid actions must not mutate the time bank.
   const legal = getLegalActions(state, seatIndex);
   if (!legal) return { ok: false, error: "Not your turn." };
   const seat = state.seats[seatIndex]!;
 
-  // Pre-validate action legality before any mutation.
-  const precheck = precheckAction(legal, seat, state, action, amount);
-  if (!precheck.ok) return precheck;
+  const validated = validateAndResolveAction(legal, seat, state, action, amount);
+  if (!validated.ok) return validated;
 
+  // Only after successful validation: settle time bank, then mutate stacks/bets.
   settleTimeBankOnAction(state, seatIndex, nowMs);
 
-  let paid = 0;
-  let resolved: ActionType = action;
+  const { plan } = validated;
+  const paid = plan.paid;
+  const resolved = plan.resolved;
 
-  switch (action) {
-    case "fold": {
+  switch (plan.kind) {
+    case "fold":
       seat.status = "folded";
       seat.actedAtBetLevel = state.currentBet;
       break;
-    }
-    case "check": {
+    case "check":
       seat.actedAtBetLevel = state.currentBet;
       break;
-    }
-    case "call": {
-      paid = Math.min(legal.callAmount, seat.stack);
+    case "call":
       seat.stack -= paid;
       seat.betThisStreet += paid;
       seat.committedThisHand += paid;
       state.pot += paid;
       seat.actedAtBetLevel = state.currentBet;
-      if (seat.stack === 0) {
-        seat.status = "all_in";
-        resolved = "all_in";
-      }
+      if (seat.stack === 0) seat.status = "all_in";
       break;
-    }
-    case "bet": {
-      const target = amount ?? legal.minBet;
-      const wantAllIn = amount !== undefined && amount >= seat.stack + seat.betThisStreet;
-      if (wantAllIn || (amount !== undefined && amount >= seat.stack)) {
-        paid = seat.stack;
-      } else {
-        const capped = Math.min(target, legal.maxBet, seat.stack);
-        if (capped < legal.minBet && capped < seat.stack) {
-          return { ok: false, error: "Bet below minimum." };
-        }
-        paid = capped;
-      }
-      if (paid <= 0) return { ok: false, error: "Invalid bet." };
+    case "call_all_in":
+      seat.stack = 0;
+      seat.betThisStreet += paid;
+      seat.committedThisHand += paid;
+      state.pot += paid;
+      seat.status = "all_in";
+      seat.actedAtBetLevel = state.currentBet;
+      break;
+    case "wager_increase":
       applyWagerIncrease(state, seat, paid);
-      if (seat.status === "all_in") resolved = "all_in";
       break;
-    }
-    case "raise": {
-      const raiseTo = amount ?? legal.minRaiseTo;
-      const maxStackTo = seat.betThisStreet + seat.stack;
-      const wantAllIn = raiseTo >= maxStackTo;
-      if (!legal.canRaise && !legal.canShortAllInRaise) {
-        return { ok: false, error: "Cannot raise." };
-      }
-      if (wantAllIn) {
-        if (!legal.canRaise && !legal.canShortAllInRaise && !legal.canAllIn) {
-          return { ok: false, error: "Cannot raise." };
-        }
-        paid = seat.stack;
-      } else {
-        if (!legal.canRaise) return { ok: false, error: "Cannot raise." };
-        if (raiseTo < legal.minRaiseTo)
-          return { ok: false, error: "Raise below minimum." };
-        const target = Math.min(raiseTo, legal.maxRaiseTo);
-        paid = target - seat.betThisStreet;
-      }
-      if (paid <= 0) return { ok: false, error: "Invalid raise." };
-      applyWagerIncrease(state, seat, paid);
-      if (seat.status === "all_in") resolved = "all_in";
-      break;
-    }
-    case "all_in": {
-      if (!legal.canAllIn) return { ok: false, error: "All-in not allowed." };
-      paid = seat.stack;
-      if (paid <= 0) return { ok: false, error: "Nothing to shove." };
-      const toCall = Math.max(0, state.currentBet - seat.betThisStreet);
-      if (paid <= toCall) {
-        // Call all-in (or partial) — does not reopen / change minRaise.
-        seat.stack = 0;
-        seat.betThisStreet += paid;
-        seat.committedThisHand += paid;
-        state.pot += paid;
-        seat.status = "all_in";
-        seat.actedAtBetLevel = state.currentBet;
-      } else {
-        // Increase — only reachable when raise rights are open (canAllIn gated).
-        applyWagerIncrease(state, seat, paid);
-      }
-      resolved = "all_in";
-      break;
-    }
     default:
       return { ok: false, error: "Unknown action." };
   }
@@ -928,60 +988,6 @@ export function applyAction(
     events: events.concat(advanceAfterAction(state, nowMs)),
     idempotencyKey,
   };
-}
-
-function precheckAction(
-  legal: LegalActions,
-  seat: SeatState,
-  state: GameState,
-  action: ActionType,
-  amount: number | undefined,
-): { ok: true } | { ok: false; error: string } {
-  void state;
-  switch (action) {
-    case "fold":
-      return { ok: true };
-    case "check":
-      if (!legal.canCheck) return { ok: false, error: "Cannot check." };
-      return { ok: true };
-    case "call":
-      if (!legal.canCall) return { ok: false, error: "Cannot call." };
-      return { ok: true };
-    case "bet": {
-      if (!legal.canBet && !(legal.canAllIn && state.currentBet === 0)) {
-        return { ok: false, error: "Cannot bet." };
-      }
-      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
-        return { ok: false, error: "Invalid bet amount." };
-      }
-      return { ok: true };
-    }
-    case "raise": {
-      if (!legal.canRaise && !legal.canShortAllInRaise) {
-        // Allow raise-to-all-in only when canAllIn with open increase rights.
-        if (!(legal.canAllIn && raiseRightsOpen(state, seat) && seat.stack > 0)) {
-          return { ok: false, error: "Cannot raise." };
-        }
-      }
-      if (amount !== undefined && (!Number.isFinite(amount) || amount < 0)) {
-        return { ok: false, error: "Invalid raise amount." };
-      }
-      if (
-        amount !== undefined &&
-        Number.isFinite(amount) &&
-        amount < legal.minRaiseTo &&
-        amount < seat.betThisStreet + seat.stack
-      ) {
-        return { ok: false, error: "Raise below minimum." };
-      }
-      return { ok: true };
-    }
-    case "all_in":
-      if (!legal.canAllIn) return { ok: false, error: "All-in not allowed." };
-      return { ok: true };
-    default:
-      return { ok: false, error: "Unknown action." };
-  }
 }
 
 export function seatPlayer(
