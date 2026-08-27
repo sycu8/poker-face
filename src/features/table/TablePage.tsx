@@ -746,7 +746,9 @@ export function TablePage({ user }: { user: User }) {
               <p className="table-toolbar__note badge">Last hand: {winnerNames}</p>
             ) : null}
             {view?.pendingConfig ? (
-              <p className="table-toolbar__note muted">Rule changes pending for the next hand.</p>
+              <p className="table-toolbar__note muted">
+                Rule changes pending for the next hand.
+              </p>
             ) : null}
           </div>
           <div className="table-toolbar__actions">
@@ -861,13 +863,19 @@ export function TablePage({ user }: { user: User }) {
               <div className="table-alert panel table-alert--start" role="status">
                 <div className="table-alert__body">
                   <strong>{startRequestLabel}</strong>
-                  <p className="muted">Ready when you are — deal is still yours to start.</p>
+                  <p className="muted">
+                    Ready when you are — deal is still yours to start.
+                  </p>
                 </div>
                 <button
                   className="btn btn-primary btn--compact"
                   type="button"
                   onClick={() => {
-                    setStartRequests({ count: 0, latestDisplayName: null, requesters: [] });
+                    setStartRequests({
+                      count: 0,
+                      latestDisplayName: null,
+                      requesters: [],
+                    });
                     send({ type: "start_hand" });
                   }}
                 >
@@ -1018,325 +1026,340 @@ export function TablePage({ user }: { user: User }) {
                     ) : null}
                   </div>
                 ) : null}
-            {celebrationWinners && celebrationWinners.length > 0 ? (
-              <WinCelebration
-                winners={celebrationWinners}
-                displayNameFor={displayNameFor}
-                handNumber={view?.handNumber ?? 0}
-              />
-            ) : null}
-            <div className="table-center">
-              <div className="board">
-                {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map(
-                  (c, i) => (
-                    <PlayingCard
-                      key={`${c}-${i}`}
-                      code={c}
-                      size="board"
-                      className={winningCardCodes.has(c) ? "playing-card--winning" : ""}
-                    />
-                  ),
-                )}
-              </div>
-              {view?.rabbitCards && view.rabbitCards.length > 0 ? (
-                <div
-                  className="board"
-                  aria-label="Rabbit hunt cards"
-                  style={{ marginTop: "0.35rem" }}
-                >
-                  {view.rabbitCards.map((c, i) => (
-                    <PlayingCard key={`rabbit-${c}-${i}`} code={c} size="sm" />
-                  ))}
-                  <span className="muted" style={{ alignSelf: "center" }}>
-                    Rabbit
-                  </span>
+                {celebrationWinners && celebrationWinners.length > 0 ? (
+                  <WinCelebration
+                    winners={celebrationWinners}
+                    displayNameFor={displayNameFor}
+                    handNumber={view?.handNumber ?? 0}
+                  />
+                ) : null}
+                <div className="table-center">
+                  <div className="board">
+                    {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map(
+                      (c, i) => (
+                        <PlayingCard
+                          key={`${c}-${i}`}
+                          code={c}
+                          size="board"
+                          className={
+                            winningCardCodes.has(c) ? "playing-card--winning" : ""
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+                  {view?.rabbitCards && view.rabbitCards.length > 0 ? (
+                    <div
+                      className="board"
+                      aria-label="Rabbit hunt cards"
+                      style={{ marginTop: "0.35rem" }}
+                    >
+                      {view.rabbitCards.map((c, i) => (
+                        <PlayingCard key={`rabbit-${c}-${i}`} code={c} size="sm" />
+                      ))}
+                      <span className="muted" style={{ alignSelf: "center" }}>
+                        Rabbit
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="pot">
+                    Pot {view?.pot ?? 0}
+                    {view?.street ? ` · ${STREET_LABEL[view.street] ?? view.street}` : ""}
+                    {view?.paused ? " · paused" : ""}
+                  </div>
                 </div>
-              ) : null}
-              <div className="pot">
-                Pot {view?.pot ?? 0}
-                {view?.street ? ` · ${STREET_LABEL[view.street] ?? view.street}` : ""}
-                {view?.paused ? " · paused" : ""}
-              </div>
-            </div>
-            {dealBurst ? (
-              <div className="deal-layer" aria-hidden="true">
-                {dealBurst.targets.flatMap((seatIndex, order) => {
-                  const visual = visualSeatIndex(seatIndex, seatCount, anchorSeatIndex);
-                  const to = seatRingPercents(visual, seatCount);
-                  const fromVisual = visualSeatIndex(
-                    dealBurst.dealerSeat,
-                    seatCount,
-                    anchorSeatIndex,
-                  );
-                  const from = seatRingPercents(fromVisual, seatCount);
-                  return [0, 1].map((cardIdx) => {
-                    const step = order * 2 + cardIdx;
+                {dealBurst ? (
+                  <div className="deal-layer" aria-hidden="true">
+                    {dealBurst.targets.flatMap((seatIndex, order) => {
+                      const visual = visualSeatIndex(
+                        seatIndex,
+                        seatCount,
+                        anchorSeatIndex,
+                      );
+                      const to = seatRingPercents(visual, seatCount);
+                      const fromVisual = visualSeatIndex(
+                        dealBurst.dealerSeat,
+                        seatCount,
+                        anchorSeatIndex,
+                      );
+                      const from = seatRingPercents(fromVisual, seatCount);
+                      return [0, 1].map((cardIdx) => {
+                        const step = order * 2 + cardIdx;
+                        return (
+                          <div
+                            key={`deal-${dealBurst.handNumber}-${seatIndex}-${cardIdx}`}
+                            className="deal-flyer"
+                            style={
+                              {
+                                "--deal-from-x": `${from.left}%`,
+                                "--deal-from-y": `${from.top}%`,
+                                "--deal-to-x": `${to.left}%`,
+                                "--deal-to-y": `${to.top}%`,
+                                animationDelay: `${step * 70}ms`,
+                              } as CSSProperties
+                            }
+                          >
+                            <PlayingCard code="?" size="sm" />
+                          </div>
+                        );
+                      });
+                    })}
+                  </div>
+                ) : null}
+                <div
+                  className={["seats", seatCount >= 7 ? "seats--dense" : ""]
+                    .filter(Boolean)
+                    .join(" ")}
+                  role="list"
+                >
+                  {seats.map((seat) => {
+                    const visual = visualSeatIndex(
+                      seat.seatIndex,
+                      seatCount,
+                      anchorSeatIndex,
+                    );
+                    const isHero = seat.isViewer;
+                    const isDealer =
+                      view?.dealerSeat === seat.seatIndex && Boolean(seat.playerId);
+                    const dealingHere = Boolean(
+                      dealBurst?.targets.includes(seat.seatIndex),
+                    );
+                    const holeCodes: [string, string] | null =
+                      seat.holeCards ??
+                      (dealingHere && !isHero ? (["?", "?"] as [string, string]) : null);
+                    const dealOrder = dealBurst
+                      ? dealBurst.targets.indexOf(seat.seatIndex)
+                      : -1;
                     return (
                       <div
-                        key={`deal-${dealBurst.handNumber}-${seatIndex}-${cardIdx}`}
-                        className="deal-flyer"
-                        style={
-                          {
-                            "--deal-from-x": `${from.left}%`,
-                            "--deal-from-y": `${from.top}%`,
-                            "--deal-to-x": `${to.left}%`,
-                            "--deal-to-y": `${to.top}%`,
-                            animationDelay: `${step * 70}ms`,
-                          } as CSSProperties
-                        }
+                        key={seat.seatIndex}
+                        role="listitem"
+                        className={[
+                          "seat",
+                          isHero ? "seat--hero" : "seat--rail",
+                          !seat.playerId ? "seat--open" : "",
+                          view?.actionSeat === seat.seatIndex ? "active-turn" : "",
+                          seat.playerId && winnerIdSet.has(seat.playerId)
+                            ? "seat--winner"
+                            : "",
+                          seat.status === "sitting_out" ? "seat--away" : "",
+                          isDealer ? "seat--dealer" : "",
+                          dealingHere ? "seat--dealing" : "",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        style={seatRingStyle(visual, seatCount)}
                       >
-                        <PlayingCard code="?" size="sm" />
-                      </div>
-                    );
-                  });
-                })}
-              </div>
-            ) : null}
-            <div
-              className={["seats", seatCount >= 7 ? "seats--dense" : ""]
-                .filter(Boolean)
-                .join(" ")}
-              role="list"
-            >
-              {seats.map((seat) => {
-                const visual = visualSeatIndex(
-                  seat.seatIndex,
-                  seatCount,
-                  anchorSeatIndex,
-                );
-                const isHero = seat.isViewer;
-                const isDealer =
-                  view?.dealerSeat === seat.seatIndex && Boolean(seat.playerId);
-                const dealingHere = Boolean(dealBurst?.targets.includes(seat.seatIndex));
-                const holeCodes: [string, string] | null =
-                  seat.holeCards ??
-                  (dealingHere && !isHero ? (["?", "?"] as [string, string]) : null);
-                const dealOrder = dealBurst
-                  ? dealBurst.targets.indexOf(seat.seatIndex)
-                  : -1;
-                return (
-                  <div
-                    key={seat.seatIndex}
-                    role="listitem"
-                    className={[
-                      "seat",
-                      isHero ? "seat--hero" : "seat--rail",
-                      !seat.playerId ? "seat--open" : "",
-                      view?.actionSeat === seat.seatIndex ? "active-turn" : "",
-                      seat.playerId && winnerIdSet.has(seat.playerId)
-                        ? "seat--winner"
-                        : "",
-                      seat.status === "sitting_out" ? "seat--away" : "",
-                      isDealer ? "seat--dealer" : "",
-                      dealingHere ? "seat--dealing" : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    style={seatRingStyle(visual, seatCount)}
-                  >
-                    {isDealer ? (
-                      <span
-                        className="seat-dealer-chip"
-                        title="Dealer"
-                        aria-label="Dealer"
-                      >
-                        D
-                      </span>
-                    ) : null}
-                    <div className="seat-info">
-                      <div className="name">
-                        {seat.displayName ? (
-                          <PlayerAvatar name={seat.displayName} size={isHero ? 32 : 22} />
-                        ) : null}
-                        <span className="seat-name-text">
-                          {seat.displayName ?? "Open"}
-                          {isHero ? " (you)" : ""}
-                          {seat.playerId && isBotUserId(seat.playerId) ? " · bot" : ""}
-                        </span>
-                        {seat.playerId ? (
-                          <SeatMicIndicator playerId={seat.playerId} />
-                        ) : null}
-                      </div>
-                      <div className="seat-status muted">
-                        {seat.playerId ? seat.status.replaceAll("_", " ") : "Open seat"}
-                      </div>
-                      {seat.playerId ? (
-                        <div className="stack">
-                          {seat.stack}
-                          {seat.betThisStreet > 0 ? ` · ${seat.betThisStreet}` : ""}
-                          {typeof seat.timeBankMs === "number" && seat.timeBankMs > 0
-                            ? ` · bank ${Math.ceil(seat.timeBankMs / 1000)}s`
-                            : ""}
-                        </div>
-                      ) : null}
-                      {!seat.playerId && isHost ? (
-                        <div className="seat-host-actions">
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            onClick={() => void addBot(seat.seatIndex)}
+                        {isDealer ? (
+                          <span
+                            className="seat-dealer-chip"
+                            title="Dealer"
+                            aria-label="Dealer"
                           >
-                            Add bot
-                          </button>
-                        </div>
-                      ) : null}
-                      {seat.playerId && isHost && seat.playerId !== user.id ? (
-                        <div className="seat-host-actions">
-                          <button
-                            className="btn btn-secondary"
-                            type="button"
-                            onClick={() => void kickPlayer(seat.playerId!)}
-                          >
-                            Kick
-                          </button>
-                          {!isBotUserId(seat.playerId) ? (
-                            <button
-                              className="btn btn-secondary"
-                              type="button"
-                              onClick={() => void transferHostTo(seat.playerId!)}
-                            >
-                              Make host
-                            </button>
+                            D
+                          </span>
+                        ) : null}
+                        <div className="seat-info">
+                          <div className="name">
+                            {seat.displayName ? (
+                              <PlayerAvatar
+                                name={seat.displayName}
+                                size={isHero ? 32 : 22}
+                              />
+                            ) : null}
+                            <span className="seat-name-text">
+                              {seat.displayName ?? "Open"}
+                              {isHero ? " (you)" : ""}
+                              {seat.playerId && isBotUserId(seat.playerId)
+                                ? " · bot"
+                                : ""}
+                            </span>
+                            {seat.playerId ? (
+                              <SeatMicIndicator playerId={seat.playerId} />
+                            ) : null}
+                          </div>
+                          <div className="seat-status muted">
+                            {seat.playerId
+                              ? seat.status.replaceAll("_", " ")
+                              : "Open seat"}
+                          </div>
+                          {seat.playerId ? (
+                            <div className="stack">
+                              {seat.stack}
+                              {seat.betThisStreet > 0 ? ` · ${seat.betThisStreet}` : ""}
+                              {typeof seat.timeBankMs === "number" && seat.timeBankMs > 0
+                                ? ` · bank ${Math.ceil(seat.timeBankMs / 1000)}s`
+                                : ""}
+                            </div>
                           ) : null}
-                          {seat.stack === 0 ? (
-                            <button
-                              className="btn btn-secondary"
-                              type="button"
-                              onClick={() => void doRebuy(seat.playerId!)}
-                            >
-                              Rebuy
-                            </button>
+                          {!seat.playerId && isHost ? (
+                            <div className="seat-host-actions">
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                onClick={() => void addBot(seat.seatIndex)}
+                              >
+                                Add bot
+                              </button>
+                            </div>
+                          ) : null}
+                          {seat.playerId && isHost && seat.playerId !== user.id ? (
+                            <div className="seat-host-actions">
+                              <button
+                                className="btn btn-secondary"
+                                type="button"
+                                onClick={() => void kickPlayer(seat.playerId!)}
+                              >
+                                Kick
+                              </button>
+                              {!isBotUserId(seat.playerId) ? (
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void transferHostTo(seat.playerId!)}
+                                >
+                                  Make host
+                                </button>
+                              ) : null}
+                              {seat.stack === 0 ? (
+                                <button
+                                  className="btn btn-secondary"
+                                  type="button"
+                                  onClick={() => void doRebuy(seat.playerId!)}
+                                >
+                                  Rebuy
+                                </button>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
-                      ) : null}
-                    </div>
-                    {holeCodes ? (
-                      <div
-                        className={`seat-holes${isHero ? " seat-holes--hero" : ""}${
-                          dealingHere ? " seat-holes--deal-in" : ""
-                        }`}
-                        style={
-                          dealingHere && dealOrder >= 0
-                            ? ({
-                                "--deal-reveal-delay": `${dealOrder * 2 * 70 + 320}ms`,
-                              } as CSSProperties)
-                            : undefined
-                        }
-                      >
-                        {holeCodes.map((c, i) => (
-                          <PlayingCard
-                            key={`${c}-${i}-${view?.handNumber ?? 0}`}
-                            code={c}
-                            size={isHero ? "hero" : "sm"}
-                            className={[
-                              winningCardCodes.has(c) ? "playing-card--winning" : "",
-                              dealingHere ? "playing-card--dealt" : "",
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
+                        {holeCodes ? (
+                          <div
+                            className={`seat-holes${isHero ? " seat-holes--hero" : ""}${
+                              dealingHere ? " seat-holes--deal-in" : ""
+                            }`}
                             style={
-                              dealingHere
-                                ? ({ animationDelay: `${i * 70}ms` } as CSSProperties)
+                              dealingHere && dealOrder >= 0
+                                ? ({
+                                    "--deal-reveal-delay": `${dealOrder * 2 * 70 + 320}ms`,
+                                  } as CSSProperties)
                                 : undefined
                             }
-                          />
-                        ))}
+                          >
+                            {holeCodes.map((c, i) => (
+                              <PlayingCard
+                                key={`${c}-${i}-${view?.handNumber ?? 0}`}
+                                code={c}
+                                size={isHero ? "hero" : "sm"}
+                                className={[
+                                  winningCardCodes.has(c) ? "playing-card--winning" : "",
+                                  dealingHere ? "playing-card--dealt" : "",
+                                ]
+                                  .filter(Boolean)
+                                  .join(" ")}
+                                style={
+                                  dealingHere
+                                    ? ({ animationDelay: `${i * 70}ms` } as CSSProperties)
+                                    : undefined
+                                }
+                              />
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {legal ? (
+                <>
+                  <div
+                    className="actions actions--hero actions--desktop"
+                    aria-label="Your actions"
+                  >
+                    {legal.canFold ? (
+                      <button
+                        className="btn btn-danger"
+                        type="button"
+                        disabled={actionsLocked}
+                        onClick={() => sendGameAction("fold")}
+                      >
+                        Fold
+                      </button>
+                    ) : null}
+                    {legal.canCheck ? (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={actionsLocked}
+                        onClick={() => sendGameAction("check")}
+                      >
+                        Check
+                      </button>
+                    ) : null}
+                    {legal.canCall ? (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={actionsLocked}
+                        onClick={() => sendGameAction("call")}
+                      >
+                        {legal.callIsAllIn
+                          ? `All-in ${legal.callAmount}`
+                          : `Call ${legal.callAmount}`}
+                      </button>
+                    ) : null}
+                    {legal.canBet || legal.canRaise ? (
+                      <>
+                        <label className="sr-only" htmlFor="raiseTo">
+                          Raise to
+                        </label>
+                        <input
+                          id="raiseTo"
+                          type="number"
+                          min={legal.canBet ? legal.minBet : legal.minRaiseTo}
+                          max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
+                          value={raiseTo}
+                          disabled={actionsLocked}
+                          onChange={(e) => setRaiseTo(Number(e.target.value))}
+                        />
+                        <button
+                          className="btn btn-primary"
+                          type="button"
+                          disabled={actionsLocked}
+                          onClick={() =>
+                            sendGameAction(legal.canBet ? "bet" : "raise", raiseTo)
+                          }
+                        >
+                          {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
+                        </button>
+                      </>
+                    ) : null}
+                    {legal.canAllIn ? (
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        disabled={actionsLocked}
+                        onClick={() => sendGameAction("all_in")}
+                      >
+                        All-in
+                      </button>
                     ) : null}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {legal ? (
-            <>
-              <div
-                className="actions actions--hero actions--desktop"
-                aria-label="Your actions"
-              >
-                {legal.canFold ? (
-                  <button
-                    className="btn btn-danger"
-                    type="button"
+                  <ActionDock
+                    className="action-dock--mobile"
+                    legal={legal}
+                    pot={view?.pot ?? 0}
+                    currentBet={view?.currentBet ?? 0}
+                    sequence={view?.sequence}
                     disabled={actionsLocked}
-                    onClick={() => sendGameAction("fold")}
-                  >
-                    Fold
-                  </button>
-                ) : null}
-                {legal.canCheck ? (
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={actionsLocked}
-                    onClick={() => sendGameAction("check")}
-                  >
-                    Check
-                  </button>
-                ) : null}
-                {legal.canCall ? (
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={actionsLocked}
-                    onClick={() => sendGameAction("call")}
-                  >
-                    {legal.callIsAllIn
-                      ? `All-in ${legal.callAmount}`
-                      : `Call ${legal.callAmount}`}
-                  </button>
-                ) : null}
-                {legal.canBet || legal.canRaise ? (
-                  <>
-                    <label className="sr-only" htmlFor="raiseTo">
-                      Raise to
-                    </label>
-                    <input
-                      id="raiseTo"
-                      type="number"
-                      min={legal.canBet ? legal.minBet : legal.minRaiseTo}
-                      max={legal.canBet ? legal.maxBet : legal.maxRaiseTo}
-                      value={raiseTo}
-                      disabled={actionsLocked}
-                      onChange={(e) => setRaiseTo(Number(e.target.value))}
-                    />
-                    <button
-                      className="btn btn-primary"
-                      type="button"
-                      disabled={actionsLocked}
-                      onClick={() =>
-                        sendGameAction(legal.canBet ? "bet" : "raise", raiseTo)
-                      }
-                    >
-                      {legal.canBet ? "Bet" : "Raise to"} {raiseTo}
-                    </button>
-                  </>
-                ) : null}
-                {legal.canAllIn ? (
-                  <button
-                    className="btn btn-secondary"
-                    type="button"
-                    disabled={actionsLocked}
-                    onClick={() => sendGameAction("all_in")}
-                  >
-                    All-in
-                  </button>
-                ) : null}
-              </div>
-              <ActionDock
-                className="action-dock--mobile"
-                legal={legal}
-                pot={view?.pot ?? 0}
-                currentBet={view?.currentBet ?? 0}
-                sequence={view?.sequence}
-                disabled={actionsLocked}
-                onSend={send}
-                raiseTo={raiseTo}
-                onRaiseToChange={setRaiseTo}
-              />
-            </>
-          ) : null}
+                    onSend={send}
+                    raiseTo={raiseTo}
+                    onRaiseToChange={setRaiseTo}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
 
