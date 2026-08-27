@@ -36,8 +36,10 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - run: npm run lint
+      - run: npm run format:check
       - run: npm run typecheck
-      - run: npm run test:domain
+      - run: npm test
       - run: npm run build
       - name: Require Cloudflare deploy secrets
         run: |
@@ -198,20 +200,24 @@ jobs:
           if [ -z "$REALTIMEKIT_API_TOKEN" ]; then export REALTIMEKIT_API_TOKEN="${REALTIMEKIT_API_TOKEN_PRODUCTION:-}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
           if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
+          # Production requires SESSION_SECRET + TURNSTILE_SECRET_KEY in Actions so deploys
+          # cannot silently rely on accidental Worker secret persistence alone.
+          missing=0
           if [ -z "$SESSION_SECRET" ]; then
-            echo "::warning::SESSION_SECRET_PRODUCTION (or SESSION_SECRET) not in Actions secrets — skipping secret bulk so existing Worker secrets are retained. Set the secret for future updates (do not generate ephemeral values)."
-            if [ -z "$TURNSTILE_SECRET_KEY" ]; then
-              echo "::warning::TURNSTILE_SECRET_KEY_PRODUCTION also unset — relying on existing Worker Turnstile secret if any."
-            fi
-          else
-            if [ -z "$TURNSTILE_SECRET_KEY" ]; then
-              echo "::warning::TURNSTILE_SECRET_KEY_PRODUCTION unset — uploading SESSION_SECRET without refreshing Turnstile."
-              unset REQUIRE_TURNSTILE
-            fi
-            node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
-            npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
-            rm -f .ci-secrets-production.json
+            echo "::error::SESSION_SECRET_PRODUCTION (or SESSION_SECRET) is required for production deploy. Do not generate ephemeral values."
+            missing=1
           fi
+          if [ -z "$TURNSTILE_SECRET_KEY" ]; then
+            echo "::error::TURNSTILE_SECRET_KEY_PRODUCTION (or TURNSTILE_SECRET_KEY) is required for production deploy."
+            missing=1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "See docs/GITHUB_ACTIONS_DEPLOY.md"
+            exit 1
+          fi
+          node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
+          npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
+          rm -f .ci-secrets-production.json
           if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
             echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured unless already set on the Worker. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
           else
@@ -228,47 +234,39 @@ jobs:
           set -euo pipefail
           BASE="${{ vars.APP_ORIGIN_PRODUCTION }}"
           if [ -z "$BASE" ]; then BASE="https://poker.orangecloud.vn"; fi
-          echo "Probing $BASE/api/health (canonical origin)"
+          echo "Probing canonical $BASE/api/health"
           CODE=$(curl -sS -o /tmp/health-prod.json -w "%{http_code}" \
             --retry 5 --retry-all-errors --retry-delay 3 \
             -A "PokerFaces-DeploySmoke/1.0 (+https://github.com/sycu8/poker-face)" \
             "$BASE/api/health" || true)
           echo "HTTP $CODE"
-          if [ "$CODE" = "200" ] && grep -q '"ok":true' /tmp/health-prod.json && grep -q '"environment":"production"' /tmp/health-prod.json; then
-            cat /tmp/health-prod.json
-            echo
-            echo "Canonical origin smoke passed."
-            exit 0
-          fi
-          # Cloudflare Bot Fight / WAF often 403s GitHub Actions egress while real users succeed.
-          echo "::warning::Canonical origin smoke returned HTTP $CODE (body below). Falling back to Wrangler deployment verification."
           cat /tmp/health-prod.json 2>/dev/null || true
           echo
-          npx wrangler deployments list --name poker-faces --json > /tmp/deployments.json
-          node -e '
-            const fs = require("node:fs");
-            const list = JSON.parse(fs.readFileSync("/tmp/deployments.json", "utf8"));
-            const rows = Array.isArray(list) ? list : (list.deployments || list.result || []);
-            if (!rows.length) {
-              console.error("No deployments returned for poker-faces");
-              process.exit(1);
-            }
-            const createdOf = (d) =>
-              Date.parse(d.created_on || d.createdOn || d.created_at || d.createdAt || 0) || 0;
-            const latest = [...rows].sort((a, b) => createdOf(b) - createdOf(a))[0];
-            const createdMs = createdOf(latest);
-            console.log("Latest deployment:", JSON.stringify(latest, null, 2).slice(0, 1200));
-            if (!createdMs) {
-              console.error("Could not parse deployment created_on");
-              process.exit(1);
-            }
-            const ageMs = Date.now() - createdMs;
-            if (ageMs > 30 * 60 * 1000) {
-              console.error(
-                "Latest deployment is older than 30 minutes — refusing smoke fallback.",
-                { ageMinutes: Math.round(ageMs / 60000) },
-              );
-              process.exit(1);
-            }
-            console.log("Wrangler confirms a recent production Worker deployment.");
-          '
+          # Diagnostic only — never converts a failed health check into success.
+          npx wrangler deployments list --name poker-faces --json > /tmp/deployments.json || true
+          if [ -f /tmp/deployments.json ]; then
+            node -e '
+              try {
+                const fs = require("node:fs");
+                const list = JSON.parse(fs.readFileSync("/tmp/deployments.json", "utf8"));
+                const rows = Array.isArray(list) ? list : (list.deployments || list.result || []);
+                const createdOf = (d) =>
+                  Date.parse(d.created_on || d.createdOn || d.created_at || d.createdAt || 0) || 0;
+                const latest = [...rows].sort((a, b) => createdOf(b) - createdOf(a))[0];
+                if (latest) console.log("Latest Worker deployment (diagnostic):", JSON.stringify(latest).slice(0, 800));
+              } catch (e) { console.log("Could not parse deployments list:", e.message); }
+            ' || true
+          fi
+          if [ "$CODE" != "200" ]; then
+            echo "::error::Canonical production health must return HTTP 200. Got $CODE. Configure a WAF/Bot exception for exact path /api/health (see docs/GITHUB_ACTIONS_DEPLOY.md). Wrangler deployment metadata is NOT a health substitute."
+            exit 1
+          fi
+          if ! grep -q '"ok":true' /tmp/health-prod.json; then
+            echo "::error::Health JSON missing ok:true"
+            exit 1
+          fi
+          if ! grep -q '"environment":"production"' /tmp/health-prod.json; then
+            echo "::error::Health JSON missing environment:production"
+            exit 1
+          fi
+          echo "Canonical origin smoke passed."

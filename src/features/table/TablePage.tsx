@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -10,11 +12,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type LedgerSnapshot, type User } from "../../lib/api";
 import { isBotUserId } from "../../lib/bots";
 import { SeatMicIndicator } from "../voice/SeatMicIndicator";
-import { VoicePanel } from "../voice/VoicePanel";
 import { VoiceSessionProvider } from "../voice/VoiceSession";
 import { ActionDock } from "./ActionDock";
 import { buildGameAction } from "./gameAction";
-import { HandHistoryPanel } from "./HandHistoryPanel";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
 import {
@@ -25,6 +25,13 @@ import {
 } from "./seatLayout";
 import { useRoomSocket } from "./useRoomSocket";
 import { WinCelebration, winningBestFiveCodes, winningPlayerIds } from "./WinCelebration";
+
+const VoicePanel = lazy(() =>
+  import("../voice/VoicePanel").then((m) => ({ default: m.VoicePanel })),
+);
+const HandHistoryPanel = lazy(() =>
+  import("./HandHistoryPanel").then((m) => ({ default: m.HandHistoryPanel })),
+);
 
 interface SeatView {
   seatIndex: number;
@@ -1465,8 +1472,14 @@ export function TablePage({ user }: { user: User }) {
                 Watching: {spectators.map((s) => s.displayName).join(", ")}
               </p>
             ) : null}
-            {showHistory && roomId ? <HandHistoryPanel roomId={roomId} /> : null}
-            <VoicePanel />
+            {showHistory && roomId ? (
+              <Suspense fallback={<p className="muted">Loading history…</p>}>
+                <HandHistoryPanel roomId={roomId} />
+              </Suspense>
+            ) : null}
+            <Suspense fallback={null}>
+              <VoicePanel />
+            </Suspense>
           </div>
           {isHost ? (
             <div className="panel">

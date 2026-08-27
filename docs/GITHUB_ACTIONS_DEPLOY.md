@@ -8,9 +8,9 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `CLOUDFLARE_API_TOKEN`                                                     | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit)                                                                                                                          |
 | `CLOUDFLARE_ACCOUNT_ID`                                                    | Cloudflare account id                                                                                                                                                                         |
-| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. When set, deploy uploads it via `wrangler secret bulk`. When unset, deploy **skips** secret bulk and retains existing Worker secrets (never generates ephemeral values). |
-| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify. Recommended for production; if unset, existing Worker secret is retained.                                                                                               |
-| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars. Empty values warn but no longer hard-fail the job.                                                                                      |
+| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. **Production deploy fails** if missing (no ephemeral generation). Staging may skip bulk and retain existing Worker secrets with a warning.                              |
+| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify. **Required for production deploy.**                                                                                                                                   |
+| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars.                                                                                                                                         |
 
 ## Recommended secrets
 
@@ -24,7 +24,7 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | `KV_NAMESPACE_ID_STAGING` / `KV_NAMESPACE_ID_PRODUCTION` | Optional; auto-created if omitted                                                                                         |
 | `TURN_KEY_ID` / `TURN_KEY_API_TOKEN`                     | Optional Calls TURN key (ops only; RealtimeKit voice does not need them)                                                  |
 
-**Voice:** set `REALTIMEKIT_API_TOKEN` (repo or Environments **`staging`** / **`production`**). Deploy does **not** copy `CLOUDFLARE_API_TOKEN` into the Worker as a RealtimeKit token.
+**Voice:** set `REALTIMEKIT_API_TOKEN` (repo or Environments **`staging`** / **`production`**). Deploy does **not** copy `CLOUDFLARE_API_TOKEN` into the Worker as a RealtimeKit token. Voice secrets remain optional for core poker.
 
 Voice setup details: [`docs/VOICE_SETUP.md`](VOICE_SETUP.md).
 
@@ -38,17 +38,55 @@ Voice setup details: [`docs/VOICE_SETUP.md`](VOICE_SETUP.md).
 | `REALTIMEKIT_APP_ID`                         | —                                      |
 | `REALTIMEKIT_PRESET_NAME`                    | `group_call_participant`               |
 
-Create GitHub Environments named `staging` and `production` (workflow references them). Add protection rules on `production` if desired.
+## GitHub Environments
+
+Create GitHub Environments named `staging` and `production` (workflow references them).
+
+**Production Environment must require a reviewer / manual approval** before `deploy-production` runs for public production. This is configured in the GitHub UI (Settings → Environments → production → Required reviewers). Application code cannot fake Environment protection.
+
+## Validate gate
+
+`deploy.yml` `validate` runs the **same** suite as `ci.yml`:
+
+- `npm ci`
+- `npm run lint`
+- `npm run format:check`
+- `npm run typecheck`
+- `npm test`
+- `npm run build`
+
+Production cannot deploy when full CI validations fail.
 
 ## Smoke checks
 
-- **Production:** prefers `APP_ORIGIN_PRODUCTION` (default `https://poker.orangecloud.vn`) `/api/health`. If Cloudflare WAF/Bot Fight returns **403** to GitHub Actions egress, the job falls back to `wrangler deployments list` confirming a recent `poker-faces` deployment (still no workers.dev success path).
-- **Staging:** prefers custom domain; may fall back to workers.dev with a warning.
+### Canonical production health (required)
+
+`https://poker.orangecloud.vn/api/health` (or `APP_ORIGIN_PRODUCTION`) **must** return:
+
+- HTTP **200**
+- JSON containing `"ok": true` and `"environment": "production"`
+
+If this fails, **production smoke fails**. Wrangler `deployments list` may be printed for diagnostics only — it **must not** convert a failed health check into success. There is **no** workers.dev fallback for production smoke.
+
+### Staging
+
+Prefers custom domain; may fall back to workers.dev with a warning.
+
+### Cloudflare WAF / Bot Fight — smallest health-path exception
+
+Configure a **path-specific** exception so GitHub Actions (and ops probes) can reach health without weakening site-wide bot protection:
+
+1. Exact path: `/api/health` (method GET)
+2. Bypass: Managed Challenge / Bot Fight Challenge for that path only
+3. Keep the endpoint **uncached** (Worker response already sets health dynamically)
+4. Do **not** expose secrets, user data, or internal IDs on `/api/health` (current payload: `ok`, `service`, `environment`, `tagline`)
+
+Do **not** disable WAF/Bot Fight globally.
 
 ## Trigger
 
 - **Manual:** Actions → Deploy Cloudflare → Run workflow → `all` / `staging` / `production`
-- **Automatic:** push to `main` deploys staging then production
+- **Automatic:** push to `main` deploys staging then production (production still gated by Environment approval)
 
 ## Vite + Cloudflare environments
 

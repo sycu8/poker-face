@@ -35,6 +35,7 @@ import {
 } from "./wsProtocol";
 import { writeAnalytics } from "../lib/analytics";
 import { createRealtimeKitMeeting } from "../voice/realtimekit";
+import { safeSend } from "../lib/safeSend";
 
 interface ChatMessage {
   id: string;
@@ -96,6 +97,13 @@ export class RoomDurableObject extends DurableObject<Env> {
   private spectators = new Map<string, string>();
   /** RealtimeKit meeting id (create-once; synced to D1). */
   private realtimekitMeetingId: string | null = null;
+  /**
+   * Room-local voice provision single-flight. Must NOT use blockConcurrencyWhile
+   * around external RealtimeKit HTTP — that would freeze poker DO handlers.
+   */
+  private voiceProvisionPromise: Promise<
+    { ok: true; meetingId: string } | { ok: false; error: string }
+  > | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -305,11 +313,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     for (const ws of this.ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() as ClientAttachment | null;
       if (exceptUserId && att?.userId === exceptUserId) continue;
-      try {
-        ws.send(payload);
-      } catch {
-        /* ignore broken sockets */
-      }
+      this.safeSend(ws, payload);
     }
   }
 
@@ -338,12 +342,18 @@ export class RoomDurableObject extends DurableObject<Env> {
     };
   }
 
+  /** Best-effort socket send — never throws into authoritative paths. */
+  private safeSend(ws: WebSocket, data: string): boolean {
+    return safeSend(ws, data);
+  }
+
   private sendProjection(ws: WebSocket): void {
     if (!this.game) return;
     const att = ws.deserializeAttachment() as ClientAttachment | null;
     const view = projectForPlayer(this.game, att?.userId ?? null);
     const isHost = att?.userId === this.hostUserId;
-    ws.send(
+    this.safeSend(
+      ws,
       JSON.stringify({
         type: "snapshot",
         view,
@@ -385,55 +395,75 @@ export class RoomDurableObject extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(this.game.turnDeadlineMs);
   }
 
+  private async provisionVoiceMeeting(roomName?: string): Promise<
+    { ok: true; meetingId: string } | { ok: false; error: string }
+  > {
+    if (this.realtimekitMeetingId) {
+      return { ok: true, meetingId: this.realtimekitMeetingId };
+    }
+    if (!this.roomId) {
+      return { ok: false, error: "Room not ready." };
+    }
+
+    const d1Row = await this.env.DB.prepare(
+      `SELECT realtimekit_meeting_id FROM rooms WHERE id = ?`,
+    )
+      .bind(this.roomId)
+      .first<{ realtimekit_meeting_id: string | null }>();
+    if (d1Row?.realtimekit_meeting_id) {
+      this.realtimekitMeetingId = d1Row.realtimekit_meeting_id;
+      this.persistMeetingId();
+      return { ok: true, meetingId: this.realtimekitMeetingId };
+    }
+
+    const title = roomName ?? this.roomName ?? "Friends table";
+    const created = await createRealtimeKitMeeting(this.env, title);
+    if ("error" in created) {
+      return { ok: false, error: created.error };
+    }
+
+    // Conditional D1 write: only set when still null (race-safe across isolates).
+    const now = Date.now();
+    await this.env.DB.prepare(
+      `UPDATE rooms SET realtimekit_meeting_id = ?, updated_at = ?
+       WHERE id = ? AND realtimekit_meeting_id IS NULL`,
+    )
+      .bind(created.meetingId, now, this.roomId)
+      .run();
+
+    const after = await this.env.DB.prepare(
+      `SELECT realtimekit_meeting_id FROM rooms WHERE id = ?`,
+    )
+      .bind(this.roomId)
+      .first<{ realtimekit_meeting_id: string | null }>();
+    const meetingId = after?.realtimekit_meeting_id ?? created.meetingId;
+    this.realtimekitMeetingId = meetingId;
+    this.persistMeetingId();
+    return { ok: true, meetingId };
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === "/ensure-voice-meeting" && request.method === "POST") {
-      // Serialize create-or-get so concurrent voice-token calls share one meeting.
-      return this.ctx.blockConcurrencyWhile(async () => {
-        if (this.realtimekitMeetingId) {
-          return Response.json({ ok: true, meetingId: this.realtimekitMeetingId });
-        }
-        if (!this.roomId) {
-          return Response.json({ ok: false, error: "Room not ready." }, { status: 400 });
-        }
-
-        const d1Row = await this.env.DB.prepare(
-          `SELECT realtimekit_meeting_id FROM rooms WHERE id = ?`,
-        )
-          .bind(this.roomId)
-          .first<{ realtimekit_meeting_id: string | null }>();
-        if (d1Row?.realtimekit_meeting_id) {
-          this.realtimekitMeetingId = d1Row.realtimekit_meeting_id;
-          this.persistMeetingId();
-          return Response.json({ ok: true, meetingId: this.realtimekitMeetingId });
-        }
-
-        const body = (await request.json().catch(() => ({}))) as { roomName?: string };
-        const title = body.roomName ?? this.roomName ?? "Friends table";
-        const created = await createRealtimeKitMeeting(this.env, title);
-        if ("error" in created) {
-          return Response.json({ ok: false, error: created.error });
-        }
-
-        // Conditional D1 write: only set when still null (race-safe across isolates).
-        const now = Date.now();
-        await this.env.DB.prepare(
-          `UPDATE rooms SET realtimekit_meeting_id = ?, updated_at = ?
-           WHERE id = ? AND realtimekit_meeting_id IS NULL`,
-        )
-          .bind(created.meetingId, now, this.roomId)
-          .run();
-
-        const after = await this.env.DB.prepare(
-          `SELECT realtimekit_meeting_id FROM rooms WHERE id = ?`,
-        )
-          .bind(this.roomId)
-          .first<{ realtimekit_meeting_id: string | null }>();
-        const meetingId = after?.realtimekit_meeting_id ?? created.meetingId;
-        this.realtimekitMeetingId = meetingId;
-        this.persistMeetingId();
-        return Response.json({ ok: true, meetingId });
-      });
+      // Fast path — no external I/O.
+      if (this.realtimekitMeetingId) {
+        return Response.json({ ok: true, meetingId: this.realtimekitMeetingId });
+      }
+      // Single-flight external provision without blockConcurrencyWhile so poker
+      // WS/HTTP handlers keep running while RealtimeKit is slow or timing out.
+      const body = (await request.json().catch(() => ({}))) as { roomName?: string };
+      if (!this.voiceProvisionPromise) {
+        this.voiceProvisionPromise = this.provisionVoiceMeeting(body.roomName).finally(
+          () => {
+            this.voiceProvisionPromise = null;
+          },
+        );
+      }
+      const result = await this.voiceProvisionPromise;
+      if (!result.ok) {
+        return Response.json({ ok: false, error: result.error });
+      }
+      return Response.json({ ok: true, meetingId: result.meetingId });
     }
 
     if (url.pathname === "/init" && request.method === "POST") {
@@ -468,11 +498,24 @@ export class RoomDurableObject extends DurableObject<Env> {
         userId: string;
         displayName: string;
       };
-      this.pendingJoins.push(body);
+      // Idempotent upsert: same requestId or same userId → one pending card.
+      const existingIdx = this.pendingJoins.findIndex(
+        (j) => j.requestId === body.requestId || j.userId === body.userId,
+      );
+      if (existingIdx >= 0) {
+        const prev = this.pendingJoins[existingIdx]!;
+        this.pendingJoins[existingIdx] = {
+          requestId: prev.requestId || body.requestId,
+          userId: body.userId,
+          displayName: body.displayName || prev.displayName,
+        };
+      } else {
+        this.pendingJoins.push(body);
+      }
       this.persist();
       this.broadcast({ type: "join_request", ...body });
       for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
-      return Response.json({ ok: true });
+      return Response.json({ ok: true, requestId: body.requestId });
     }
 
     if (url.pathname === "/reject" && request.method === "POST") {
@@ -552,6 +595,19 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.pendingJoins = this.pendingJoins.filter(
         (j) => j.requestId !== body.requestId && j.userId !== body.userId,
       );
+
+      // Idempotent retry: already seated → return existing seat (no second seat).
+      const alreadySeated = this.game.seats.find((s) => s.playerId === body.userId);
+      if (alreadySeated) {
+        this.spectators.delete(body.userId);
+        this.persist();
+        for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
+        return Response.json({
+          ok: true,
+          seatIndex: alreadySeated.seatIndex,
+          alreadySeated: true,
+        });
+      }
 
       if (body.asSpectator || body.seatIndex === null) {
         this.spectators.set(body.userId, body.displayName);

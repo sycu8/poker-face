@@ -35,6 +35,25 @@ describe("wsProtocol", () => {
     if (!parsed.ok) expect(parsed.close).toBe(true);
   });
 
+  it("rejects UTF-8 oversized payloads when character count is under the limit", () => {
+    // Each 😀 is 4 UTF-8 bytes. 2100 emoji = 8400 bytes > 8192, but length=2100.
+    const emoji = "😀".repeat(2100);
+    expect(emoji.length).toBeLessThan(WS_MAX_MESSAGE_BYTES);
+    expect(new TextEncoder().encode(emoji).byteLength).toBeGreaterThan(
+      WS_MAX_MESSAGE_BYTES,
+    );
+    const parsed = parseWsClientMessage(emoji);
+    expect(parsed.ok).toBe(false);
+    if (!parsed.ok) expect(parsed.close).toBe(true);
+  });
+
+  it("rejects unknown fields (strict schemas)", () => {
+    const parsed = parseWsClientMessage(
+      JSON.stringify({ type: "ping", hack: true }),
+    );
+    expect(parsed.ok).toBe(false);
+  });
+
   it("rejects NaN / Infinity amounts", () => {
     const parsed = parseWsClientMessage(
       JSON.stringify({

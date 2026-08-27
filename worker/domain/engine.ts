@@ -665,9 +665,11 @@ function awardOddChipsClockwise(
     const seatB = state.seats.find((s) => s.playerId === b)!.seatIndex;
     const distA = (seatA - state.dealerSeat + n) % n;
     const distB = (seatB - state.dealerSeat + n) % n;
-    // First odd chip goes to the first seat clockwise from the button
-    // (smallest positive distance; distance 0 = button gets odd chip first).
-    return distA - distB;
+    // TDA / standard Hold'em: first odd chip goes to the first eligible
+    // tied winner clockwise LEFT of the button (positive distance).
+    // Distance 0 (button) sorts last for odd-chip priority.
+    const rank = (d: number) => (d === 0 ? n : d);
+    return rank(distA) - rank(distB);
   });
   const share = Math.floor(potAmount / ordered.length);
   let remainder = potAmount - share * ordered.length;

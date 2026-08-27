@@ -5,6 +5,7 @@ import { handleVoice } from "./voice/realtimekit";
 import { purgeExpiredSessions, requireUser } from "./auth/session";
 import { readPublicConfig } from "./lib/configKv";
 import { requireActiveMember } from "./lib/membership";
+import { flushMembershipOps } from "./lib/membershipOps";
 import { errorJson, json } from "./lib/http";
 import { rejectDisallowedOrigin, requiresOriginCheck } from "./lib/origin";
 import { RoomDurableObject } from "./room/RoomDurableObject";
@@ -185,6 +186,15 @@ export default {
     } catch (err) {
       console.error(
         "purgeExpiredSessions failed",
+        err instanceof Error ? err.message : err,
+      );
+    }
+    try {
+      const applied = await flushMembershipOps(env);
+      if (applied > 0) console.log("flushMembershipOps", applied);
+    } catch (err) {
+      console.error(
+        "flushMembershipOps failed",
         err instanceof Error ? err.message : err,
       );
     }

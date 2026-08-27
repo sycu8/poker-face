@@ -54,8 +54,7 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 /** Fixed dummy hash so unknown-user login still pays PBKDF2 cost (timing). */
-const DUMMY_PASSWORD_HASH =
-  "pbkdf2$100000$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+export const DUMMY_PASSWORD_HASH = `pbkdf2$${PBKDF2_ITERS}$AAAAAAAAAAAAAAAAAAAAAA==$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=`;
 
 /** Run verify work even when no user row exists (mitigate timing oracles). */
 export async function verifyPasswordOrDummy(
