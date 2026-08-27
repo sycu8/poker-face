@@ -137,6 +137,14 @@ export class RoomDurableObject extends DurableObject<Env> {
         );
         this.realtimekitMeetingId = snap.realtimekitMeetingId ?? null;
       }
+      if (!this.realtimekitMeetingId) {
+        const meetingRow = this.ctx.storage.sql
+          .exec<{ value: string }>(
+            `SELECT value FROM room_meta WHERE key = 'realtimekit_meeting_id'`,
+          )
+          .toArray()[0];
+        if (meetingRow?.value) this.realtimekitMeetingId = meetingRow.value;
+      }
     });
   }
 
@@ -164,6 +172,20 @@ export class RoomDurableObject extends DurableObject<Env> {
       `INSERT INTO room_meta (key, value) VALUES ('snapshot', ?)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       value,
+    );
+  }
+
+  /** Persist meeting id even when a full game snapshot is not ready. */
+  private persistMeetingId(): void {
+    if (this.game && this.roomId && this.hostUserId) {
+      this.persist();
+      return;
+    }
+    if (!this.realtimekitMeetingId) return;
+    this.ctx.storage.sql.exec(
+      `INSERT INTO room_meta (key, value) VALUES ('realtimekit_meeting_id', ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      this.realtimekitMeetingId,
     );
   }
 
@@ -354,7 +376,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           .first<{ realtimekit_meeting_id: string | null }>();
         if (d1Row?.realtimekit_meeting_id) {
           this.realtimekitMeetingId = d1Row.realtimekit_meeting_id;
-          this.persist();
+          this.persistMeetingId();
           return Response.json({ ok: true, meetingId: this.realtimekitMeetingId });
         }
 
@@ -381,7 +403,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           .first<{ realtimekit_meeting_id: string | null }>();
         const meetingId = after?.realtimekit_meeting_id ?? created.meetingId;
         this.realtimekitMeetingId = meetingId;
-        this.persist();
+        this.persistMeetingId();
         return Response.json({ ok: true, meetingId });
       });
     }
