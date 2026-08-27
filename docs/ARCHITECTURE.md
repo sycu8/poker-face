@@ -9,6 +9,7 @@
 - **Analytics Engine:** Aggregate events without PII.
 - **Rate limits + Turnstile:** Registration, login, guest join, and join abuse paths.
 - **Cron (staging/production):** `0 */6 * * *` runs `purgeExpiredSessions` (expired sessions + revoked older than 7 days).
+- **Origin validation:** For `POST /api/*` and `/ws/rooms/:id` upgrades, if the browser sends an `Origin` header it must match `APP_ORIGIN`. Missing `Origin` is allowed (curl, CI scripts). See `worker/lib/origin.ts`.
 
 ### Auth (password)
 
