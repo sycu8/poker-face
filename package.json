@@ -1,9 +1,26 @@
 {
   "name": "poker-faces",
-  "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Private play-money Texas Hold'em for friends on Cloudflare",
+  "description": "Open-source play-money Texas Hold'em for friends on Cloudflare",
+  "license": "MIT",
+  "author": "Cuong Le Sy (https://github.com/sycu8)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sycu8/poker-face.git"
+  },
+  "homepage": "https://poker.orangecloud.vn",
+  "bugs": {
+    "url": "https://github.com/sycu8/poker-face/issues"
+  },
+  "keywords": [
+    "poker",
+    "texas-holdem",
+    "cloudflare-workers",
+    "react",
+    "play-money",
+    "open-source"
+  ],
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
