@@ -72,6 +72,16 @@ export function HomePage({
 
   async function continueAsGuestAndJoin() {
     setError(null);
+    const code = invite.trim().toUpperCase();
+    const name = guestName.trim();
+    if (code.length < 4) {
+      setError("Enter a valid invite code (at least 4 characters).");
+      return;
+    }
+    if (name.length < 2) {
+      setError("Enter a display name (at least 2 characters).");
+      return;
+    }
     setGuestBusy(true);
     try {
       const result = await api.joinAsGuest({
@@ -170,14 +180,22 @@ export function HomePage({
               <button
                 className="btn btn-primary"
                 type="button"
-                disabled={
-                  guestBusy || guestName.trim().length < 2 || invite.trim().length < 4
-                }
+                disabled={guestBusy}
                 onClick={() => void continueAsGuestAndJoin()}
               >
                 {guestBusy ? "Joining…" : "Continue as guest"}
               </button>
             </div>
+            {!guestBusy && (invite.trim().length < 4 || guestName.trim().length < 2) ? (
+              <p className="muted" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+                Enter an invite code and display name to continue.
+              </p>
+            ) : null}
+            {error ? (
+              <p role="alert" style={{ color: "var(--danger)", margin: "0.75rem 0 0" }}>
+                {error}
+              </p>
+            ) : null}
             <p className="muted" style={{ marginTop: "0.75rem" }}>
               Prefer a lasting handle?{" "}
               <Link to={`/auth?mode=register${invite ? `&invite=${invite}` : ""}`}>
@@ -187,14 +205,9 @@ export function HomePage({
               <Link to={`/auth${invite ? `?invite=${invite}` : ""}`}>Sign in</Link>
             </p>
           </div>
-          {message || error ? (
+          {message ? (
             <div className="home-status">
-              {message ? <p className="badge">{message}</p> : null}
-              {error ? (
-                <p role="alert" style={{ color: "var(--danger)", margin: 0 }}>
-                  {error}
-                </p>
-              ) : null}
+              <p className="badge">{message}</p>
             </div>
           ) : null}
         </section>

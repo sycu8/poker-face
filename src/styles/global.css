@@ -1832,6 +1832,7 @@ button {
 :root,
 html[data-theme="felt"] {
   --theme-felt: #1a4d3a;
+  --panel: #0d261c;
 }
 
 html[data-theme="midnight"] {
@@ -1865,10 +1866,16 @@ html[data-theme="sunset"] {
 
 .theme-picker select {
   background: var(--panel);
-  color: var(--ink);
+  color: var(--ivory);
   border: 1px solid #ffffff22;
   border-radius: 8px;
   padding: 0.25rem 0.45rem;
+  min-width: 6.5rem;
+}
+
+.theme-picker select option {
+  background: var(--panel);
+  color: var(--ivory);
 }
 
 .player-avatar {
