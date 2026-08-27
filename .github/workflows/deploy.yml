@@ -234,15 +234,9 @@ jobs:
           set -euo pipefail
           BASE="${{ vars.APP_ORIGIN_PRODUCTION }}"
           if [ -z "$BASE" ]; then BASE="https://poker.orangecloud.vn"; fi
-          echo "Probing canonical $BASE/api/health"
-          CODE=$(curl -sS -o /tmp/health-prod.json -w "%{http_code}" \
-            --retry 5 --retry-all-errors --retry-delay 3 \
-            -A "PokerFaces-DeploySmoke/1.0 (+https://github.com/sycu8/poker-face)" \
-            "$BASE/api/health" || true)
-          echo "HTTP $CODE"
-          cat /tmp/health-prod.json 2>/dev/null || true
-          echo
-          # Diagnostic only — never converts a failed health check into success.
+          export APP_ORIGIN="$BASE"
+          # Temporary IP Access Allow for this runner (Free Bot Fight Mode cannot
+          # be skipped with path WAF rules). Wrangler deploy list is diagnostic only.
           npx wrangler deployments list --name poker-faces --json > /tmp/deployments.json || true
           if [ -f /tmp/deployments.json ]; then
             node -e '
@@ -257,16 +251,4 @@ jobs:
               } catch (e) { console.log("Could not parse deployments list:", e.message); }
             ' || true
           fi
-          if [ "$CODE" != "200" ]; then
-            echo "::error::Canonical production health must return HTTP 200. Got $CODE. Configure a WAF/Bot exception for exact path /api/health (see docs/GITHUB_ACTIONS_DEPLOY.md). Wrangler deployment metadata is NOT a health substitute."
-            exit 1
-          fi
-          if ! grep -q '"ok":true' /tmp/health-prod.json; then
-            echo "::error::Health JSON missing ok:true"
-            exit 1
-          fi
-          if ! grep -q '"environment":"production"' /tmp/health-prod.json; then
-            echo "::error::Health JSON missing environment:production"
-            exit 1
-          fi
-          echo "Canonical origin smoke passed."
+          node scripts/ci-smoke-health.mjs
