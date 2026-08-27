@@ -6,7 +6,7 @@ export function coalesceJoinRequest(args: {
 }):
   | { status: "approved"; message: string }
   | { status: "pending"; requestId: string; message: string } {
-  if (args.memberStatus === "seated") {
+  if (args.memberStatus === "seated" || args.memberStatus === "away") {
     return { status: "approved", message: "You have a seat" };
   }
   if (args.pendingRequestId) {

@@ -33,4 +33,13 @@ describe("join request coalescing", () => {
     });
     expect(res).toEqual({ status: "approved", message: "You have a seat" });
   });
+
+  it("short-circuits when away (still has a seat)", () => {
+    const res = coalesceJoinRequest({
+      memberStatus: "away",
+      pendingRequestId: "jr_stale",
+      newRequestId: "jr_new",
+    });
+    expect(res).toEqual({ status: "approved", message: "You have a seat" });
+  });
 });

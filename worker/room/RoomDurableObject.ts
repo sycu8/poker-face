@@ -225,8 +225,42 @@ export class RoomDurableObject extends DurableObject<Env> {
       if (this.ledger[playerId]?.active) {
         recordBuyOut(this.ledger, playerId, stack);
       }
+      this.pendingLeaves.delete(playerId);
     }
-    this.pendingLeaves.clear();
+  }
+
+  /** Persist projections, alarms, and hand archive side effects after engine events. */
+  private async publishGameEvents(
+    events: Array<{ type: string }>,
+    reason?: string,
+  ): Promise<void> {
+    if (!this.game) return;
+    this.flushLeavesIfWaiting();
+    this.persist();
+    await this.syncAlarms();
+    for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
+    if (events.length === 0) return;
+    this.broadcast(
+      reason ? { type: "events", events, reason } : { type: "events", events },
+    );
+    if (events.some((e) => e.type === "hand_complete") && this.roomId) {
+      try {
+        await this.env.ARCHIVE_QUEUE.send({
+          type: "hand_complete",
+          roomId: this.roomId,
+          handNumber: this.game.handNumber,
+          summary: this.game.lastHandResult,
+          idempotencyKey: `hand:${this.roomId}:${this.game.handNumber}`,
+        });
+      } catch {
+        /* queue optional in some local setups */
+      }
+      try {
+        writeAnalytics(this.env, "hand_complete", this.roomId, [this.game.handNumber]);
+      } catch {
+        /* analytics best-effort */
+      }
+    }
   }
 
   /** Apply bot actions while the action seat belongs to a bot (instant practice play). */
@@ -263,34 +297,7 @@ export class RoomDurableObject extends DurableObject<Env> {
     events: Array<{ type: string }>,
     reason?: string,
   ): Promise<void> {
-    if (!this.game) return;
-    // Flush deferred leaves after showdown so buy-out uses final stacks.
-    this.flushLeavesIfWaiting();
-    this.persist();
-    await this.syncAlarms();
-    for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
-    this.broadcast(
-      reason ? { type: "events", events, reason } : { type: "events", events },
-    );
-
-    if (events.some((e) => e.type === "hand_complete") && this.roomId) {
-      try {
-        await this.env.ARCHIVE_QUEUE.send({
-          type: "hand_complete",
-          roomId: this.roomId,
-          handNumber: this.game.handNumber,
-          summary: this.game.lastHandResult,
-          idempotencyKey: `hand:${this.roomId}:${this.game.handNumber}`,
-        });
-      } catch {
-        /* queue optional in some local setups */
-      }
-      try {
-        writeAnalytics(this.env, "hand_complete", this.roomId, [this.game.handNumber]);
-      } catch {
-        /* analytics best-effort */
-      }
-    }
+    await this.publishGameEvents(events, reason);
   }
 
   private broadcast(message: unknown, exceptUserId?: string): void {
@@ -712,13 +719,10 @@ export class RoomDurableObject extends DurableObject<Env> {
       this.startRequests = this.startRequests.filter((r) => r.userId !== body.userId);
       if (result.deferred) this.pendingLeaves.add(body.userId);
       else this.pendingLeaves.delete(body.userId);
-      this.flushLeavesIfWaiting();
-      this.persist();
       this.broadcast({ type: "player_left", userId: body.userId });
       writeAnalytics(this.env, "player_left", this.roomId ?? "unknown");
       this.closeSocketsForUser(body.userId, "Left table");
-      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
-      if (result.events.length) this.broadcast({ type: "events", events: result.events });
+      await this.publishGameEvents(result.events);
       return Response.json({ ok: true });
     }
 
@@ -749,13 +753,10 @@ export class RoomDurableObject extends DurableObject<Env> {
       );
       if (result.deferred) this.pendingLeaves.add(body.targetUserId);
       else this.pendingLeaves.delete(body.targetUserId);
-      this.flushLeavesIfWaiting();
-      this.persist();
       this.broadcast({ type: "player_kicked", userId: body.targetUserId });
       writeAnalytics(this.env, "player_kicked", this.roomId ?? "unknown");
       this.closeSocketsForUser(body.targetUserId, "Kicked from table");
-      for (const ws of this.ctx.getWebSockets()) this.sendProjection(ws);
-      if (result.events.length) this.broadcast({ type: "events", events: result.events });
+      await this.publishGameEvents(result.events);
       return Response.json({ ok: true });
     }
 
@@ -1108,14 +1109,12 @@ export class RoomDurableObject extends DurableObject<Env> {
       }
       this.startRequests = [];
       this.actionIdempotency.pruneBeforeHand(this.game.handNumber);
+      this.flushLeavesIfWaiting();
       const events = startHand(this.game, Date.now());
-      this.persist();
-      await this.syncAlarms();
       writeAnalytics(this.env, "hand_started", this.roomId ?? "unknown", [
         this.game.handNumber,
       ]);
-      for (const socket of this.ctx.getWebSockets()) this.sendProjection(socket);
-      this.broadcast({ type: "events", events });
+      await this.publishGameEvents(events);
       await this.runBotTurns();
       return;
     }
