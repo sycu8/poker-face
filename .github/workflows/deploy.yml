@@ -103,17 +103,17 @@ jobs:
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
           if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
           if [ -z "$SESSION_SECRET" ]; then
-            echo "::error::SESSION_SECRET / SESSION_SECRET_STAGING must be set. Refusing to generate an ephemeral secret."
-            exit 1
-          fi
-          node scripts/ci-write-secrets-file.mjs .ci-secrets-staging.json
-          # Target the named Worker via source env; secrets are not in the Vite output config.
-          npx wrangler secret bulk .ci-secrets-staging.json --env staging --config wrangler.jsonc
-          rm -f .ci-secrets-staging.json
-          if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
-            echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
+            echo "::warning::SESSION_SECRET / SESSION_SECRET_STAGING not in Actions secrets — skipping secret bulk so existing Worker secrets are retained. Set the secret for future updates (do not generate ephemeral values)."
           else
-            echo "REALTIMEKIT_API_TOKEN is present for staging secret bulk (len=${#REALTIMEKIT_API_TOKEN})."
+            node scripts/ci-write-secrets-file.mjs .ci-secrets-staging.json
+            # Target the named Worker via source env; secrets are not in the Vite output config.
+            npx wrangler secret bulk .ci-secrets-staging.json --env staging --config wrangler.jsonc
+            rm -f .ci-secrets-staging.json
+          fi
+          if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
+            echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured unless already set on the Worker. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
+          else
+            echo "REALTIMEKIT_API_TOKEN is present for staging (len=${#REALTIMEKIT_API_TOKEN})."
           fi
       - name: Redeploy staging after secrets
         uses: cloudflare/wrangler-action@v3
@@ -164,8 +164,7 @@ jobs:
           if [ -z "$TURNSTILE_SITE_KEY" ]; then export TURNSTILE_SITE_KEY="${{ vars.TURNSTILE_SITE_KEY_PRODUCTION }}"; fi
           if [ -z "$APP_ORIGIN" ]; then export APP_ORIGIN="https://poker.orangecloud.vn"; fi
           if [ -z "$TURNSTILE_SITE_KEY" ]; then
-            echo "::error::TURNSTILE_SITE_KEY is empty after prepare. Set TURNSTILE_SITE_KEY_PRODUCTION (secret or var)."
-            exit 1
+            echo "::warning::TURNSTILE_SITE_KEY_PRODUCTION is empty — guest/auth Turnstile will use an empty site key until set."
           fi
           node scripts/ci-prepare-wrangler.mjs production
       - name: Apply D1 migrations (production)
@@ -196,20 +195,23 @@ jobs:
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
           if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
           if [ -z "$SESSION_SECRET" ]; then
-            echo "::error::SESSION_SECRET_PRODUCTION (or SESSION_SECRET) must be set. Refusing to generate an ephemeral secret."
-            exit 1
-          fi
-          if [ -z "$TURNSTILE_SECRET_KEY" ]; then
-            echo "::error::TURNSTILE_SECRET_KEY_PRODUCTION (or TURNSTILE_SECRET_KEY) must be set for production."
-            exit 1
-          fi
-          node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
-          npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
-          rm -f .ci-secrets-production.json
-          if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
-            echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
+            echo "::warning::SESSION_SECRET_PRODUCTION (or SESSION_SECRET) not in Actions secrets — skipping secret bulk so existing Worker secrets are retained. Set the secret for future updates (do not generate ephemeral values)."
+            if [ -z "$TURNSTILE_SECRET_KEY" ]; then
+              echo "::warning::TURNSTILE_SECRET_KEY_PRODUCTION also unset — relying on existing Worker Turnstile secret if any."
+            fi
           else
-            echo "REALTIMEKIT_API_TOKEN is present for production secret bulk (len=${#REALTIMEKIT_API_TOKEN})."
+            if [ -z "$TURNSTILE_SECRET_KEY" ]; then
+              echo "::warning::TURNSTILE_SECRET_KEY_PRODUCTION unset — uploading SESSION_SECRET without refreshing Turnstile."
+              unset REQUIRE_TURNSTILE
+            fi
+            node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
+            npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
+            rm -f .ci-secrets-production.json
+          fi
+          if [ -z "${REALTIMEKIT_API_TOKEN:-}" ]; then
+            echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured unless already set on the Worker. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
+          else
+            echo "REALTIMEKIT_API_TOKEN is present for production (len=${#REALTIMEKIT_API_TOKEN})."
           fi
       - name: Redeploy production after secrets
         uses: cloudflare/wrangler-action@v3
