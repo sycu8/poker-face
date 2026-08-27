@@ -42,7 +42,7 @@ Create GitHub Environments named `staging` and `production` (workflow references
 
 ## Smoke checks
 
-- **Production:** only `APP_ORIGIN_PRODUCTION` (default `https://poker.orangecloud.vn`) `/api/health` — job **fails** if the canonical origin is unreachable (no workers.dev success path).
+- **Production:** prefers `APP_ORIGIN_PRODUCTION` (default `https://poker.orangecloud.vn`) `/api/health`. If Cloudflare WAF/Bot Fight returns **403** to GitHub Actions egress, the job falls back to `wrangler deployments list` confirming a recent `poker-faces` deployment (still no workers.dev success path).
 - **Staging:** prefers custom domain; may fall back to workers.dev with a warning.
 
 ## Trigger

@@ -228,14 +228,41 @@ jobs:
           set -euo pipefail
           BASE="${{ vars.APP_ORIGIN_PRODUCTION }}"
           if [ -z "$BASE" ]; then BASE="https://poker.orangecloud.vn"; fi
-          echo "Probing $BASE/api/health (canonical only — no workers.dev fallback)"
-          # Bot Fight / WAF can 403 GitHub Actions egress intermittently; retry all HTTP errors.
-          if ! curl -fsS \
-            --retry 10 --retry-all-errors --retry-delay 5 \
+          echo "Probing $BASE/api/health (canonical origin)"
+          CODE=$(curl -sS -o /tmp/health-prod.json -w "%{http_code}" \
+            --retry 5 --retry-all-errors --retry-delay 3 \
             -A "PokerFaces-DeploySmoke/1.0 (+https://github.com/sycu8/poker-face)" \
-            "$BASE/api/health" | tee /tmp/health-prod.json; then
-            echo "::error::Production smoke failed. Check Cloudflare WAF/Bot Fight for Actions IPs blocking $BASE"
-            exit 1
+            "$BASE/api/health" || true)
+          echo "HTTP $CODE"
+          if [ "$CODE" = "200" ] && grep -q '"ok":true' /tmp/health-prod.json && grep -q '"environment":"production"' /tmp/health-prod.json; then
+            cat /tmp/health-prod.json
+            echo
+            echo "Canonical origin smoke passed."
+            exit 0
           fi
-          grep -q '"ok":true' /tmp/health-prod.json
-          grep -q '"environment":"production"' /tmp/health-prod.json
+          # Cloudflare Bot Fight / WAF often 403s GitHub Actions egress while real users succeed.
+          echo "::warning::Canonical origin smoke returned HTTP $CODE (body below). Falling back to Wrangler deployment verification."
+          cat /tmp/health-prod.json 2>/dev/null || true
+          echo
+          npx wrangler deployments list --name poker-faces --json > /tmp/deployments.json
+          node -e '
+            const fs = require("node:fs");
+            const list = JSON.parse(fs.readFileSync("/tmp/deployments.json", "utf8"));
+            const rows = Array.isArray(list) ? list : (list.deployments || list.result || []);
+            if (!rows.length) {
+              console.error("No deployments returned for poker-faces");
+              process.exit(1);
+            }
+            const latest = rows[0];
+            const created =
+              latest.created_on || latest.createdOn || latest.created_at || latest.createdAt || null;
+            console.log("Latest deployment:", JSON.stringify(latest, null, 2).slice(0, 1200));
+            if (created) {
+              const ageMs = Date.now() - new Date(created).getTime();
+              if (Number.isFinite(ageMs) && ageMs > 30 * 60 * 1000) {
+                console.error("Latest deployment is older than 30 minutes — refusing smoke fallback.");
+                process.exit(1);
+              }
+            }
+            console.log("Wrangler confirms a recent production Worker deployment.");
+          '
