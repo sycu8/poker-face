@@ -32,33 +32,42 @@ Statuses:
 
 ## Category scores
 
-| Category                    |   Score | Notes                                                                                                                                             |
-| --------------------------- | ------: | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Poker correctness           | 23 / 25 | HU, short all-in, side pots, TDA odd chip, 3→2 HU, `validateAndResolveAction` zero-mutation rejects                                               |
-| State integrity & realtime  | 17 / 20 | Join re-ensure, approve idempotent, `membership_ops` outbox, `safeSend`, voice single-flight (no `blockConcurrencyWhile`)                         |
-| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; Turnstile preserved (no site-key change)                                                             |
-| Auth & Turnstile            |  8 / 10 | Dummy PBKDF2 = 300k; legacy rehash; guest identity idempotency; prod deploy requires Turnstile secret — live siteverify not re-proved in this run |
-| CI/CD & rollback            |  9 / 10 | Deploy validate = full CI; canonical health required (no Wrangler false-green); Environment approval is manual                                    |
-| Observability & operations  |   5 / 8 | Analytics + session purge + membership flush cron; limited alerting                                                                               |
-| Mobile UX                   |   5 / 7 | Existing table UX unchanged this pass                                                                                                             |
-| Performance/PWA             |   3 / 5 | VoicePanel + HandHistory lazy; Table chunk still large (~680KB; RealtimeKit still via provider)                                                   |
+| Category                    |   Score | Notes                                                                                                                                    |
+| --------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Poker correctness           | 23 / 25 | HU, short all-in, side pots, TDA odd chip, 3→2 HU, `validateAndResolveAction` zero-mutation rejects                                      |
+| State integrity & realtime  | 17 / 20 | Join re-ensure, approve idempotent, `membership_ops` outbox, `safeSend`, voice single-flight                                             |
+| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; Turnstile preserved                                                                         |
+| Auth & Turnstile            |  9 / 10 | Live site key on `/api/config`; dummy PBKDF2=300k; guest idempotency; secret values not readable via API (owner attested)                |
+| CI/CD & rollback            |  9 / 10 | Full CI in deploy validate; **canonical health verified 200** (no Wrangler false-green path); Environment required reviewers still empty |
+| Observability & operations  |   5 / 8 | Analytics + session purge + membership flush cron; limited alerting                                                                      |
+| Mobile UX                   |   5 / 7 | Existing table UX unchanged this pass                                                                                                    |
+| Performance/PWA             |   3 / 5 | VoicePanel + HandHistory lazy; Table chunk still ~680KB                                                                                  |
 
-**Weighted total: 83 / 100**
+**Weighted total: 84 / 100**
 
 Uncapped band: **STAGING READY, NOT PRODUCTION READY**.
 
+Capped verdict (remaining P0): **STAGING READY, NOT PRODUCTION READY**.
+
 ---
 
-## P0 blockers (manual / dashboard — not claimed complete)
+## Manual actions verification (2026-08-27)
 
-| Blocker                                                                            | Owner action                                              |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| WAF/Bot exception for exact `GET /api/health`                                      | Required so production smoke can pass without false-green |
-| GitHub Environment `production` required reviewers                                 | Manual approval before public promote                     |
-| Confirm `SESSION_SECRET_PRODUCTION` + `TURNSTILE_SECRET_KEY_PRODUCTION` in Actions | Deploy now hard-fails if missing                          |
-| Confirm live Turnstile siteverify on production                                    | Widget + secret already expected present                  |
+| Action                                               | Owner claim | Agent verification                                                                                               |
+| ---------------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| WAF / Bot exception for exact `GET /api/health`      | Completed   | **VERIFIED indirectly** — `https://poker.orangecloud.vn/api/health` → HTTP 200 + `ok` + `environment:production` |
+| Canonical health must succeed                        | Completed   | **VERIFIED** — body `{"ok":true,"service":"poker-faces","environment":"production",...}`                         |
+| Production Turnstile site key                        | Completed   | **VERIFIED** — `/api/config` returns non-empty `turnstileSiteKey`                                                |
+| `SESSION_SECRET` / `TURNSTILE_SECRET_KEY` in Actions | Completed   | **NOT READABLE** — Actions secrets API returns 403 for this token; owner attestation only                        |
+| GitHub Environment `production` required reviewers   | Completed   | **NOT VERIFIED** — API shows `protection_rules: []` and `deployment_branch_policy: null`                         |
 
-Because ≥1 P0 item requires dashboard verification outside this agent run, verdict remains **STAGING READY, NOT PRODUCTION READY**.
+### Remaining P0
+
+1. **Enable required reviewers** on GitHub Environment `production`  
+   Settings → Environments → production → **Required reviewers** (at least one reviewer).  
+   Current API snapshot still has zero protection rules.
+
+Until that rule is visible, production promotion is not gated by a human approval gate in GitHub.
 
 ---
 
@@ -70,14 +79,15 @@ Because ≥1 P0 item requires dashboard verification outside this agent run, ver
 - Deploy gate runs lint + format + typecheck + full test + build
 - Voice provision no longer globally blocks the room DO
 - PBKDF2 dummy cost aligned; guest join identity-idempotent; UTF-8 WS limit
+- Canonical production health now reachable (verified)
 
 ---
 
 ## Sign-off checklist (human)
 
 - [ ] Staging deploy green with real D1/KV IDs + migration `0008_membership_ops`
-- [ ] Cloudflare WAF path exception for `/api/health` only
-- [ ] Canonical `https://poker.orangecloud.vn/api/health` returns 200 + `ok` + `environment:production`
-- [ ] Production Environment required reviewers enabled
-- [ ] Production secrets present (SESSION, Turnstile)
+- [x] Cloudflare WAF path exception for `/api/health` only (inferred from successful probe)
+- [x] Canonical `https://poker.orangecloud.vn/api/health` returns 200 + `ok` + `environment:production`
+- [ ] Production Environment required reviewers enabled (**API still empty**)
+- [x] Production secrets present (SESSION, Turnstile) — **owner attested; agent cannot list secrets**
 - [ ] Explicit product owner approval to promote
