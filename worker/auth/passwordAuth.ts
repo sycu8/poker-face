@@ -216,12 +216,7 @@ export async function handleAuth(
         },
       );
     } catch (err) {
-      // #region agent log
-      console.error(
-        "register failed",
-        err instanceof Error ? `${err.name}: ${err.message}` : err,
-      );
-      // #endregion
+      console.error("register failed", err instanceof Error ? err.message : err);
       return genericAuthFailure("Registration");
     }
   }
@@ -239,9 +234,6 @@ export async function handleAuth(
       const parsed = await readJson(request, loginSchema);
       if (!parsed.ok) return parsed.response;
 
-      // #region agent log
-      const _dbgLoginT0 = Date.now();
-      // #endregion
       const row = await env.DB.prepare(
         `SELECT id, display_name, username, password_hash FROM users WHERE username = ?`,
       )
@@ -253,23 +245,7 @@ export async function handleAuth(
           password_hash: string | null;
         }>();
 
-      // #region agent log
-      let _dbgVerifyMs = -1;
-      const _dbgVerifyT0 = Date.now();
-      // #endregion
       const ok = await verifyPasswordOrDummy(parsed.data.password, row?.password_hash);
-      // #region agent log
-      _dbgVerifyMs = Date.now() - _dbgVerifyT0;
-      console.error(
-        "login_debug",
-        JSON.stringify({
-          hypothesisId: "A",
-          hasRow: Boolean(row),
-          verifyMs: _dbgVerifyMs,
-          totalMs: Date.now() - _dbgLoginT0,
-        }),
-      );
-      // #endregion
       if (!ok || !row) {
         return errorJson(401, "Invalid username or password.");
       }
@@ -302,12 +278,7 @@ export async function handleAuth(
         },
       );
     } catch (err) {
-      // #region agent log
-      console.error(
-        "login failed",
-        err instanceof Error ? `${err.name}: ${err.message}` : err,
-      );
-      // #endregion
+      console.error("login failed", err instanceof Error ? err.message : err);
       return genericAuthFailure("Login");
     }
   }
