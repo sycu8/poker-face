@@ -30,7 +30,7 @@ describe("password hashing", () => {
   });
 
   it("flags older iteration counts for rehash", () => {
-    expect(needsRehash("pbkdf2$100000$salt$hash")).toBe(true);
+    expect(needsRehash("pbkdf2$50000$salt$hash")).toBe(true);
     expect(needsRehash(`pbkdf2$${PBKDF2_ITERS}$salt$hash`)).toBe(false);
     expect(needsRehash("not-a-hash")).toBe(true);
   });
@@ -41,8 +41,8 @@ describe("password hashing", () => {
     expect(iters).toBe(PBKDF2_ITERS);
   });
 
-  it("still verifies legacy 100k hashes", async () => {
-    // Build a 100k hash manually via crypto (same algorithm as hashPassword).
+  it("still verifies legacy lower-iter hashes and flags rehash", async () => {
+    // Build a 50k hash manually via crypto (same algorithm as hashPassword).
     const password = "legacy-password";
     const salt = new Uint8Array(16).fill(7);
     const keyMaterial = await crypto.subtle.importKey(
@@ -54,7 +54,7 @@ describe("password hashing", () => {
     );
     const derived = new Uint8Array(
       await crypto.subtle.deriveBits(
-        { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
+        { name: "PBKDF2", salt, iterations: 50_000, hash: "SHA-256" },
         keyMaterial,
         256,
       ),
@@ -64,7 +64,7 @@ describe("password hashing", () => {
       for (const b of bytes) binary += String.fromCharCode(b);
       return btoa(binary);
     };
-    const legacy = `pbkdf2$100000$${b64(salt)}$${b64(derived)}`;
+    const legacy = `pbkdf2$50000$${b64(salt)}$${b64(derived)}`;
     expect(await verifyPassword(password, legacy)).toBe(true);
     expect(needsRehash(legacy)).toBe(true);
   });

@@ -14,7 +14,7 @@
 ### Auth (password)
 
 - **Register** (`POST /api/auth/register`): username, email, password (+ optional displayName). Email is stored normalized (trim + lowercase) with a unique index.
-- **Login** (`POST /api/auth/login`): username + password. PBKDF2 hashes use 300k iterations (Workers-compatible middle ground); successful login transparently rehashes when stored iters are lower.
+- **Login** (`POST /api/auth/login`): username + password. PBKDF2 hashes use 100k iterations (fits Workers CPU budgets; 300k previously aborted as generic login/register failures); successful login transparently rehashes when stored iters are lower.
 - **Password reset** (`POST /api/auth/reset-password`): **disabled** (account-takeover risk without SMTP). Logged-in users change passwords via `POST /api/auth/change-password` (current + new password); sibling sessions are revoked and a fresh session cookie is issued.
 - **Guest join** (`POST /api/rooms/join-as-guest`): creates a guest session and join request in one call.
 
