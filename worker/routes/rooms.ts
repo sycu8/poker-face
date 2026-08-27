@@ -79,11 +79,7 @@ async function submitJoinRequest(
       roomId?: string;
       message?: string;
     };
-    if (
-      cached.status === "pending" &&
-      cached.requestId &&
-      cached.roomId
-    ) {
+    if (cached.status === "pending" && cached.requestId && cached.roomId) {
       await ensureJoinRequestInDo(env, cached.roomId, {
         requestId: cached.requestId,
         userId: user.id,
@@ -391,8 +387,8 @@ export async function handleRooms(
         if (
           prior.join &&
           typeof prior.join === "object" &&
-          (prior.join as { status?: string; roomId?: string; requestId?: string }).status ===
-            "pending"
+          (prior.join as { status?: string; roomId?: string; requestId?: string })
+            .status === "pending"
         ) {
           const j = prior.join as {
             status: string;

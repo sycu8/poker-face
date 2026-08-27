@@ -4,13 +4,13 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 
 ## Required repository secrets
 
-| Secret                                                                     | Purpose                                                                                                                                                                                       |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_API_TOKEN`                                                     | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit)                                                                                                                          |
-| `CLOUDFLARE_ACCOUNT_ID`                                                    | Cloudflare account id                                                                                                                                                                         |
-| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. **Production deploy fails** if missing (no ephemeral generation). Staging may skip bulk and retain existing Worker secrets with a warning.                              |
-| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify. **Required for production deploy.**                                                                                                                                   |
-| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars.                                                                                                                                         |
+| Secret                                                                     | Purpose                                                                                                                                                         |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`                                                     | Wrangler deploy + resource create (Workers, D1, KV, R2, Queues edit)                                                                                            |
+| `CLOUDFLARE_ACCOUNT_ID`                                                    | Cloudflare account id                                                                                                                                           |
+| `SESSION_SECRET` or `SESSION_SECRET_PRODUCTION` / `SESSION_SECRET_STAGING` | Session HMAC secret. **Production deploy fails** if missing (no ephemeral generation). Staging may skip bulk and retain existing Worker secrets with a warning. |
+| `TURNSTILE_SECRET_KEY` or `TURNSTILE_SECRET_KEY_PRODUCTION`                | Turnstile siteverify. **Required for production deploy.**                                                                                                       |
+| `TURNSTILE_SITE_KEY_PRODUCTION` (secret or var)                            | Public Turnstile site key written into Wrangler vars.                                                                                                           |
 
 ## Recommended secrets
 

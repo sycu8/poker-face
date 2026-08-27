@@ -4,13 +4,13 @@
 
 ## 1. Authoritative stores by category
 
-| State | Authority | Replica / metadata |
-|---|---|---|
-| Hand, stacks, bets, cards, timers, chat (live), ledger, pending joins (live) | Room Durable Object | D1 mirrors membership / join_request rows |
-| Users, sessions, room rows, membership, join requests, idempotency keys | D1 | DO may mirror pending joins for host UI |
-| Membership convergence ops (`membership_ops`) | D1 outbox | Flushed on mutate paths + cron |
-| Hand summaries / replay JSON | R2 (via archive queue); D1 summary row | Queue idempotent |
-| Public config flags/copy | KV (non-authoritative) | — |
+| State                                                                        | Authority                              | Replica / metadata                        |
+| ---------------------------------------------------------------------------- | -------------------------------------- | ----------------------------------------- |
+| Hand, stacks, bets, cards, timers, chat (live), ledger, pending joins (live) | Room Durable Object                    | D1 mirrors membership / join_request rows |
+| Users, sessions, room rows, membership, join requests, idempotency keys      | D1                                     | DO may mirror pending joins for host UI   |
+| Membership convergence ops (`membership_ops`)                                | D1 outbox                              | Flushed on mutate paths + cron            |
+| Hand summaries / replay JSON                                                 | R2 (via archive queue); D1 summary row | Queue idempotent                          |
+| Public config flags/copy                                                     | KV (non-authoritative)                 | —                                         |
 
 Gameplay state MUST NOT move to D1.
 

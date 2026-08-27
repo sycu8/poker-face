@@ -1,12 +1,7 @@
 import type { Env } from "../env";
 import { randomId } from "./http";
 
-export type MembershipOp =
-  | "leave"
-  | "kick"
-  | "seat"
-  | "spectator"
-  | "reject_request";
+export type MembershipOp = "leave" | "kick" | "seat" | "spectator" | "reject_request";
 
 export interface MembershipOpPayload {
   displayName?: string;
@@ -166,7 +161,9 @@ export async function flushMembershipOps(
         .run();
       // Drop poison pills after many failures.
       if (row.attempts + 1 >= 8) {
-        await env.DB.prepare(`DELETE FROM membership_ops WHERE id = ?`).bind(row.id).run();
+        await env.DB.prepare(`DELETE FROM membership_ops WHERE id = ?`)
+          .bind(row.id)
+          .run();
       }
     }
   }

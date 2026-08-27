@@ -84,12 +84,10 @@ function mockEnv(opts?: { failApplyOnce?: boolean }) {
           }
           return { success: true };
         };
-        const all = async <T,>() => {
+        const all = async <T>() => {
           if (sql.includes("FROM membership_ops")) {
             const roomFilter =
-              sql.includes("WHERE room_id") && args.length >= 1
-                ? String(args[0])
-                : null;
+              sql.includes("WHERE room_id") && args.length >= 1 ? String(args[0]) : null;
             const limit = Number(args[args.length - 1] ?? 32);
             let rows = roomFilter
               ? ops.filter((o) => o.room_id === roomFilter)

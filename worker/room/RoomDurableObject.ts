@@ -395,9 +395,9 @@ export class RoomDurableObject extends DurableObject<Env> {
     await this.ctx.storage.setAlarm(this.game.turnDeadlineMs);
   }
 
-  private async provisionVoiceMeeting(roomName?: string): Promise<
-    { ok: true; meetingId: string } | { ok: false; error: string }
-  > {
+  private async provisionVoiceMeeting(
+    roomName?: string,
+  ): Promise<{ ok: true; meetingId: string } | { ok: false; error: string }> {
     if (this.realtimekitMeetingId) {
       return { ok: true, meetingId: this.realtimekitMeetingId };
     }

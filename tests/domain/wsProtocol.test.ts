@@ -48,9 +48,7 @@ describe("wsProtocol", () => {
   });
 
   it("rejects unknown fields (strict schemas)", () => {
-    const parsed = parseWsClientMessage(
-      JSON.stringify({ type: "ping", hack: true }),
-    );
+    const parsed = parseWsClientMessage(JSON.stringify({ type: "ping", hack: true }));
     expect(parsed.ok).toBe(false);
   });
 

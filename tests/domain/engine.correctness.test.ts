@@ -87,8 +87,9 @@ describe("heads-up blinds and action order", () => {
     state.dealerSeat = 2;
     startHand(state, 1_000);
     expect(state.dealerSeat).toBe(0);
-    // End hand quickly via fold to waiting
+    // Fold everyone but one to end the hand
     expect(applyAction(state, 0, "fold", undefined, 1_100, "f0").ok).toBe(true);
+    expect(applyAction(state, 1, "fold", undefined, 1_200, "f1").ok).toBe(true);
     expect(state.street).toBe("waiting");
     // C leaves between hands
     expect(unseatPlayer(state, "c", 2_000).ok).toBe(true);
@@ -476,10 +477,10 @@ describe("time bank validation and pause", () => {
     startHand(state, 1_000);
     const seatIdx = state.actionSeat!;
     onTurnTimerExpired(state, 2_000);
-    const before = structuredClone(state);
-    // A) raise when currentBet=0 is illegal (should be bet)
+    // A) raise when currentBet=0 is illegal (should be bet / all_in)
     state.currentBet = 0;
     state.minRaise = 2;
+    const before = structuredClone(state);
     expect(applyAction(state, seatIdx, "raise", 10, 2_500, "bad-raise").ok).toBe(false);
     expect(state).toEqual(before);
   });
@@ -495,9 +496,9 @@ describe("time bank validation and pause", () => {
     // Advance to flop so bet is legal form
     const actor = state.actionSeat!;
     expect(applyAction(state, actor, "call", undefined, 1_100, "c1").ok).toBe(true);
-    expect(applyAction(state, actor === 0 ? 1 : 0, "check", undefined, 1_200, "k1").ok).toBe(
-      true,
-    );
+    expect(
+      applyAction(state, actor === 0 ? 1 : 0, "check", undefined, 1_200, "k1").ok,
+    ).toBe(true);
     expect(state.street).toBe("flop");
     onTurnTimerExpired(state, 2_000);
     const seatIdx = state.actionSeat!;
@@ -506,7 +507,7 @@ describe("time bank validation and pause", () => {
     expect(state).toEqual(before);
   });
 
-  it("blocked raise when raise rights closed leaves state unchanged", () => {
+  it("generic raise rejects when only canAllIn is open (no raise bypass)", () => {
     const state = createInitialGameState(cfg(200, 5));
     seatMany(state, [
       ["a", "A", 0],
@@ -515,29 +516,19 @@ describe("time bank validation and pause", () => {
     ]);
     state.dealerSeat = 2;
     startHand(state, 1_000);
-    // UTG opens; BB faces short all-in that does not reopen
-    expect(state.actionSeat).toBe(0);
     expect(applyAction(state, 0, "raise", 40, 1_100, "open").ok).toBe(true);
-    // SB folds
     expect(applyAction(state, 1, "fold", undefined, 1_200, "sb-f").ok).toBe(true);
-    // BB short all-in for less than full raise — may close raise rights for others
-    const bb = 2;
-    state.seats[bb]!.stack = 5;
-    const legal = getLegalActions(state, bb);
-    if (legal?.canAllIn) {
-      expect(applyAction(state, bb, "all_in", undefined, 1_300, "bb-ai").ok).toBe(true);
-    }
-    // If someone still to act and raise closed, reject raise with full clone check
-    if (state.actionSeat !== null) {
-      const actorSeat = state.seats[state.actionSeat]!;
-      if (!raiseRightsOpen(state, actorSeat)) {
-        const before = structuredClone(state);
-        expect(
-          applyAction(state, state.actionSeat, "raise", 200, 1_400, "blocked").ok,
-        ).toBe(false);
-        expect(state).toEqual(before);
-      }
-    }
+    // BB short: canAllIn for call, not canRaise
+    state.seats[2]!.stack = 5;
+    state.seats[2]!.betThisStreet = 10;
+    state.actionSeat = 2;
+    const legal = getLegalActions(state, 2)!;
+    expect(legal.canAllIn).toBe(true);
+    expect(legal.canRaise).toBe(false);
+    const before = structuredClone(state);
+    expect(applyAction(state, 2, "raise", 15, 1_300, "raise-ai").ok).toBe(false);
+    expect(state).toEqual(before);
+    expect(applyAction(state, 2, "all_in", undefined, 1_400, "ai-ok").ok).toBe(true);
   });
 
   it("pause freezes time-bank wall clock", () => {
