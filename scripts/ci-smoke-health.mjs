@@ -77,7 +77,28 @@ async function getEgressIp() {
   return data.ip;
 }
 
-async function createAllowRule(zoneId, ip, note) {
+async function findExistingAllow(zoneId, ip) {
+  const { res, json } = await cfApi(
+    `/zones/${zoneId}/firewall/access_rules/rules?mode=whitelist&configuration.target=ip&configuration.value=${encodeURIComponent(ip)}&per_page=50`,
+  );
+  if (!res.ok || !json.success) return null;
+  const rows = json.result || [];
+  return rows.find((r) => r?.configuration?.value === ip && r?.mode === "whitelist") || null;
+}
+
+/**
+ * @returns {{ ruleId: string, created: boolean }}
+ */
+async function ensureAllowRule(zoneId, ip, note) {
+  const existing = await findExistingAllow(zoneId, ip);
+  if (existing?.id) {
+    console.log(
+      `Reusing existing IP Access Allow rule ${existing.id} for ${ip}` +
+        (existing.notes ? ` (notes: ${String(existing.notes).slice(0, 80)})` : ""),
+    );
+    return { ruleId: existing.id, created: false };
+  }
+
   const { res, json } = await cfApi(`/zones/${zoneId}/firewall/access_rules/rules`, {
     method: "POST",
     body: {
@@ -88,9 +109,20 @@ async function createAllowRule(zoneId, ip, note) {
   });
   if (!res.ok || !json.success) {
     const err = JSON.stringify(json.errors || json);
-    throw new Error(`Failed to create IP Access Allow rule: HTTP ${res.status} ${err}`);
+    // Race: another job may have created the same IP allow.
+    if (res.status === 400 || res.status === 409) {
+      const again = await findExistingAllow(zoneId, ip);
+      if (again?.id) {
+        console.log(`Allow rule appeared after create conflict; reusing ${again.id}`);
+        return { ruleId: again.id, created: false };
+      }
+    }
+    throw new Error(
+      `Failed to create IP Access Allow rule: HTTP ${res.status} ${err}. ` +
+        `Token needs Zone.Firewall Services:Edit (IP Access Rules) on this zone.`,
+    );
   }
-  return json.result.id;
+  return { ruleId: json.result.id, created: true };
 }
 
 async function deleteAllowRule(zoneId, ruleId) {
@@ -161,11 +193,16 @@ async function main() {
 
   const note = `${NOTE_PREFIX} ${randomUUID().slice(0, 8)}`;
   let ruleId = null;
+  let created = false;
   try {
-    ruleId = await createAllowRule(zone.zoneId, ip, note);
-    console.log(`Created temporary IP Access Allow rule ${ruleId} for ${ip}`);
+    const ensured = await ensureAllowRule(zone.zoneId, ip, note);
+    ruleId = ensured.ruleId;
+    created = ensured.created;
+    if (created) {
+      console.log(`Created temporary IP Access Allow rule ${ruleId} for ${ip}`);
+    }
 
-    // Propagation can take a few seconds.
+    // Propagation can take a few seconds after create.
     let last = { status: 0, text: "" };
     for (let attempt = 1; attempt <= 12; attempt++) {
       await new Promise((r) => setTimeout(r, attempt === 1 ? 2000 : 3000));
@@ -190,11 +227,14 @@ async function main() {
 
     const hint =
       last.status === 403
-        ? " Still challenged — Free Bot Fight Mode may need Super Bot Fight Mode + Skip, or disable Bot Fight Mode for this zone (see docs)."
+        ? " Still challenged after IP Access Allow — confirm Free Bot Fight Mode is the product in use, or upgrade to Super Bot Fight Mode + path Skip (see docs/GITHUB_ACTIONS_DEPLOY.md)."
         : "";
-    die(`Canonical production health must return HTTP 200. Got ${last.status}.${hint}`);
+    die(
+      `Canonical production health must return HTTP 200. Got ${last.status}.${hint} Wrangler deployment metadata is NOT a health substitute.`,
+    );
   } finally {
-    if (ruleId) {
+    // Only delete rules we created this run — never remove a pre-existing Allow.
+    if (ruleId && created) {
       try {
         await deleteAllowRule(zone.zoneId, ruleId);
       } catch (err) {
