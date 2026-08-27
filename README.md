@@ -44,15 +44,15 @@ npm run dev
 
 ## Scripts
 
-| Script | Purpose |
-| --- | --- |
-| `npm run dev` | Vite + Worker local |
-| `npm run typecheck` | TypeScript |
-| `npm run test` | Vitest (domain + worker) |
-| `npm run test:domain` | Poker engine tests |
-| `npm run build` | Production build |
-| `npm run cf-typegen` | Generate Worker binding types |
-| `npm run db:migrate:local` | Apply D1 migrations locally |
+| Script                     | Purpose                       |
+| -------------------------- | ----------------------------- |
+| `npm run dev`              | Vite + Worker local           |
+| `npm run typecheck`        | TypeScript                    |
+| `npm run test`             | Vitest (domain + worker)      |
+| `npm run test:domain`      | Poker engine tests            |
+| `npm run build`            | Production build              |
+| `npm run cf-typegen`       | Generate Worker binding types |
+| `npm run db:migrate:local` | Apply D1 migrations locally   |
 
 ## Brand
 
@@ -63,6 +63,11 @@ See `docs/BRAND_GUIDE.md` and `logo/`.
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped state, gaps, and phased product plan
 - [`docs/GAME_RULES.md`](docs/GAME_RULES.md) — play-money rules
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Worker / DO / D1 layout
+- [`docs/DISCOVERY_REPORT.md`](docs/DISCOVERY_REPORT.md) — production hardening baseline audit
+- [`docs/CONSISTENCY_MODEL.md`](docs/CONSISTENCY_MODEL.md) — D1 ↔ Durable Object ordering and retries
+- [`docs/ADVERSARIAL_QA.md`](docs/ADVERSARIAL_QA.md) — adversarial scenarios and verification matrix
+- [`docs/PRODUCTION_SCORECARD.md`](docs/PRODUCTION_SCORECARD.md) — weighted production readiness scorecard
+- [`docs/ROLLBACK.md`](docs/ROLLBACK.md) — Worker rollback and migration notes
 - [`docs/BRAND_GUIDE.md`](docs/BRAND_GUIDE.md) — brand and copy
 - [`docs/GITHUB_ACTIONS_DEPLOY.md`](docs/GITHUB_ACTIONS_DEPLOY.md) — staging/production deploy
 - [`docs/VOICE_SETUP.md`](docs/VOICE_SETUP.md) — RealtimeKit voice + optional TURN secrets
