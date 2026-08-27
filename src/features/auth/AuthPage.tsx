@@ -252,7 +252,13 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           </>
         )}
         {mode !== "reset" ? (
-          <TurnstileWidget siteKey={siteKey} onToken={onToken} />
+          <TurnstileWidget
+            siteKey={siteKey}
+            onToken={onToken}
+            action={
+              mode === "register" ? "register" : mode === "guest" ? "guest" : "login"
+            }
+          />
         ) : null}
         {error ? (
           <p role="alert" style={{ color: "var(--danger)", textAlign: "center" }}>

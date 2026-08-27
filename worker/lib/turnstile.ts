@@ -41,7 +41,9 @@ export async function verifyTurnstile(
   if (!env.TURNSTILE_SECRET_KEY) {
     return isDevEnvironment(env);
   }
-  if (!token) return false;
+  if (typeof token !== "string" || token.length === 0 || token.length > 2048) {
+    return false;
+  }
 
   const body = new URLSearchParams({
     secret: env.TURNSTILE_SECRET_KEY,

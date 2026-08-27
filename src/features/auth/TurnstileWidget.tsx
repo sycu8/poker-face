@@ -11,6 +11,7 @@ declare global {
           "expired-callback"?: () => void;
           "error-callback"?: () => void;
           theme?: "auto" | "light" | "dark";
+          action?: string;
         },
       ) => string;
       reset: (widgetId?: string) => void;
@@ -55,11 +56,14 @@ export function TurnstileWidget({
   siteKey,
   onToken,
   resetKey = 0,
+  action,
 }: {
   siteKey: string | null | undefined;
   onToken: (token: string | null) => void;
   /** Increment to force a fresh challenge after a failed submit. */
   resetKey?: number;
+  /** Stable action name (1–32 chars); must match backend expectedAction. */
+  action?: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
@@ -85,6 +89,7 @@ export function TurnstileWidget({
         hostRef.current.innerHTML = "";
         widgetId.current = window.turnstile.render(hostRef.current, {
           sitekey: siteKey,
+          ...(action ? { action } : {}),
           callback: (token) => onToken(token),
           "expired-callback": () => onToken(null),
           "error-callback": () => onToken(null),
@@ -105,7 +110,7 @@ export function TurnstileWidget({
         widgetId.current = null;
       }
     };
-  }, [siteKey, onToken, reactId, resetKey]);
+  }, [siteKey, onToken, reactId, resetKey, action]);
 
   if (!siteKey) return null;
   return (
@@ -113,6 +118,7 @@ export function TurnstileWidget({
       className="turnstile-wrap"
       ref={hostRef}
       data-testid="turnstile"
+      data-action={action}
       style={{ display: "flex", justifyContent: "center", marginBlock: "0.75rem" }}
     />
   );

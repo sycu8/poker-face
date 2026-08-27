@@ -130,6 +130,16 @@ describe("verifyTurnstile", () => {
     ).resolves.toBe(true);
   });
 
+  it("rejects oversized tokens", async () => {
+    await expect(
+      verifyTurnstile(
+        envStub({ ENVIRONMENT: "production", TURNSTILE_SECRET_KEY: "sec" }),
+        "x".repeat(2049),
+        null,
+      ),
+    ).resolves.toBe(false);
+  });
+
   it("fails closed on siteverify timeout/network error", async () => {
     vi.stubGlobal(
       "fetch",

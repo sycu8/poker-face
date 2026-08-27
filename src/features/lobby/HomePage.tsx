@@ -191,6 +191,7 @@ export function HomePage({
               siteKey={siteKey}
               onToken={onToken}
               resetKey={turnstileReset}
+              action="join-as-guest"
             />
             <div className="home-panel-actions">
               <button
@@ -307,6 +308,7 @@ export function HomePage({
                 siteKey={siteKey}
                 onToken={onToken}
                 resetKey={turnstileReset}
+                action="join"
               />
               <div className="home-panel-actions">
                 <button

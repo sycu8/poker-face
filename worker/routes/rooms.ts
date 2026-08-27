@@ -322,6 +322,7 @@ export async function handleRooms(
         env,
         parsed.data.turnstileToken,
         request.headers.get("cf-connecting-ip"),
+        "join-as-guest",
       );
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
@@ -383,6 +384,7 @@ export async function handleRooms(
       env,
       parsed.data.turnstileToken,
       request.headers.get("cf-connecting-ip"),
+      "join",
     );
     if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 

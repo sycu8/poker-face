@@ -113,6 +113,7 @@ export async function handleAuth(
         env,
         parsed.data.turnstileToken,
         request.headers.get("cf-connecting-ip"),
+        "guest",
       );
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
@@ -182,6 +183,7 @@ export async function handleAuth(
         env,
         parsed.data.turnstileToken,
         request.headers.get("cf-connecting-ip"),
+        "register",
       );
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
@@ -256,6 +258,7 @@ export async function handleAuth(
         env,
         parsed.data.turnstileToken,
         request.headers.get("cf-connecting-ip"),
+        "login",
       );
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
