@@ -1,11 +1,11 @@
 /** Password hashing with Web Crypto PBKDF2 (Workers-compatible). */
 
 /**
- * PBKDF2 iteration count. 300k is a Workers-compatible middle ground:
- * stronger than the prior 100k default while staying within typical
- * isolate CPU budgets for auth request paths.
+ * PBKDF2 iteration count. Keep at 100k: Workers with the legacy Bundled
+ * ~50ms CPU cap (and Free's 10ms) abort 300k PBKDF2 mid-derive, which
+ * surfaces as genericAuthFailure("Login"|"Registration"). See 012c9cf.
  */
-export const PBKDF2_ITERS = 300_000;
+export const PBKDF2_ITERS = 100_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
 
