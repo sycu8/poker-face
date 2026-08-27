@@ -1,7 +1,7 @@
 # Production scorecard — Poker Faces
 
-Date: 2026-08-27 · Branch: `cursor/production-hardening-4c45`  
-Evidence baseline: `npm run test:domain` → **93 passed** · CI lint/format/typecheck/build on PR
+Date: 2026-08-27 · Branch: `main`  
+Evidence baseline: `npm test` → **109 passed** · CI lint/format/typecheck/build · Deploy Cloudflare on `main`
 
 Scoring: each category **0–10** × weight → weighted sum / 100.  
 Verdict thresholds: **≥ 85** Production ready · **70–84** Production candidate · **55–69** Staging ready · **< 55** Not production ready.
@@ -12,19 +12,19 @@ Verdict thresholds: **≥ 85** Production ready · **70–84** Production candid
 
 ## Category scores
 
-| #   | Category                                                               | Weight | Score | Evidence / notes                                                                         |
-| --- | ---------------------------------------------------------------------- | -----: | ----: | ---------------------------------------------------------------------------------------- |
-| 1   | **Engine correctness**                                                 |     15 |     9 | HU/side pots/leave/deferred settlement fixes; 93 domain tests green                      |
-| 2   | **Realtime safety** (WS schema, version, idempotency, chat RL, alarms) |     15 |     8 | `wsProtocol.ts`, DO hardening; limited WS integration tests                              |
-| 3   | **Auth & sessions**                                                    |     10 |     8 | PBKDF2 rehash, guest TTL, reset disabled, cron purge; needs prod `SESSION_SECRET` verify |
-| 4   | **Abuse controls** (Turnstile, rate limits, Origin)                    |     10 |     7 | Turnstile hostname bind; Origin check on POST/WS; prod Turnstile keys **manual**         |
-| 5   | **Join / membership consistency**                                      |     10 |     7 | D1 idempotency join + join-decision; consistency doc; full reconcile job not shipped     |
-| 6   | **Deploy & CI**                                                        |     10 |     8 | CI lint/format/test/build; deploy requires secrets; prod smoke canonical origin only     |
-| 7   | **Observability & ops**                                                |      5 |     6 | Analytics events; session purge cron; no formal alert runbooks in repo                   |
-| 8   | **PWA / client perf**                                                  |      5 |     7 | SW v3 no API cache; lazy Auth/Table routes; voice bundled in Table chunk                 |
-| 9   | **Voice (optional)**                                                   |      5 |     6 | RealtimeKit isolated token; degrades safe; `REALTIMEKIT_API_TOKEN` **manual**            |
-| 10  | **Documentation & QA**                                                 |      5 |     8 | DISCOVERY, CONSISTENCY, ADVERSARIAL_QA, ROLLBACK; QA scripts exist, not in CI            |
-| 11  | **Secrets & infra separation**                                         |     10 |     5 | Wrangler template placeholders; staging/prod IDs & secrets **dashboard**                 |
+| #   | Category                                                               | Weight | Score | Evidence / notes                                                                        |
+| --- | ---------------------------------------------------------------------- | -----: | ----: | --------------------------------------------------------------------------------------- |
+| 1   | **Engine correctness**                                                 |     15 |     9 | HU/side pots/leave/deferred settlement fixes; domain correctness suite green            |
+| 2   | **Realtime safety** (WS schema, version, idempotency, chat RL, alarms) |     15 |     8 | `wsProtocol.ts`, DO hardening; hand_complete archive on leave/kick/start_hand           |
+| 3   | **Auth & sessions**                                                    |     10 |     8 | PBKDF2 rehash, guest TTL, reset disabled, cron purge; set stable `SESSION_SECRET` in GH |
+| 4   | **Abuse controls** (Turnstile, rate limits, Origin)                    |     10 |     7 | Turnstile hostname bind; Origin check on POST/WS; prod Turnstile keys **manual**        |
+| 5   | **Join / membership consistency**                                      |     10 |     7 | D1 idempotency join + join-decision; away coalesce; full reconcile job not shipped      |
+| 6   | **Deploy & CI**                                                        |     10 |     8 | CI lint/format/test/build; secret bulk skips if unset (retains Worker secrets)          |
+| 7   | **Observability & ops**                                                |      5 |     6 | Analytics events; session purge cron; no formal alert runbooks in repo                  |
+| 8   | **PWA / client perf**                                                  |      5 |     7 | SW v3 no API cache; lazy Auth/Table routes; voice bundled in Table chunk                |
+| 9   | **Voice (optional)**                                                   |      5 |     6 | RealtimeKit isolated token; degrades safe; `REALTIMEKIT_API_TOKEN` **manual**           |
+| 10  | **Documentation & QA**                                                 |      5 |     8 | DISCOVERY, CONSISTENCY, ADVERSARIAL_QA, ROLLBACK; QA scripts exist, not in CI           |
+| 11  | **Secrets & infra separation**                                         |     10 |     5 | Wrangler template placeholders; staging/prod IDs & secrets **dashboard**                |
 
 **Weighted total:** `(9×15 + 8×15 + 8×10 + 7×10 + 7×10 + 8×10 + 6×5 + 7×5 + 6×5 + 8×5 + 5×10) / 100`  
 = `(135 + 120 + 80 + 70 + 70 + 80 + 30 + 35 + 30 + 40 + 50) / 100` = **740 / 100 = 74.0**
@@ -37,14 +37,14 @@ Uncapped verdict: **PRODUCTION CANDIDATE** (70–84).
 
 These are **not** proven by code-only review in this agent run:
 
-| Blocker                                                            | Owner action                      |
-| ------------------------------------------------------------------ | --------------------------------- |
-| `SESSION_SECRET` (or `_PRODUCTION`) set in GitHub + Worker secrets | Required; deploy fails if missing |
-| Production `TURNSTILE_SECRET_KEY` + non-empty `TURNSTILE_SITE_KEY` | Turnstile fail-closed in prod     |
-| `APP_ORIGIN_PRODUCTION` matches live custom domain                 | Smoke check + Origin validation   |
-| D1/KV/R2/Queue IDs patched via `ci-prepare-wrangler.mjs`           | First deploy or secret vars       |
-| Custom domain / route for `poker.orangecloud.vn`                   | Cloudflare dashboard              |
-| Optional: `REALTIMEKIT_API_TOKEN` for voice                        | Voice works degraded without      |
+| Blocker                                                            | Owner action                                                         |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| `SESSION_SECRET` (or `_PRODUCTION`) set in GitHub Actions secrets  | Recommended so CI can refresh Worker secrets; unset retains existing |
+| Production `TURNSTILE_SECRET_KEY` + non-empty `TURNSTILE_SITE_KEY` | Turnstile fail-closed in prod when secret missing on Worker          |
+| `APP_ORIGIN_PRODUCTION` matches live custom domain                 | Smoke check + Origin validation                                      |
+| D1/KV/R2/Queue IDs patched via `ci-prepare-wrangler.mjs`           | First deploy or secret vars                                          |
+| Custom domain / route for `poker.orangecloud.vn`                   | Cloudflare dashboard                                                 |
+| Optional: `REALTIMEKIT_API_TOKEN` for voice                        | Voice works degraded without                                         |
 
 Because ≥1 P0 item requires production dashboard verification **outside this branch**, the **capped verdict is NOT PRODUCTION READY** until a human confirms secrets, domain, and smoke on production.
 
