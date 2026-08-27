@@ -253,16 +253,22 @@ jobs:
               console.error("No deployments returned for poker-faces");
               process.exit(1);
             }
-            const latest = rows[0];
-            const created =
-              latest.created_on || latest.createdOn || latest.created_at || latest.createdAt || null;
+            const createdOf = (d) =>
+              Date.parse(d.created_on || d.createdOn || d.created_at || d.createdAt || 0) || 0;
+            const latest = [...rows].sort((a, b) => createdOf(b) - createdOf(a))[0];
+            const createdMs = createdOf(latest);
             console.log("Latest deployment:", JSON.stringify(latest, null, 2).slice(0, 1200));
-            if (created) {
-              const ageMs = Date.now() - new Date(created).getTime();
-              if (Number.isFinite(ageMs) && ageMs > 30 * 60 * 1000) {
-                console.error("Latest deployment is older than 30 minutes — refusing smoke fallback.");
-                process.exit(1);
-              }
+            if (!createdMs) {
+              console.error("Could not parse deployment created_on");
+              process.exit(1);
+            }
+            const ageMs = Date.now() - createdMs;
+            if (ageMs > 30 * 60 * 1000) {
+              console.error(
+                "Latest deployment is older than 30 minutes — refusing smoke fallback.",
+                { ageMinutes: Math.round(ageMs / 60000) },
+              );
+              process.exit(1);
             }
             console.log("Wrangler confirms a recent production Worker deployment.");
           '
