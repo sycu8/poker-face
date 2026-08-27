@@ -1,6 +1,13 @@
 import { z } from "zod";
 import type { Env } from "../env";
-import { requireUser } from "../auth/session";
+import {
+  createGuestUserAndSession,
+} from "../auth/passwordAuth";
+import {
+  GUEST_SESSION_TTL_MS,
+  requireUser,
+  sessionCookieHeader,
+} from "../auth/session";
 import { validateConfigInput } from "../domain/config";
 import { writeAnalytics } from "../lib/analytics";
 import { requireActiveMember } from "../lib/membership";
@@ -21,6 +28,121 @@ const joinRequestSchema = z.object({
   idempotencyKey: z.string().min(8).max(80),
   turnstileToken: z.string().optional(),
 });
+
+const joinAsGuestSchema = z.object({
+  inviteCode: z.string().trim().min(4).max(12),
+  displayName: z.string().trim().min(2).max(32),
+  turnstileToken: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(8).max(80),
+});
+
+/** Shared join-request create/coalesce (Turnstile already verified by caller). */
+async function submitJoinRequest(
+  env: Env,
+  user: { id: string; displayName: string },
+  data: {
+    inviteCode: string;
+    displayName?: string;
+    idempotencyKey: string;
+  },
+): Promise<Response> {
+  const existing = await env.DB.prepare(
+    `SELECT response_json FROM idempotency_keys WHERE scope = ? AND key = ?`,
+  )
+    .bind(`join:${user.id}`, data.idempotencyKey)
+    .first<{ response_json: string }>();
+  if (existing) return json(JSON.parse(existing.response_json));
+
+  const room = await env.DB.prepare(
+    `SELECT * FROM rooms WHERE invite_code = ? AND status = 'open'`,
+  )
+    .bind(data.inviteCode.toUpperCase())
+    .first<{
+      id: string;
+      host_user_id: string;
+      name: string;
+    }>();
+  if (!room) return errorJson(404, "Table not found.");
+
+  const member = await env.DB.prepare(
+    `SELECT status FROM room_members WHERE room_id = ? AND user_id = ?`,
+  )
+    .bind(room.id, user.id)
+    .first<{ status: string }>();
+
+  const pendingExisting = await env.DB.prepare(
+    `SELECT id FROM join_requests
+     WHERE room_id = ? AND user_id = ? AND status = 'pending'
+     ORDER BY created_at DESC LIMIT 1`,
+  )
+    .bind(room.id, user.id)
+    .first<{ id: string }>();
+
+  const requestId = randomId("jr");
+  const coalesced = coalesceJoinRequest({
+    memberStatus: member?.status,
+    pendingRequestId: pendingExisting?.id,
+    newRequestId: requestId,
+  });
+  const now = Date.now();
+  const displayName = data.displayName ?? user.displayName;
+
+  if (coalesced.status === "approved") {
+    return json({ status: "approved", roomId: room.id, message: coalesced.message });
+  }
+
+  if (pendingExisting && coalesced.requestId === pendingExisting.id) {
+    const payload = {
+      status: "pending" as const,
+      requestId: pendingExisting.id,
+      roomId: room.id,
+      message: coalesced.message,
+    };
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO idempotency_keys (scope, key, response_json, created_at)
+       VALUES (?, ?, ?, ?)`,
+    )
+      .bind(`join:${user.id}`, data.idempotencyKey, JSON.stringify(payload), now)
+      .run();
+    return json(payload);
+  }
+
+  try {
+    await env.DB.prepare(
+      `INSERT INTO join_requests
+       (id, room_id, user_id, display_name, status, idempotency_key, created_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+    )
+      .bind(requestId, room.id, user.id, displayName, data.idempotencyKey, now)
+      .run();
+  } catch {
+    return errorJson(409, "Duplicate join request.");
+  }
+
+  const stub = env.ROOM.get(env.ROOM.idFromName(room.id));
+  await stub.fetch("https://room/join-request", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      requestId,
+      userId: user.id,
+      displayName,
+    }),
+  });
+
+  const payload = {
+    status: "pending",
+    requestId,
+    roomId: room.id,
+    message: "Waiting for the host",
+  };
+  await env.DB.prepare(
+    `INSERT INTO idempotency_keys (scope, key, response_json, created_at) VALUES (?, ?, ?, ?)`,
+  )
+    .bind(`join:${user.id}`, data.idempotencyKey, JSON.stringify(payload), now)
+    .run();
+  return json(payload);
+}
 
 const decideSchema = z.object({
   requestId: z.string().min(1),
@@ -189,6 +311,67 @@ export async function handleRooms(
     });
   }
 
+  if (path === "/api/rooms/join-as-guest" && request.method === "POST") {
+    try {
+      if (!env.SESSION_SECRET) {
+        return errorJson(500, "SESSION_SECRET is not configured on this Worker.");
+      }
+      const ip = request.headers.get("cf-connecting-ip") ?? "anon";
+      const limited = await env.JOIN_RATE_LIMIT.limit({ key: `guest-join:${ip}` });
+      if (!limited.success) return errorJson(429, "Too many join requests.");
+
+      const parsed = await readJson(request, joinAsGuestSchema);
+      if (!parsed.ok) return parsed.response;
+
+      // Verify Turnstile exactly once for the combined guest+join flow.
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
+
+      const guest = await createGuestUserAndSession(env, parsed.data.displayName);
+      const joinRes = await submitJoinRequest(env, {
+        id: guest.userId,
+        displayName: guest.displayName,
+      }, {
+        inviteCode: parsed.data.inviteCode,
+        displayName: guest.displayName,
+        idempotencyKey: parsed.data.idempotencyKey,
+      });
+
+      const joinBody = await joinRes.json();
+      return new Response(
+        JSON.stringify({
+          user: {
+            id: guest.userId,
+            displayName: guest.displayName,
+            username: null,
+            isGuest: true,
+          },
+          join: joinBody,
+          privacyNote:
+            "Guest names are not accounts. Create a full account to host tables or keep your handle.",
+        }),
+        {
+          status: joinRes.status >= 400 ? joinRes.status : 201,
+          headers: {
+            "content-type": "application/json",
+            "set-cookie": sessionCookieHeader(
+              guest.token,
+              env.APP_ORIGIN,
+              GUEST_SESSION_TTL_MS / 1000,
+            ),
+          },
+        },
+      );
+    } catch (err) {
+      console.error("join-as-guest failed", err instanceof Error ? err.message : err);
+      return errorJson(500, "Guest join failed. Try again shortly.");
+    }
+  }
+
   if (path === "/api/rooms/join-request" && request.method === "POST") {
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
@@ -205,102 +388,7 @@ export async function handleRooms(
     );
     if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
-    const existing = await env.DB.prepare(
-      `SELECT response_json FROM idempotency_keys WHERE scope = ? AND key = ?`,
-    )
-      .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey)
-      .first<{ response_json: string }>();
-    if (existing) return json(JSON.parse(existing.response_json));
-
-    const room = await env.DB.prepare(
-      `SELECT * FROM rooms WHERE invite_code = ? AND status = 'open'`,
-    )
-      .bind(parsed.data.inviteCode.toUpperCase())
-      .first<{
-        id: string;
-        host_user_id: string;
-        name: string;
-      }>();
-    if (!room) return errorJson(404, "Table not found.");
-
-    const member = await env.DB.prepare(
-      `SELECT status FROM room_members WHERE room_id = ? AND user_id = ?`,
-    )
-      .bind(room.id, auth.user.id)
-      .first<{ status: string }>();
-
-    const pendingExisting = await env.DB.prepare(
-      `SELECT id FROM join_requests
-       WHERE room_id = ? AND user_id = ? AND status = 'pending'
-       ORDER BY created_at DESC LIMIT 1`,
-    )
-      .bind(room.id, auth.user.id)
-      .first<{ id: string }>();
-
-    const requestId = randomId("jr");
-    const coalesced = coalesceJoinRequest({
-      memberStatus: member?.status,
-      pendingRequestId: pendingExisting?.id,
-      newRequestId: requestId,
-    });
-    const now = Date.now();
-    const displayName = parsed.data.displayName ?? auth.user.displayName;
-
-    if (coalesced.status === "approved") {
-      return json({ status: "approved", roomId: room.id, message: coalesced.message });
-    }
-
-    if (pendingExisting && coalesced.requestId === pendingExisting.id) {
-      const payload = {
-        status: "pending" as const,
-        requestId: pendingExisting.id,
-        roomId: room.id,
-        message: coalesced.message,
-      };
-      await env.DB.prepare(
-        `INSERT OR IGNORE INTO idempotency_keys (scope, key, response_json, created_at)
-         VALUES (?, ?, ?, ?)`,
-      )
-        .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey, JSON.stringify(payload), now)
-        .run();
-      return json(payload);
-    }
-
-    try {
-      await env.DB.prepare(
-        `INSERT INTO join_requests
-         (id, room_id, user_id, display_name, status, idempotency_key, created_at)
-         VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
-      )
-        .bind(requestId, room.id, auth.user.id, displayName, parsed.data.idempotencyKey, now)
-        .run();
-    } catch {
-      return errorJson(409, "Duplicate join request.");
-    }
-
-    const stub = env.ROOM.get(env.ROOM.idFromName(room.id));
-    await stub.fetch("https://room/join-request", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        requestId,
-        userId: auth.user.id,
-        displayName,
-      }),
-    });
-
-    const payload = {
-      status: "pending",
-      requestId,
-      roomId: room.id,
-      message: "Waiting for the host",
-    };
-    await env.DB.prepare(
-      `INSERT INTO idempotency_keys (scope, key, response_json, created_at) VALUES (?, ?, ?, ?)`,
-    )
-      .bind(`join:${auth.user.id}`, parsed.data.idempotencyKey, JSON.stringify(payload), now)
-      .run();
-    return json(payload);
+    return submitJoinRequest(env, auth.user, parsed.data);
   }
 
   if (path === "/api/rooms/join-decision" && request.method === "POST") {

@@ -8,10 +8,29 @@ import {
   requireUser,
   sessionCookieHeader,
 } from "./session";
-import { hashPassword, verifyPasswordOrDummy } from "./password";
+import { hashPassword, needsRehash, verifyPasswordOrDummy } from "./password";
 import { verifyTurnstile } from "../lib/turnstile";
 import { writeAnalytics } from "../lib/analytics";
 import { errorJson, json, randomId, readJson, sha256Hex } from "../lib/http";
+
+/** Create a guest user row + short-lived session. Shared by /auth/guest and join-as-guest. */
+export async function createGuestUserAndSession(
+  env: Env,
+  displayName: string,
+): Promise<{ userId: string; displayName: string; token: string }> {
+  const userId = randomId("gst");
+  const now = Date.now();
+  await env.DB.prepare(
+    `INSERT INTO users (id, display_name, username, email, password_hash, is_guest, created_at, updated_at)
+     VALUES (?, ?, NULL, NULL, NULL, 1, ?, ?)`,
+  )
+    .bind(userId, displayName, now, now)
+    .run();
+
+  const session = await createSession(env, userId, GUEST_SESSION_TTL_MS);
+  writeAnalytics(env, "auth_guest", userId);
+  return { userId, displayName, token: session.token };
+}
 
 const usernameSchema = z
   .string()
@@ -96,21 +115,15 @@ export async function handleAuth(
       );
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
-      const userId = randomId("gst");
-      const displayName = parsed.data.displayName;
-      const now = Date.now();
-      await env.DB.prepare(
-        `INSERT INTO users (id, display_name, username, email, password_hash, is_guest, created_at, updated_at)
-         VALUES (?, ?, NULL, NULL, NULL, 1, ?, ?)`,
-      )
-        .bind(userId, displayName, now, now)
-        .run();
-
-      const session = await createSession(env, userId, GUEST_SESSION_TTL_MS);
-      writeAnalytics(env, "auth_guest", userId);
+      const guest = await createGuestUserAndSession(env, parsed.data.displayName);
       return new Response(
         JSON.stringify({
-          user: { id: userId, displayName, username: null, isGuest: true },
+          user: {
+            id: guest.userId,
+            displayName: guest.displayName,
+            username: null,
+            isGuest: true,
+          },
           privacyNote:
             "Guest names are not accounts. Create a full account to host tables or keep your handle.",
         }),
@@ -119,7 +132,7 @@ export async function handleAuth(
           headers: {
             "content-type": "application/json",
             "set-cookie": sessionCookieHeader(
-              session.token,
+              guest.token,
               env.APP_ORIGIN,
               GUEST_SESSION_TTL_MS / 1000,
             ),
@@ -252,6 +265,16 @@ export async function handleAuth(
       const ok = await verifyPasswordOrDummy(parsed.data.password, row?.password_hash);
       if (!ok || !row) {
         return errorJson(401, "Invalid username or password.");
+      }
+
+      // Transparent upgrade when stored PBKDF2 iters lag the current target.
+      if (row.password_hash && needsRehash(row.password_hash)) {
+        const upgraded = await hashPassword(parsed.data.password);
+        await env.DB.prepare(
+          `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`,
+        )
+          .bind(upgraded, Date.now(), row.id)
+          .run();
       }
 
       const session = await createSession(env, row.id);

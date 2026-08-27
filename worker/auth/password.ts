@@ -1,7 +1,11 @@
 /** Password hashing with Web Crypto PBKDF2 (Workers-compatible). */
 
-// Keep iterations modest: Workers isolate CPU budgets are tight for auth paths.
-const PBKDF2_ITERS = 100_000;
+/**
+ * PBKDF2 iteration count. 300k is a Workers-compatible middle ground:
+ * stronger than the prior 100k default while staying within typical
+ * isolate CPU budgets for auth request paths.
+ */
+export const PBKDF2_ITERS = 300_000;
 const SALT_BYTES = 16;
 const KEY_BITS = 256;
 
@@ -16,6 +20,15 @@ function base64ToBytes(value: string): Uint8Array {
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
   return out;
+}
+
+/** True when a stored hash uses fewer iterations than the current target. */
+export function needsRehash(stored: string): boolean {
+  const parts = stored.split("$");
+  if (parts.length !== 4 || parts[0] !== "pbkdf2") return true;
+  const iterations = Number(parts[1]);
+  if (!Number.isFinite(iterations)) return true;
+  return iterations < PBKDF2_ITERS;
 }
 
 export async function hashPassword(password: string): Promise<string> {

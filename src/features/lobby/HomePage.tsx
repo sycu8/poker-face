@@ -25,8 +25,14 @@ export function HomePage({
   const [myRooms, setMyRooms] = useState<MyRoom[]>([]);
   const [siteKey, setSiteKey] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const [guestBusy, setGuestBusy] = useState(false);
   const onToken = useCallback((token: string | null) => setTurnstileToken(token), []);
+
+  function resetTurnstile() {
+    setTurnstileToken(null);
+    setTurnstileReset((n) => n + 1);
+  }
 
   useEffect(() => {
     const fromUrl = searchParams.get("invite");
@@ -78,6 +84,7 @@ export function HomePage({
       setMessage(res.message ?? "Waiting for the host");
       if (res.roomId) navigate(`/table/${res.roomId}`);
     } catch (e) {
+      resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not ask to join.");
     }
   }
@@ -86,20 +93,17 @@ export function HomePage({
     setError(null);
     setGuestBusy(true);
     try {
-      const result = await api.guest({
+      const result = await api.joinAsGuest({
+        inviteCode: invite.trim().toUpperCase(),
         displayName: guestName.trim(),
+        idempotencyKey: crypto.randomUUID(),
         turnstileToken: turnstileToken ?? undefined,
       });
       onAuthed(result.user);
-      const res = await api.joinRequest({
-        inviteCode: invite.trim().toUpperCase(),
-        idempotencyKey: crypto.randomUUID(),
-        displayName: result.user.displayName,
-        turnstileToken: turnstileToken ?? undefined,
-      });
-      setMessage(res.message ?? result.privacyNote ?? "Waiting for the host");
-      if (res.roomId) navigate(`/table/${res.roomId}`);
+      setMessage(result.join.message ?? result.privacyNote ?? "Waiting for the host");
+      if (result.join.roomId) navigate(`/table/${result.join.roomId}`);
     } catch (e) {
+      resetTurnstile();
       setError(e instanceof Error ? e.message : "Could not join as guest.");
     } finally {
       setGuestBusy(false);
@@ -183,7 +187,7 @@ export function HomePage({
                 maxLength={32}
               />
             </div>
-            <TurnstileWidget siteKey={siteKey} onToken={onToken} />
+            <TurnstileWidget siteKey={siteKey} onToken={onToken} resetKey={turnstileReset} />
             <div className="home-panel-actions">
               <button
                 className="btn btn-primary"
@@ -281,7 +285,7 @@ export function HomePage({
                   placeholder="ABC123"
                 />
               </div>
-              <TurnstileWidget siteKey={siteKey} onToken={onToken} />
+              <TurnstileWidget siteKey={siteKey} onToken={onToken} resetKey={turnstileReset} />
               <div className="home-panel-actions">
                 <button className="btn btn-secondary" type="button" onClick={() => void askToJoin()}>
                   Ask to join

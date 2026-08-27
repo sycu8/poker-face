@@ -115,6 +115,9 @@
       "analytics_engine_datasets": [
         { "binding": "ANALYTICS", "dataset": "poker_faces_events_staging" }
       ],
+      "triggers": {
+        "crons": ["0 */6 * * *"]
+      },
       "ratelimits": [
         {
           "name": "AUTH_RATE_LIMIT",
@@ -133,7 +136,7 @@
     },
     "production": {
       "name": "poker-faces",
-      "workers_dev": true,
+      "workers_dev": false,
       "routes": [
         { "pattern": "poker.orangecloud.vn", "custom_domain": true }
       ],
@@ -175,6 +178,9 @@
       "analytics_engine_datasets": [
         { "binding": "ANALYTICS", "dataset": "poker_faces_events_production" }
       ],
+      "triggers": {
+        "crons": ["0 */6 * * *"]
+      },
       "ratelimits": [
         {
           "name": "AUTH_RATE_LIMIT",

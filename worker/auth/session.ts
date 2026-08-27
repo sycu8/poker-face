@@ -90,3 +90,29 @@ export async function createSession(
     .run();
   return { token, expiresAt };
 }
+
+const REVOKED_RETENTION_MS = 1000 * 60 * 60 * 24 * 7;
+
+/**
+ * Delete expired sessions and revoked sessions older than 7 days.
+ * Does not touch active (non-expired, non-revoked) sessions.
+ */
+export async function purgeExpiredSessions(
+  env: Env,
+  limit = 100,
+): Promise<{ deleted: number }> {
+  const now = Date.now();
+  const revokedCutoff = now - REVOKED_RETENTION_MS;
+  const result = await env.DB.prepare(
+    `DELETE FROM sessions
+     WHERE id IN (
+       SELECT id FROM sessions
+       WHERE expires_at < ?
+          OR (revoked_at IS NOT NULL AND revoked_at < ?)
+       LIMIT ?
+     )`,
+  )
+    .bind(now, revokedCutoff, limit)
+    .run();
+  return { deleted: result.meta.changes ?? 0 };
+}

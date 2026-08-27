@@ -177,6 +177,25 @@ export const api = {
     }).then((r) =>
       parse<{ status: string; roomId?: string; requestId?: string; message?: string }>(r),
     ),
+  /** Combined guest session + join request (verifies Turnstile once). */
+  joinAsGuest: (body: {
+    inviteCode: string;
+    displayName: string;
+    idempotencyKey: string;
+    turnstileToken?: string;
+  }) =>
+    fetch("/api/rooms/join-as-guest", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) =>
+      parse<{
+        user: User;
+        join: { status: string; roomId?: string; requestId?: string; message?: string };
+        privacyNote?: string;
+      }>(r),
+    ),
   decideJoin: (body: {
     requestId: string;
     approve: boolean;

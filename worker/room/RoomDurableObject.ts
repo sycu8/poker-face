@@ -29,6 +29,7 @@ import {
   type LedgerPlayer,
 } from "../domain/ledger";
 import { writeAnalytics } from "../lib/analytics";
+import { createRealtimeKitMeeting } from "../voice/realtimekit";
 
 interface ChatMessage {
   id: string;
@@ -80,6 +81,8 @@ export class RoomDurableObject extends DurableObject<Env> {
   private ledger: Record<string, LedgerPlayer> = emptyLedger();
   /** Unseated members watching the table (true spectators). */
   private spectators = new Map<string, string>();
+  /** RealtimeKit meeting id (create-once; synced to D1). */
+  private realtimekitMeetingId: string | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -116,6 +119,7 @@ export class RoomDurableObject extends DurableObject<Env> {
           pendingLeaves?: string[];
           ledger?: Record<string, LedgerPlayer>;
           spectators?: Array<{ userId: string; displayName: string }>;
+          realtimekitMeetingId?: string | null;
         };
         this.roomId = snap.roomId;
         this.hostUserId = snap.hostUserId;
@@ -131,6 +135,7 @@ export class RoomDurableObject extends DurableObject<Env> {
         this.spectators = new Map(
           (snap.spectators ?? []).map((s) => [s.userId, s.displayName]),
         );
+        this.realtimekitMeetingId = snap.realtimekitMeetingId ?? null;
       }
     });
   }
@@ -153,6 +158,7 @@ export class RoomDurableObject extends DurableObject<Env> {
         userId,
         displayName,
       })),
+      realtimekitMeetingId: this.realtimekitMeetingId,
     });
     this.ctx.storage.sql.exec(
       `INSERT INTO room_meta (key, value) VALUES ('snapshot', ?)
@@ -331,6 +337,55 @@ export class RoomDurableObject extends DurableObject<Env> {
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === "/ensure-voice-meeting" && request.method === "POST") {
+      // Serialize create-or-get so concurrent voice-token calls share one meeting.
+      return this.ctx.blockConcurrencyWhile(async () => {
+        if (this.realtimekitMeetingId) {
+          return Response.json({ ok: true, meetingId: this.realtimekitMeetingId });
+        }
+        if (!this.roomId) {
+          return Response.json({ ok: false, error: "Room not ready." }, { status: 400 });
+        }
+
+        const d1Row = await this.env.DB.prepare(
+          `SELECT realtimekit_meeting_id FROM rooms WHERE id = ?`,
+        )
+          .bind(this.roomId)
+          .first<{ realtimekit_meeting_id: string | null }>();
+        if (d1Row?.realtimekit_meeting_id) {
+          this.realtimekitMeetingId = d1Row.realtimekit_meeting_id;
+          this.persist();
+          return Response.json({ ok: true, meetingId: this.realtimekitMeetingId });
+        }
+
+        const body = (await request.json().catch(() => ({}))) as { roomName?: string };
+        const title = body.roomName ?? this.roomName ?? "Friends table";
+        const created = await createRealtimeKitMeeting(this.env, title);
+        if ("error" in created) {
+          return Response.json({ ok: false, error: created.error });
+        }
+
+        // Conditional D1 write: only set when still null (race-safe across isolates).
+        const now = Date.now();
+        await this.env.DB.prepare(
+          `UPDATE rooms SET realtimekit_meeting_id = ?, updated_at = ?
+           WHERE id = ? AND realtimekit_meeting_id IS NULL`,
+        )
+          .bind(created.meetingId, now, this.roomId)
+          .run();
+
+        const after = await this.env.DB.prepare(
+          `SELECT realtimekit_meeting_id FROM rooms WHERE id = ?`,
+        )
+          .bind(this.roomId)
+          .first<{ realtimekit_meeting_id: string | null }>();
+        const meetingId = after?.realtimekit_meeting_id ?? created.meetingId;
+        this.realtimekitMeetingId = meetingId;
+        this.persist();
+        return Response.json({ ok: true, meetingId });
+      });
+    }
+
     if (url.pathname === "/init" && request.method === "POST") {
       const body = (await request.json()) as {
         roomId: string;

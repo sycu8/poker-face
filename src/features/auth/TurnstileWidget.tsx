@@ -52,9 +52,12 @@ function loadTurnstileScript(): Promise<void> {
 export function TurnstileWidget({
   siteKey,
   onToken,
+  resetKey = 0,
 }: {
   siteKey: string | null | undefined;
   onToken: (token: string | null) => void;
+  /** Increment to force a fresh challenge after a failed submit. */
+  resetKey?: number;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
@@ -100,7 +103,7 @@ export function TurnstileWidget({
         widgetId.current = null;
       }
     };
-  }, [siteKey, onToken, reactId]);
+  }, [siteKey, onToken, reactId, resetKey]);
 
   if (!siteKey) return null;
   return (

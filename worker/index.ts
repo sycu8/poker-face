@@ -2,7 +2,7 @@ import type { Env } from "./env";
 import { handleAuth } from "./auth/passwordAuth";
 import { handleRooms } from "./routes/rooms";
 import { handleVoice } from "./voice/realtimekit";
-import { requireUser } from "./auth/session";
+import { purgeExpiredSessions, requireUser } from "./auth/session";
 import { readPublicConfig } from "./lib/configKv";
 import { requireActiveMember } from "./lib/membership";
 import { errorJson, json } from "./lib/http";
@@ -164,5 +164,22 @@ export default {
 
   async queue(batch: MessageBatch, env: Env): Promise<void> {
     await handleArchiveBatch(batch, env);
+  },
+
+  /**
+   * Cron: purge expired / old-revoked sessions.
+   * Production/staging triggers: "0 */6 * * *" (see wrangler.jsonc).
+   */
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    try {
+      const result = await purgeExpiredSessions(env, 100);
+      console.log("purgeExpiredSessions", result.deleted);
+    } catch (err) {
+      console.error("purgeExpiredSessions failed", err instanceof Error ? err.message : err);
+    }
   },
 } satisfies ExportedHandler<Env>;
