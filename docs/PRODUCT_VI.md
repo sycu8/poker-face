@@ -83,6 +83,13 @@ Cách chơi rất đơn giản:
 
 Chỉ chip ảo thôi — không nạp tiền, không rút tiền, không ví.
 
+Tech stack (ngắn gọn):
+• Frontend: React + Vite (PWA)
+• Backend: Cloudflare Workers
+• Realtime bàn: Durable Objects + WebSocket (SQLite trong DO)
+• Data: D1 · KV · R2 · Queues
+• Voice (optional): Cloudflare RealtimeKit
+
 Ai thích có thể fork repo (MIT) rồi tự dựng platform của mình trên Cloudflare.
 
 Chơi thử: https://poker.orangecloud.vn
@@ -96,8 +103,16 @@ Ai rảnh tối nay thì vào bàn mình nhé 🙌
 ```
 Nhóm bạn muốn chơi Texas Hold'em online mà không dính tiền thật?
 
-Poker Faces — bàn riêng, mời bằng mã, host duyệt vào. Chip ảo only. Open source (MIT), fork được luôn.
+Poker Faces — bàn riêng, mời bằng mã, host duyệt vào. Chip ảo only.
+Stack: React/Vite PWA · Workers · Durable Objects · D1/KV/R2 · RealtimeKit.
+Open source (MIT), fork được luôn.
 
 👉 https://poker.orangecloud.vn
 💻 https://github.com/sycu8/poker-face
+```
+
+### Chỉ tech stack (dán thêm vào post hoặc comment)
+
+```
+Tech: React + Vite (PWA) → Cloudflare Workers · mỗi bàn 1 Durable Object (WebSocket + SQLite) · D1/KV/R2/Queues · voice qua RealtimeKit. Full stack trên Cloudflare, MIT, fork tự host được.
 ```
