@@ -39,6 +39,7 @@ npm install
 cp .env.example .dev.vars
 # set SESSION_SECRET at minimum
 # optional: GITHUB_CLIENT_ID/SECRET and GOOGLE_CLIENT_ID/SECRET for social login
+# (in GitHub Actions, GitHub provider secrets must be named OAUTH_GITHUB_CLIENT_ID/SECRET)
 npm run db:migrate:local
 npm run dev
 ```
