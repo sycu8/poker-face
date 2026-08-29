@@ -5,6 +5,18 @@ import { api, type User } from "../../lib/api";
 
 type Mode = "login" | "register" | "reset" | "guest";
 
+const OAUTH_ERROR_COPY: Record<string, string> = {
+  denied: "Sign-in was cancelled. You can try again or use a username and password.",
+  rate_limited: "Too many sign-in attempts. Wait a moment and try again.",
+  bad_state: "That sign-in link expired. Start again from this page.",
+  missing_code: "Sign-in did not complete. Please try again.",
+  token: "Could not finish provider sign-in. Try again shortly.",
+  profile: "Could not read your provider profile. Try again shortly.",
+  not_configured: "That sign-in provider is not available right now.",
+  server_config: "Sign-in is temporarily unavailable. Try again shortly.",
+  failed: "Sign-in failed. Try again or use a username and password.",
+};
+
 function modeFromSearch(params: URLSearchParams): Mode {
   const m = params.get("mode");
   if (m === "register") return "register";
@@ -23,23 +35,90 @@ function pathForMode(mode: Mode, invite?: string | null): string {
   return s ? `/auth?${s}` : "/auth";
 }
 
+function oauthStartHref(provider: "github" | "google", invite?: string | null): string {
+  const q = new URLSearchParams();
+  if (invite) q.set("invite", invite);
+  const s = q.toString();
+  return s ? `/api/auth/oauth/${provider}?${s}` : `/api/auth/oauth/${provider}`;
+}
+
+function GitHubGlyph() {
+  return (
+    <svg
+      aria-hidden="true"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <path d="M12 2C6.477 2 2 6.584 2 12.217c0 4.506 2.865 8.33 6.839 9.679.5.094.682-.222.682-.49 0-.242-.009-.884-.014-1.733-2.782.617-3.369-1.368-3.369-1.368-.454-1.178-1.11-1.491-1.11-1.491-.908-.635.069-.622.069-.622 1.004.072 1.532 1.053 1.532 1.053.892 1.561 2.341 1.11 2.91.85.091-.66.35-1.11.636-1.365-2.22-.258-4.555-1.137-4.555-5.062 0-1.118.39-2.033 1.029-2.75-.103-.258-.446-1.297.098-2.703 0 0 .84-.274 2.75 1.05A9.37 9.37 0 0 1 12 6.948a9.37 9.37 0 0 1 2.504.344c1.909-1.324 2.747-1.05 2.747-1.05.546 1.406.203 2.445.1 2.703.64.717 1.028 1.632 1.028 2.75 0 3.935-2.339 4.801-4.566 5.054.359.316.679.94.679 1.895 0 1.368-.012 2.47-.012 2.806 0 .27.18.588.688.488C19.138 20.543 22 16.72 22 12.217 22 6.584 17.523 2 12 2z" />
+    </svg>
+  );
+}
+
+function GoogleGlyph() {
+  return (
+    <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24">
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.6h5.1c-.2 1.2-.9 2.2-1.9 2.9l3.1 2.4c1.8-1.7 2.9-4.1 2.9-7 0-.7-.1-1.3-.2-1.9H12z"
+      />
+      <path
+        fill="#34A853"
+        d="M6.6 14.3 5.7 15l-2.1 1.6C5.3 19.5 8.4 21.5 12 21.5c2.7 0 5-.9 6.7-2.4l-3.1-2.4c-.9.6-2 .9-3.6.9-2.8 0-5.1-1.9-5.9-4.4z"
+      />
+      <path
+        fill="#4A90E2"
+        d="M3.6 7.4C2.9 8.8 2.5 10.4 2.5 12s.4 3.2 1.1 4.6l3-2.3c-.2-.6-.3-1.2-.3-2.3 0-.8.1-1.5.3-2.2L3.6 7.4z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M12 5.5c1.5 0 2.8.5 3.9 1.5l2.9-2.9C16.9 2.4 14.7 1.5 12 1.5 8.4 1.5 5.3 3.5 3.6 7.4l3 2.3C7 7.4 9.2 5.5 12 5.5z"
+      />
+    </svg>
+  );
+}
+
 export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const modeFromUrl = modeFromSearch(searchParams);
   const inviteFromUrl = searchParams.get("invite");
+  const oauthErrorCode = searchParams.get("oauth_error");
   const [mode, setMode] = useState<Mode>(modeFromUrl);
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    oauthErrorCode
+      ? (OAUTH_ERROR_COPY[oauthErrorCode] ?? OAUTH_ERROR_COPY.failed!)
+      : null,
+  );
   const [info, setInfo] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [oauth, setOauth] = useState<{ github: boolean; google: boolean }>({
+    github: false,
+    google: false,
+  });
 
   useEffect(() => {
     setMode(modeFromUrl);
   }, [modeFromUrl]);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const cfg = await api.config();
+        setOauth({
+          github: Boolean(cfg.oauth?.github),
+          google: Boolean(cfg.oauth?.google),
+        });
+      } catch {
+        /* keep buttons hidden */
+      }
+    })();
+  }, []);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -108,7 +187,10 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
         ? "Unauthenticated reset is disabled. Sign in to change your password, or create a new account if you lost access."
         : mode === "guest"
           ? "Join with a display name only. Guest names are not accounts — you cannot host until you register."
-          : "Sign in with a username and password to host or join a private table. Virtual chips only.";
+          : "Sign in with a username and password, or continue with GitHub or Google. Virtual chips only.";
+
+  const showOauth =
+    (mode === "login" || mode === "register") && (oauth.github || oauth.google);
 
   return (
     <section className="hero" style={{ justifyItems: "center", textAlign: "center" }}>
@@ -141,6 +223,40 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             >
               Sign up
             </button>
+          </div>
+        ) : null}
+
+        {showOauth ? (
+          <div className="oauth-stack" aria-label="Continue with a provider">
+            {oauth.github ? (
+              <a
+                className="btn btn-secondary oauth-btn"
+                href={oauthStartHref("github", inviteFromUrl)}
+                aria-disabled={busy || undefined}
+                onClick={(e) => {
+                  if (busy) e.preventDefault();
+                }}
+              >
+                <GitHubGlyph />
+                Continue with GitHub
+              </a>
+            ) : null}
+            {oauth.google ? (
+              <a
+                className="btn btn-secondary oauth-btn"
+                href={oauthStartHref("google", inviteFromUrl)}
+                aria-disabled={busy || undefined}
+                onClick={(e) => {
+                  if (busy) e.preventDefault();
+                }}
+              >
+                <GoogleGlyph />
+                Continue with Google
+              </a>
+            ) : null}
+            <p className="oauth-divider muted">
+              <span>or use email credentials</span>
+            </p>
           </div>
         ) : null}
 

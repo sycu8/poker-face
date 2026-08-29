@@ -11,6 +11,12 @@ export interface Env {
   ENVIRONMENT: string;
   APP_ORIGIN: string;
   SESSION_SECRET: string;
+  /** GitHub OAuth App client id (optional). Enabled only when secret is also set. */
+  GITHUB_CLIENT_ID?: string;
+  GITHUB_CLIENT_SECRET?: string;
+  /** Google OAuth client id (optional). Enabled only when secret is also set. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   REALTIMEKIT_APP_ID?: string;
   REALTIMEKIT_PRESET_NAME?: string;
   REALTIMEKIT_API_TOKEN?: string;

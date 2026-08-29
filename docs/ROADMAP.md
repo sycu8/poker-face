@@ -5,6 +5,7 @@ Play-money Texas Hold’em for friends. Virtual chips only. This roadmap is the 
 ## 1. Current state (shipped)
 
 - [x] Username/password auth + cookie sessions (PBKDF2)
+- [x] Optional GitHub + Google OAuth (authorization code + linked accounts)
 - [x] Host create / invite / approve–decline join
 - [x] Authoritative Hold’em Durable Object (blinds, streets, pot-cap, side pots, timers, privacy)
 - [x] Table UX (share invite, street/timer, winners, host rules, chat)

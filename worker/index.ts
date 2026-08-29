@@ -1,4 +1,5 @@
 import type { Env } from "./env";
+import { handleOAuth } from "./auth/oauth";
 import { handleAuth } from "./auth/passwordAuth";
 import { handleRooms } from "./routes/rooms";
 import { handleVoice } from "./voice/realtimekit";
@@ -135,6 +136,9 @@ export default {
 
     const authRes = await handleAuth(request, env, url.pathname);
     if (authRes) return withSecurityHeaders(authRes);
+
+    const oauthRes = await handleOAuth(request, env, url.pathname);
+    if (oauthRes) return withSecurityHeaders(oauthRes);
 
     const roomsRes = await handleRooms(request, env, url.pathname);
     if (roomsRes) return withSecurityHeaders(roomsRes);

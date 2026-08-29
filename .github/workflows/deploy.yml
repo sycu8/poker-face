@@ -95,11 +95,19 @@ jobs:
           REALTIMEKIT_PRESET_NAME: ${{ secrets.REALTIMEKIT_PRESET_NAME }}
           TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
           TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$REALTIMEKIT_API_TOKEN" ]; then export REALTIMEKIT_API_TOKEN="${REALTIMEKIT_API_TOKEN_STAGING:-}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
           if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
+          if [ -z "$GITHUB_CLIENT_ID" ]; then export GITHUB_CLIENT_ID="${{ secrets.GITHUB_CLIENT_ID_STAGING }}"; fi
+          if [ -z "$GITHUB_CLIENT_SECRET" ]; then export GITHUB_CLIENT_SECRET="${{ secrets.GITHUB_CLIENT_SECRET_STAGING }}"; fi
+          if [ -z "$GOOGLE_CLIENT_ID" ]; then export GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID_STAGING }}"; fi
+          if [ -z "$GOOGLE_CLIENT_SECRET" ]; then export GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET_STAGING }}"; fi
           if [ -z "$SESSION_SECRET" ]; then
             echo "::warning::SESSION_SECRET / SESSION_SECRET_STAGING not in Actions secrets — skipping secret bulk so existing Worker secrets are retained. Set the secret for future updates (do not generate ephemeral values)."
           else
@@ -112,6 +120,12 @@ jobs:
             echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured unless already set on the Worker. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
           else
             echo "REALTIMEKIT_API_TOKEN is present for staging (len=${#REALTIMEKIT_API_TOKEN})."
+          fi
+          if [ -z "${GITHUB_CLIENT_ID:-}" ] || [ -z "${GITHUB_CLIENT_SECRET:-}" ]; then
+            echo "::notice::GitHub OAuth secrets incomplete — Continue with GitHub stays hidden until GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET are set."
+          fi
+          if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+            echo "::notice::Google OAuth secrets incomplete — Continue with Google stays hidden until GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set."
           fi
       - name: Redeploy staging after secrets
         uses: cloudflare/wrangler-action@v3
@@ -183,11 +197,19 @@ jobs:
           REALTIMEKIT_PRESET_NAME: ${{ secrets.REALTIMEKIT_PRESET_NAME }}
           TURN_KEY_ID: ${{ secrets.TURN_KEY_ID }}
           TURN_KEY_API_TOKEN: ${{ secrets.TURN_KEY_API_TOKEN }}
+          GITHUB_CLIENT_ID: ${{ secrets.GITHUB_CLIENT_ID }}
+          GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$REALTIMEKIT_API_TOKEN" ]; then export REALTIMEKIT_API_TOKEN="${REALTIMEKIT_API_TOKEN_PRODUCTION:-}"; fi
           if [ -z "$REALTIMEKIT_APP_ID" ]; then export REALTIMEKIT_APP_ID="${{ vars.REALTIMEKIT_APP_ID }}"; fi
           if [ -z "$REALTIMEKIT_PRESET_NAME" ]; then export REALTIMEKIT_PRESET_NAME="${{ vars.REALTIMEKIT_PRESET_NAME }}"; fi
+          if [ -z "$GITHUB_CLIENT_ID" ]; then export GITHUB_CLIENT_ID="${{ secrets.GITHUB_CLIENT_ID_PRODUCTION }}"; fi
+          if [ -z "$GITHUB_CLIENT_SECRET" ]; then export GITHUB_CLIENT_SECRET="${{ secrets.GITHUB_CLIENT_SECRET_PRODUCTION }}"; fi
+          if [ -z "$GOOGLE_CLIENT_ID" ]; then export GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID_PRODUCTION }}"; fi
+          if [ -z "$GOOGLE_CLIENT_SECRET" ]; then export GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET_PRODUCTION }}"; fi
           # Production requires SESSION_SECRET in Actions so deploys cannot silently rely
           # on accidental Worker secret persistence alone.
           if [ -z "$SESSION_SECRET" ]; then
@@ -202,6 +224,12 @@ jobs:
             echo "::warning::REALTIMEKIT_API_TOKEN is empty — voice will stay not_configured unless already set on the Worker. Set Actions secret REALTIMEKIT_API_TOKEN (Realtime Admin), then re-run Deploy Cloudflare."
           else
             echo "REALTIMEKIT_API_TOKEN is present for production (len=${#REALTIMEKIT_API_TOKEN})."
+          fi
+          if [ -z "${GITHUB_CLIENT_ID:-}" ] || [ -z "${GITHUB_CLIENT_SECRET:-}" ]; then
+            echo "::notice::GitHub OAuth secrets incomplete — Continue with GitHub stays hidden until GITHUB_CLIENT_ID + GITHUB_CLIENT_SECRET are set."
+          fi
+          if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
+            echo "::notice::Google OAuth secrets incomplete — Continue with Google stays hidden until GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set."
           fi
       - name: Redeploy production after secrets
         uses: cloudflare/wrangler-action@v3

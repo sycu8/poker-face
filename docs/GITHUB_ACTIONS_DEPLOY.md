@@ -20,6 +20,15 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | `D1_DATABASE_ID_STAGING` / `D1_DATABASE_ID_PRODUCTION`   | Optional; auto-created if omitted                                                                                         |
 | `KV_NAMESPACE_ID_STAGING` / `KV_NAMESPACE_ID_PRODUCTION` | Optional; auto-created if omitted                                                                                         |
 | `TURN_KEY_ID` / `TURN_KEY_API_TOKEN`                     | Optional Calls TURN key (ops only; RealtimeKit voice does not need them)                                                  |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`              | Optional GitHub OAuth App credentials (both required to show **Continue with GitHub**)                                    |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`              | Optional Google OAuth client credentials (both required to show **Continue with Google**)                                 |
+
+Per-environment overrides (optional): `GITHUB_CLIENT_ID_STAGING` / `_PRODUCTION`, `GOOGLE_CLIENT_ID_STAGING` / `_PRODUCTION`, and matching `*_CLIENT_SECRET_*` names.
+
+**OAuth callback URLs** (register in each provider console for every `APP_ORIGIN`):
+
+- `{APP_ORIGIN}/api/auth/oauth/github/callback`
+- `{APP_ORIGIN}/api/auth/oauth/google/callback`
 
 **Voice:** set `REALTIMEKIT_API_TOKEN` (repo or Environments **`staging`** / **`production`**). Deploy does **not** copy `CLOUDFLARE_API_TOKEN` into the Worker as a RealtimeKit token. Voice secrets remain optional for core poker.
 

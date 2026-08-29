@@ -25,7 +25,7 @@ If Poker Faces helps your group play online, you can [buy me a coffee](https://b
 - SQLite-backed Durable Object per room (hibernatable WebSockets)
 - D1 (users, sessions, rooms, hand summaries)
 - KV / R2 / Queues / Analytics Engine / Rate Limiting
-- Username + email + password auth (PBKDF2) with cookie sessions; signed-in password change
+- Username + email + password auth (PBKDF2) with cookie sessions; optional GitHub/Google OAuth; signed-in password change
 - Host-approved private tables, text chat, optional voice
 - PWA manifest + service worker shell cache
 - Voice via Cloudflare RealtimeKit (degraded-safe when unset)
@@ -38,9 +38,17 @@ cd poker-face
 npm install
 cp .env.example .dev.vars
 # set SESSION_SECRET at minimum
+# optional: GITHUB_CLIENT_ID/SECRET and GOOGLE_CLIENT_ID/SECRET for social login
 npm run db:migrate:local
 npm run dev
 ```
+
+### OAuth (optional)
+
+1. Create a GitHub OAuth App and/or Google OAuth client.
+2. Set callback URLs to `{APP_ORIGIN}/api/auth/oauth/github/callback` and `{APP_ORIGIN}/api/auth/oauth/google/callback`.
+3. Put client id + secret in `.dev.vars` (local) or GitHub Actions / Worker secrets (deploy).
+4. Buttons appear on `/auth` only when both id and secret for that provider are present.
 
 ## Scripts
 

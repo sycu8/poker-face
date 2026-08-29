@@ -16,6 +16,11 @@ const optional = [
   // Optional Calls TURN key (ops / custom WebRTC). RealtimeKit voice does not require these.
   "TURN_KEY_ID",
   "TURN_KEY_API_TOKEN",
+  // Optional OAuth providers (both id + secret required to enable each).
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "GOOGLE_CLIENT_ID",
+  "GOOGLE_CLIENT_SECRET",
 ];
 
 const missing = required.filter((k) => !process.env[k]);
