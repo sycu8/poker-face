@@ -107,6 +107,11 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
   }, [modeFromUrl]);
 
   useEffect(() => {
+    if (!oauthErrorCode) return;
+    setError(OAUTH_ERROR_COPY[oauthErrorCode] ?? OAUTH_ERROR_COPY.failed!);
+  }, [oauthErrorCode]);
+
+  useEffect(() => {
     void (async () => {
       try {
         const cfg = await api.config();
