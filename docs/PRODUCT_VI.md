@@ -66,3 +66,38 @@ Deploy staging/production: [GITHUB_ACTIONS_DEPLOY.md](./GITHUB_ACTIONS_DEPLOY.md
 > **Poker Faces** — Texas Hold'em chip ảo cho nhóm bạn. Bàn riêng, mời bằng mã, host duyệt vào. Chat + voice, PWA. Open source (MIT): fork rồi tự build platform của mình.  
 > Chơi: https://poker.orangecloud.vn  
 > Code: https://github.com/sycu8/poker-face
+
+---
+
+## Post Facebook (copy/paste)
+
+### Bản chính (khuyên dùng)
+
+```
+Mình vừa làm xong Poker Faces — bàn Texas Hold'em chip ảo để nhóm bạn chơi chung online 🃏
+
+Cách chơi rất đơn giản:
+• Tạo bàn riêng → gửi mã mời
+• Bạn bè xin vào, host duyệt rồi mới ngồi
+• Chat (và voice nếu muốn) như họp bàn thật
+
+Chỉ chip ảo thôi — không nạp tiền, không rút tiền, không ví.
+
+Ai thích có thể fork repo (MIT) rồi tự dựng platform của mình trên Cloudflare.
+
+Chơi thử: https://poker.orangecloud.vn
+Code mở: https://github.com/sycu8/poker-face
+
+Ai rảnh tối nay thì vào bàn mình nhé 🙌
+```
+
+### Bản ngắn
+
+```
+Nhóm bạn muốn chơi Texas Hold'em online mà không dính tiền thật?
+
+Poker Faces — bàn riêng, mời bằng mã, host duyệt vào. Chip ảo only. Open source (MIT), fork được luôn.
+
+👉 https://poker.orangecloud.vn
+💻 https://github.com/sycu8/poker-face
+```
