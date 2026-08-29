@@ -18,6 +18,7 @@ const DEFAULT_COPY: PublicCopy = {
  * Missing keys fall back to shipped defaults — never blocks the game.
  */
 export async function readPublicConfig(env: Env): Promise<{
+  turnstileSiteKey: string;
   environment: string;
   appOrigin: string;
   flags: {
@@ -56,6 +57,7 @@ export async function readPublicConfig(env: Env): Promise<{
   }
 
   return {
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY ?? "",
     environment: env.ENVIRONMENT,
     appOrigin: env.APP_ORIGIN,
     flags: { handHistoryEnabled, themesEnabled, passkeysEnabled },

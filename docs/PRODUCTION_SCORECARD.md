@@ -32,16 +32,16 @@ Statuses:
 
 ## Category scores
 
-| Category                    |   Score | Notes                                                                                                                                        |
-| --------------------------- | ------: | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Poker correctness           | 23 / 25 | HU, short all-in, side pots, TDA odd chip, 3→2 HU, `validateAndResolveAction` zero-mutation rejects                                          |
-| State integrity & realtime  | 17 / 20 | Join re-ensure, approve idempotent, `membership_ops` outbox, `safeSend`, voice single-flight                                                 |
-| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; rate limits + Origin checks                                                                     |
-| Auth                        |  8 / 10 | Dummy PBKDF2=100k (CPU-safe); guest idempotency; Turnstile removed (rate limits remain); secret values not readable via API (owner attested) |
-| CI/CD & rollback            |  9 / 10 | Full CI in deploy validate; **canonical health verified 200** (no Wrangler false-green path); Environment required reviewers still empty     |
-| Observability & operations  |   5 / 8 | Analytics + session purge + membership flush cron; limited alerting                                                                          |
-| Mobile UX                   |   5 / 7 | Existing table UX unchanged this pass                                                                                                        |
-| Performance/PWA             |   3 / 5 | VoicePanel + HandHistory lazy; Table chunk still ~680KB                                                                                      |
+| Category                    |   Score | Notes                                                                                                                                    |
+| --------------------------- | ------: | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Poker correctness           | 23 / 25 | HU, short all-in, side pots, TDA odd chip, 3→2 HU, `validateAndResolveAction` zero-mutation rejects                                      |
+| State integrity & realtime  | 17 / 20 | Join re-ensure, approve idempotent, `membership_ops` outbox, `safeSend`, voice single-flight                                             |
+| Security & abuse resistance | 13 / 15 | UTF-8 WS 8KiB + strict Zod; chat RL; Origin; rate limits + Origin checks                                                                 |
+| Auth                        |  9 / 10 | Dummy PBKDF2=100k (CPU-safe); guest idempotency; Turnstile siteverify on auth/join; secret values not readable via API (owner attested)  |
+| CI/CD & rollback            |  9 / 10 | Full CI in deploy validate; **canonical health verified 200** (no Wrangler false-green path); Environment required reviewers still empty |
+| Observability & operations  |   5 / 8 | Analytics + session purge + membership flush cron; limited alerting                                                                      |
+| Mobile UX                   |   5 / 7 | Existing table UX unchanged this pass                                                                                                    |
+| Performance/PWA             |   3 / 5 | VoicePanel + HandHistory lazy; Table chunk still ~680KB                                                                                  |
 
 **Weighted total: 84 / 100**
 

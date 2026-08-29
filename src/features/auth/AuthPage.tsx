@@ -1,7 +1,8 @@
 import type { FormEvent } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type User } from "../../lib/api";
+import { TurnstileWidget } from "./TurnstileWidget";
 
 type Mode = "login" | "register" | "reset" | "guest";
 
@@ -16,6 +17,13 @@ const OAUTH_ERROR_COPY: Record<string, string> = {
   server_config: "Sign-in is temporarily unavailable. Try again shortly.",
   failed: "Sign-in failed. Try again or use a username and password.",
 };
+
+function turnstileActionForMode(mode: Mode): string | undefined {
+  if (mode === "login") return "login";
+  if (mode === "register") return "register";
+  if (mode === "guest") return "guest";
+  return undefined;
+}
 
 function modeFromSearch(params: URLSearchParams): Mode {
   const m = params.get("mode");
@@ -101,10 +109,19 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
     github: false,
     google: false,
   });
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+  const [turnstileReset, setTurnstileReset] = useState(0);
+  const onToken = useCallback((token: string | null) => setTurnstileToken(token), []);
 
   useEffect(() => {
     setMode(modeFromUrl);
   }, [modeFromUrl]);
+
+  useEffect(() => {
+    if (!oauthErrorCode) return;
+    setError(OAUTH_ERROR_COPY[oauthErrorCode] ?? OAUTH_ERROR_COPY.failed!);
+  }, [oauthErrorCode]);
 
   useEffect(() => {
     void (async () => {
@@ -114,8 +131,9 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           github: Boolean(cfg.oauth?.github),
           google: Boolean(cfg.oauth?.google),
         });
+        setSiteKey(cfg.turnstileSiteKey || null);
       } catch {
-        /* keep buttons hidden */
+        /* keep defaults */
       }
     })();
   }, []);
@@ -125,7 +143,14 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
     setError(null);
     setInfo(null);
     setPassword("");
+    setTurnstileToken(null);
+    setTurnstileReset((n) => n + 1);
     navigate(pathForMode(next, inviteFromUrl), { replace: true });
+  }
+
+  function resetTurnstile() {
+    setTurnstileToken(null);
+    setTurnstileReset((n) => n + 1);
   }
 
   async function submit(e: FormEvent) {
@@ -137,6 +162,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
       if (mode === "guest") {
         const result = await api.guest({
           displayName: displayName.trim(),
+          turnstileToken: turnstileToken ?? undefined,
         });
         onAuthed(result.user);
         if (result.privacyNote) setInfo(result.privacyNote);
@@ -155,17 +181,20 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
           email,
           password,
           displayName: displayName.trim() || undefined,
+          turnstileToken: turnstileToken ?? undefined,
         });
         onAuthed(user);
       } else {
         const { user } = await api.login({
           username,
           password,
+          turnstileToken: turnstileToken ?? undefined,
         });
         onAuthed(user);
       }
       navigate(inviteFromUrl ? `/?invite=${encodeURIComponent(inviteFromUrl)}` : "/");
     } catch (err) {
+      resetTurnstile();
       setError(err instanceof Error ? err.message : "Could not sign in.");
     } finally {
       setBusy(false);
@@ -352,6 +381,14 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             </div>
           </>
         )}
+        {mode !== "reset" ? (
+          <TurnstileWidget
+            siteKey={siteKey}
+            onToken={onToken}
+            resetKey={turnstileReset}
+            action={turnstileActionForMode(mode)}
+          />
+        ) : null}
         {error ? (
           <p role="alert" style={{ color: "var(--danger)", textAlign: "center" }}>
             {error}

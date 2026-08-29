@@ -99,6 +99,7 @@ jobs:
           GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$REALTIMEKIT_API_TOKEN" ]; then export REALTIMEKIT_API_TOKEN="${REALTIMEKIT_API_TOKEN_STAGING:-}"; fi
@@ -108,6 +109,7 @@ jobs:
           if [ -z "$GITHUB_CLIENT_SECRET" ]; then export GITHUB_CLIENT_SECRET="${{ secrets.GITHUB_CLIENT_SECRET_STAGING }}"; fi
           if [ -z "$GOOGLE_CLIENT_ID" ]; then export GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID_STAGING }}"; fi
           if [ -z "$GOOGLE_CLIENT_SECRET" ]; then export GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET_STAGING }}"; fi
+          if [ -z "$TURNSTILE_SECRET" ]; then export TURNSTILE_SECRET="${{ secrets.TURNSTILE_SECRET_STAGING }}"; fi
           if [ -z "$SESSION_SECRET" ]; then
             echo "::warning::SESSION_SECRET / SESSION_SECRET_STAGING not in Actions secrets — skipping secret bulk so existing Worker secrets are retained. Set the secret for future updates (do not generate ephemeral values)."
           else
@@ -126,6 +128,11 @@ jobs:
           fi
           if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
             echo "::notice::Google OAuth secrets incomplete — Continue with Google stays hidden until GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set."
+          fi
+          if [ -z "${TURNSTILE_SECRET:-}" ]; then
+            echo "::warning::TURNSTILE_SECRET is empty — staging auth/join will fail closed once the Worker has no secret. Set Actions secret TURNSTILE_SECRET (or TURNSTILE_SECRET_STAGING)."
+          else
+            echo "TURNSTILE_SECRET is present for staging (len=${#TURNSTILE_SECRET})."
           fi
       - name: Redeploy staging after secrets
         uses: cloudflare/wrangler-action@v3
@@ -201,6 +208,7 @@ jobs:
           GITHUB_CLIENT_SECRET: ${{ secrets.GITHUB_CLIENT_SECRET }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          TURNSTILE_SECRET: ${{ secrets.TURNSTILE_SECRET }}
         run: |
           if [ -z "$SESSION_SECRET" ]; then export SESSION_SECRET="${{ secrets.SESSION_SECRET }}"; fi
           if [ -z "$REALTIMEKIT_API_TOKEN" ]; then export REALTIMEKIT_API_TOKEN="${REALTIMEKIT_API_TOKEN_PRODUCTION:-}"; fi
@@ -210,6 +218,7 @@ jobs:
           if [ -z "$GITHUB_CLIENT_SECRET" ]; then export GITHUB_CLIENT_SECRET="${{ secrets.GITHUB_CLIENT_SECRET_PRODUCTION }}"; fi
           if [ -z "$GOOGLE_CLIENT_ID" ]; then export GOOGLE_CLIENT_ID="${{ secrets.GOOGLE_CLIENT_ID_PRODUCTION }}"; fi
           if [ -z "$GOOGLE_CLIENT_SECRET" ]; then export GOOGLE_CLIENT_SECRET="${{ secrets.GOOGLE_CLIENT_SECRET_PRODUCTION }}"; fi
+          if [ -z "$TURNSTILE_SECRET" ]; then export TURNSTILE_SECRET="${{ secrets.TURNSTILE_SECRET_PRODUCTION }}"; fi
           # Production requires SESSION_SECRET in Actions so deploys cannot silently rely
           # on accidental Worker secret persistence alone.
           if [ -z "$SESSION_SECRET" ]; then
@@ -230,6 +239,11 @@ jobs:
           fi
           if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
             echo "::notice::Google OAuth secrets incomplete — Continue with Google stays hidden until GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set."
+          fi
+          if [ -z "${TURNSTILE_SECRET:-}" ]; then
+            echo "::warning::TURNSTILE_SECRET is empty — production auth/join will fail closed. Set Actions secret TURNSTILE_SECRET (or TURNSTILE_SECRET_PRODUCTION)."
+          else
+            echo "TURNSTILE_SECRET is present for production (len=${#TURNSTILE_SECRET})."
           fi
       - name: Redeploy production after secrets
         uses: cloudflare/wrangler-action@v3

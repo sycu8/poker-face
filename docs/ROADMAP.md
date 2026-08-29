@@ -23,7 +23,7 @@ Play-money Texas Hold’em for friends. Virtual chips only. This roadmap is the 
 
 ### Phase 1 — Launch polish
 
-1. [x] Auth rate limits on register/login/guest/join (Turnstile removed)
+1. [x] Auth rate limits on register/login/guest/join + Cloudflare Turnstile siteverify
 2. [x] Leave / stand-up + host kick (clear `room_members` + DO seat)
 3. [x] Play-money rebuy / stack reset for busted seats
 4. [x] Reconnect hardening: document snapshot-only and stop creating dead `room_events`

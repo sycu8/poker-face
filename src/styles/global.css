@@ -1504,6 +1504,13 @@ button {
   margin-top: 0.25rem;
 }
 
+.turnstile-wrap {
+  display: flex;
+  justify-content: center;
+  margin-block: 0.75rem;
+  min-height: 65px;
+}
+
 .auth-switch {
   margin: 0.85rem 0 0;
   text-align: center;

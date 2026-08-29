@@ -10,6 +10,7 @@ import {
 } from "./session";
 import { hashPassword, needsRehash, verifyPasswordOrDummy } from "./password";
 import { writeAnalytics } from "../lib/analytics";
+import { verifyTurnstile } from "../lib/turnstile";
 import { errorJson, json, randomId, readJson, sha256Hex } from "../lib/http";
 
 /** Create a guest user row + short-lived session. Shared by /auth/guest and join-as-guest. */
@@ -53,11 +54,13 @@ const registerSchema = z.object({
   email: emailSchema,
   password: passwordSchema,
   displayName: z.string().trim().min(2).max(32).optional(),
+  turnstileToken: z.string().min(1).optional(),
 });
 
 const loginSchema = z.object({
   username: usernameSchema,
   password: passwordSchema,
+  turnstileToken: z.string().min(1).optional(),
 });
 
 const changePasswordSchema = z.object({
@@ -67,6 +70,7 @@ const changePasswordSchema = z.object({
 
 const guestSchema = z.object({
   displayName: z.string().trim().min(2).max(32),
+  turnstileToken: z.string().min(1).optional(),
 });
 
 function genericAuthFailure(action: string): Response {
@@ -104,6 +108,14 @@ export async function handleAuth(
 
       const parsed = await readJson(request, guestSchema);
       if (!parsed.ok) return parsed.response;
+
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+        "guest",
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
       const guest = await createGuestUserAndSession(env, parsed.data.displayName);
       return new Response(
@@ -166,6 +178,14 @@ export async function handleAuth(
 
       const parsed = await readJson(request, registerSchema);
       if (!parsed.ok) return parsed.response;
+
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+        "register",
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
       const existingUsername = await env.DB.prepare(
         `SELECT id FROM users WHERE username = ?`,
@@ -233,6 +253,14 @@ export async function handleAuth(
 
       const parsed = await readJson(request, loginSchema);
       if (!parsed.ok) return parsed.response;
+
+      const okTurnstile = await verifyTurnstile(
+        env,
+        parsed.data.turnstileToken,
+        request.headers.get("cf-connecting-ip"),
+        "login",
+      );
+      if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
       const row = await env.DB.prepare(
         `SELECT id, display_name, username, password_hash FROM users WHERE username = ?`,

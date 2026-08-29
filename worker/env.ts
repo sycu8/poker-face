@@ -11,6 +11,12 @@ export interface Env {
   ENVIRONMENT: string;
   APP_ORIGIN: string;
   SESSION_SECRET: string;
+  /** Public Turnstile site key (safe in vars). */
+  TURNSTILE_SITE_KEY?: string;
+  /** Turnstile widget secret (Worker secret / .dev.vars). */
+  TURNSTILE_SECRET?: string;
+  /** Comma-separated frontend hostnames allowed by siteverify. */
+  TURNSTILE_HOSTNAMES?: string;
   /** GitHub OAuth App client id (optional). Enabled only when secret is also set. */
   GITHUB_CLIENT_ID?: string;
   GITHUB_CLIENT_SECRET?: string;

@@ -22,8 +22,11 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | `TURN_KEY_ID` / `TURN_KEY_API_TOKEN`                     | Optional Calls TURN key (ops only; RealtimeKit voice does not need them)                                                  |
 | `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`              | Optional GitHub OAuth App credentials (both required to show **Continue with GitHub**)                                    |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`              | Optional Google OAuth client credentials (both required to show **Continue with Google**)                                 |
+| `TURNSTILE_SECRET`                                       | Cloudflare Turnstile widget secret (required for staging/production auth/join bot checks)                                 |
 
-Per-environment overrides (optional): `GITHUB_CLIENT_ID_STAGING` / `_PRODUCTION`, `GOOGLE_CLIENT_ID_STAGING` / `_PRODUCTION`, and matching `*_CLIENT_SECRET_*` names.
+Per-environment overrides (optional): `GITHUB_CLIENT_ID_STAGING` / `_PRODUCTION`, `GOOGLE_CLIENT_ID_STAGING` / `_PRODUCTION`, matching `*_CLIENT_SECRET_*`, and `TURNSTILE_SECRET_STAGING` / `TURNSTILE_SECRET_PRODUCTION`.
+
+Public Turnstile site key and hostname allowlists are Wrangler **vars** (`TURNSTILE_SITE_KEY`, `TURNSTILE_HOSTNAMES`) — not Actions secrets.
 
 **OAuth callback URLs** (register in each provider console for every `APP_ORIGIN`):
 

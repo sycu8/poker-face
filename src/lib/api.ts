@@ -82,6 +82,7 @@ export const api = {
   config: () =>
     fetch("/api/config").then((r) =>
       parse<{
+        turnstileSiteKey?: string;
         environment?: string;
         appOrigin?: string;
         flags?: {
@@ -106,6 +107,7 @@ export const api = {
     email: string;
     password: string;
     displayName?: string;
+    turnstileToken?: string;
   }) =>
     fetch("/api/auth/register", {
       method: "POST",
@@ -113,14 +115,14 @@ export const api = {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
-  login: (body: { username: string; password: string }) =>
+  login: (body: { username: string; password: string; turnstileToken?: string }) =>
     fetch("/api/auth/login", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     }).then((r) => parse<{ user: User }>(r)),
-  guest: (body: { displayName: string }) =>
+  guest: (body: { displayName: string; turnstileToken?: string }) =>
     fetch("/api/auth/guest", {
       method: "POST",
       credentials: "include",
@@ -169,6 +171,7 @@ export const api = {
     inviteCode: string;
     idempotencyKey: string;
     displayName?: string;
+    turnstileToken?: string;
   }) =>
     fetch("/api/rooms/join-request", {
       method: "POST",
@@ -178,11 +181,12 @@ export const api = {
     }).then((r) =>
       parse<{ status: string; roomId?: string; requestId?: string; message?: string }>(r),
     ),
-  /** Combined guest session + join request. */
+  /** Combined guest session + join request (verifies Turnstile once). */
   joinAsGuest: (body: {
     inviteCode: string;
     displayName: string;
     idempotencyKey: string;
+    turnstileToken?: string;
   }) =>
     fetch("/api/rooms/join-as-guest", {
       method: "POST",
