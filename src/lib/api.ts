@@ -89,6 +89,10 @@ export const api = {
           themesEnabled: boolean;
           passkeysEnabled: boolean;
         };
+        oauth?: {
+          github: boolean;
+          google: boolean;
+        };
         copy: { tagline: string; support: string; chips: string };
       }>(r),
     ),

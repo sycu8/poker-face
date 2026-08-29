@@ -1,4 +1,5 @@
 import type { Env } from "../env";
+import { oauthProvidersConfigured } from "../auth/oauth";
 
 export type PublicCopy = {
   tagline: string;
@@ -23,6 +24,10 @@ export async function readPublicConfig(env: Env): Promise<{
     handHistoryEnabled: boolean;
     themesEnabled: boolean;
     passkeysEnabled: boolean;
+  };
+  oauth: {
+    github: boolean;
+    google: boolean;
   };
   copy: PublicCopy;
 }> {
@@ -54,6 +59,7 @@ export async function readPublicConfig(env: Env): Promise<{
     environment: env.ENVIRONMENT,
     appOrigin: env.APP_ORIGIN,
     flags: { handHistoryEnabled, themesEnabled, passkeysEnabled },
+    oauth: oauthProvidersConfigured(env),
     copy,
   };
 }
