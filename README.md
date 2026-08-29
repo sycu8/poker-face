@@ -10,9 +10,24 @@ Live app: [https://poker.orangecloud.vn](https://poker.orangecloud.vn)
 
 Virtual chips only. No purchases, cash-out, wallets, or real-money language.
 
+Share a private table with friends via invite code (host approves seats). Prefer Vietnamese product copy? See [`docs/PRODUCT_VI.md`](docs/PRODUCT_VI.md).
+
 ## Open source
 
-This repository is public under the [MIT License](LICENSE). You are welcome to fork, study, and contribute — see [CONTRIBUTING.md](CONTRIBUTING.md).
+This repository is public under the [MIT License](LICENSE). Fork it, self-host on Cloudflare, and run your own platform — or contribute back via [CONTRIBUTING.md](CONTRIBUTING.md).
+
+### Basics at a glance
+
+| Area | What you get |
+| --- | --- |
+| Game | Authoritative Texas Hold'em (blinds, streets, side pots, timers) |
+| Privacy | Host-approved private rooms; invite code / guest join |
+| Social | Table chat; optional voice |
+| Host | Rules, pause/resume, kick, transfer host, practice bots |
+| History | Hand archive / replay; session ledger + CSV |
+| Client | React PWA on Cloudflare Workers |
+
+More detail (Vietnamese): [`docs/PRODUCT_VI.md`](docs/PRODUCT_VI.md).
 
 ## Support the project
 
@@ -60,6 +75,7 @@ See `docs/BRAND_GUIDE.md` and `logo/`.
 
 ## Docs
 
+- [`docs/PRODUCT_VI.md`](docs/PRODUCT_VI.md) — Vietnamese product intro (friends, fork, features)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md) — shipped state, gaps, and phased product plan
 - [`docs/GAME_RULES.md`](docs/GAME_RULES.md) — play-money rules
 - [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) — Worker / DO / D1 layout
