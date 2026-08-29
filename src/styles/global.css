@@ -572,6 +572,11 @@ button {
   margin-top: 0;
 }
 
+.board .playing-card {
+  /* Prefer staged .playing-card--board-deal over the generic pop. */
+  animation: none;
+}
+
 .playing-card {
   position: relative;
   flex-shrink: 0;
@@ -909,19 +914,27 @@ button {
   justify-content: center;
 }
 
+.seat-holes .playing-card {
+  animation: none;
+}
+
 .seat-holes--hero {
   gap: 0.55rem;
   margin-top: 0.4rem;
 }
 
-.seat-holes--deal-in {
-  opacity: 0;
-  animation: deal-holes-reveal 220ms ease-out forwards;
-  animation-delay: var(--deal-reveal-delay, 0ms);
-}
-
 .playing-card--dealt {
   animation: none;
+}
+
+.playing-card--hole-deal {
+  opacity: 0;
+  animation: deal-holes-reveal 320ms ease-out forwards;
+}
+
+.playing-card--board-deal {
+  opacity: 0;
+  animation: board-deal-in 560ms cubic-bezier(0.22, 0.9, 0.3, 1) forwards;
 }
 
 .seat-dealer-chip {
@@ -966,7 +979,7 @@ button {
   top: var(--deal-from-y);
   transform: translate(-50%, -50%) scale(0.72) rotate(-18deg);
   opacity: 0;
-  animation: deal-fly 480ms cubic-bezier(0.22, 0.9, 0.3, 1) forwards;
+  animation: deal-fly 720ms cubic-bezier(0.22, 0.9, 0.3, 1) forwards;
   filter: drop-shadow(0 8px 12px #0008);
 }
 
@@ -981,7 +994,10 @@ button {
     opacity: 0;
     transform: translate(-50%, -50%) scale(0.65) rotate(-22deg);
   }
-  12% {
+  10% {
+    opacity: 1;
+  }
+  78% {
     opacity: 1;
   }
   100% {
@@ -995,7 +1011,22 @@ button {
 @keyframes deal-holes-reveal {
   from {
     opacity: 0;
-    transform: translateY(6px) scale(0.92);
+    transform: translateY(8px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes board-deal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-14px) scale(0.82) rotate(-10deg);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(2px) scale(1.03) rotate(1deg);
   }
   to {
     opacity: 1;
