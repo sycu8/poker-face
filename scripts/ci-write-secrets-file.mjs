@@ -21,6 +21,8 @@ const optional = [
   "GITHUB_CLIENT_SECRET",
   "GOOGLE_CLIENT_ID",
   "GOOGLE_CLIENT_SECRET",
+  // Cloudflare Turnstile (required for staging/production bot checks).
+  "TURNSTILE_SECRET",
 ];
 
 const missing = required.filter((k) => !process.env[k]);

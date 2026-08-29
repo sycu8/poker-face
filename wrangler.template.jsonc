@@ -16,6 +16,8 @@
   "vars": {
     "ENVIRONMENT": "local",
     "APP_ORIGIN": "http://localhost:5173",
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAEgsiYVAzamYskC5",
+    "TURNSTILE_HOSTNAMES": "localhost,127.0.0.1",
   },
   "d1_databases": [
     {

@@ -25,7 +25,7 @@ If Poker Faces helps your group play online, you can [buy me a coffee](https://b
 - SQLite-backed Durable Object per room (hibernatable WebSockets)
 - D1 (users, sessions, rooms, hand summaries)
 - KV / R2 / Queues / Analytics Engine / Rate Limiting
-- Username + email + password auth (PBKDF2) with cookie sessions; optional GitHub/Google OAuth; signed-in password change
+- Username + email + password auth (PBKDF2) with cookie sessions; optional GitHub/Google OAuth; Cloudflare Turnstile on auth/join; signed-in password change
 - Host-approved private tables, text chat, optional voice
 - PWA manifest + service worker shell cache
 - Voice via Cloudflare RealtimeKit (degraded-safe when unset)
