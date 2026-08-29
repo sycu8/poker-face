@@ -20,11 +20,11 @@ This repo deploys with `.github/workflows/deploy.yml` using **GitHub Actions sec
 | `D1_DATABASE_ID_STAGING` / `D1_DATABASE_ID_PRODUCTION`   | Optional; auto-created if omitted                                                                                         |
 | `KV_NAMESPACE_ID_STAGING` / `KV_NAMESPACE_ID_PRODUCTION` | Optional; auto-created if omitted                                                                                         |
 | `TURN_KEY_ID` / `TURN_KEY_API_TOKEN`                     | Optional Calls TURN key (ops only; RealtimeKit voice does not need them)                                                  |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`              | Optional GitHub OAuth App credentials (both required to show **Continue with GitHub**)                                    |
+| `OAUTH_GITHUB_CLIENT_ID` / `OAUTH_GITHUB_CLIENT_SECRET`  | Optional GitHub OAuth App credentials (both required to show **Continue with GitHub**). **Do not** name Actions secrets `GITHUB_*` — that prefix is reserved. Mapped to Worker secrets `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET`. |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`              | Optional Google OAuth client credentials (both required to show **Continue with Google**)                                 |
 | `TURNSTILE_SECRET`                                       | Cloudflare Turnstile widget secret (required for staging/production auth/join bot checks)                                 |
 
-Per-environment overrides (optional): `GITHUB_CLIENT_ID_STAGING` / `_PRODUCTION`, `GOOGLE_CLIENT_ID_STAGING` / `_PRODUCTION`, matching `*_CLIENT_SECRET_*`, and `TURNSTILE_SECRET_STAGING` / `TURNSTILE_SECRET_PRODUCTION`.
+Per-environment overrides (optional): `OAUTH_GITHUB_CLIENT_ID_STAGING` / `_PRODUCTION`, `GOOGLE_CLIENT_ID_STAGING` / `_PRODUCTION`, matching `*_CLIENT_SECRET_*`, and `TURNSTILE_SECRET_STAGING` / `TURNSTILE_SECRET_PRODUCTION`.
 
 Public Turnstile site key and hostname allowlists are Wrangler **vars** (`TURNSTILE_SITE_KEY`, `TURNSTILE_HOSTNAMES`) — not Actions secrets.
 
