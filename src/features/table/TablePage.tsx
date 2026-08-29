@@ -14,6 +14,13 @@ import { isBotUserId } from "../../lib/bots";
 import { SeatMicIndicator } from "../voice/SeatMicIndicator";
 import { VoiceSessionProvider } from "../voice/VoiceSession";
 import { ActionDock } from "./ActionDock";
+import {
+  boardDealBatchMs,
+  boardRevealDelayMs,
+  holeDealBurstMs,
+  holeFlyerDelayMs,
+  holeRevealDelayMs,
+} from "./dealTiming";
 import { buildGameAction } from "./gameAction";
 import { PlayingCard } from "./PlayingCard";
 import { PlayerAvatar } from "./PlayerAvatar";
@@ -186,9 +193,17 @@ export function TablePage({ user }: { user: User }) {
     dealerSeat: number;
     targets: number[];
   } | null>(null);
+  /** Staggered board reveal: cards at index >= fromIndex animate in one-by-one. */
+  const [boardDeal, setBoardDeal] = useState<{
+    epoch: number;
+    fromIndex: number;
+    handNumber: number;
+  } | null>(null);
   const lastAskAtRef = useRef(0);
   const prevHandRef = useRef(0);
   const dealPrimedRef = useRef(false);
+  const prevBoardLenRef = useRef(0);
+  const boardPrimedRef = useRef(false);
   const disconnectRef = useRef<() => void>(() => {});
   const turnLeft = useTurnSeconds(view?.turnDeadlineMs ?? null);
 
@@ -565,13 +580,50 @@ export function TablePage({ user }: { user: User }) {
       prevHandRef.current = hand;
       if (targets.length > 0) {
         setDealBurst({ handNumber: hand, dealerSeat, targets });
-        const ms = 700 + targets.length * 2 * 70;
+        const ms = holeDealBurstMs(targets.length);
         const id = window.setTimeout(() => setDealBurst(null), ms);
         return () => window.clearTimeout(id);
       }
       return;
     }
     prevHandRef.current = hand;
+  }, [view]);
+
+  useEffect(() => {
+    if (!view) return;
+    const board = view.board ?? [];
+    const len = board.length;
+    const hand = view.handNumber;
+
+    if (!boardPrimedRef.current) {
+      prevBoardLenRef.current = len;
+      boardPrimedRef.current = true;
+      return;
+    }
+
+    if (len === 0) {
+      prevBoardLenRef.current = 0;
+      setBoardDeal(null);
+      return;
+    }
+
+    if (len > prevBoardLenRef.current) {
+      const fromIndex = prevBoardLenRef.current;
+      const newCount = len - fromIndex;
+      prevBoardLenRef.current = len;
+      setBoardDeal((prev) => ({
+        epoch: (prev?.epoch ?? 0) + 1,
+        fromIndex,
+        handNumber: hand,
+      }));
+      const id = window.setTimeout(() => setBoardDeal(null), boardDealBatchMs(newCount));
+      return () => window.clearTimeout(id);
+    }
+
+    if (len < prevBoardLenRef.current) {
+      prevBoardLenRef.current = len;
+      setBoardDeal(null);
+    }
   }, [view]);
 
   async function copyInvite() {
@@ -1036,16 +1088,34 @@ export function TablePage({ user }: { user: User }) {
                 <div className="table-center">
                   <div className="board">
                     {(view?.board?.length ? view.board : ["?", "?", "?", "?", "?"]).map(
-                      (c, i) => (
-                        <PlayingCard
-                          key={`${c}-${i}`}
-                          code={c}
-                          size="board"
-                          className={
-                            winningCardCodes.has(c) ? "playing-card--winning" : ""
-                          }
-                        />
-                      ),
+                      (c, i) => {
+                        const dealingBoard =
+                          Boolean(view?.board?.length) &&
+                          boardDeal != null &&
+                          i >= boardDeal.fromIndex;
+                        return (
+                          <PlayingCard
+                            key={`board-${view?.handNumber ?? 0}-${i}-${c}`}
+                            code={c}
+                            size="board"
+                            className={[
+                              winningCardCodes.has(c) ? "playing-card--winning" : "",
+                              dealingBoard ? "playing-card--board-deal" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            style={
+                              dealingBoard
+                                ? ({
+                                    animationDelay: `${boardRevealDelayMs(
+                                      i - boardDeal.fromIndex,
+                                    )}ms`,
+                                  } as CSSProperties)
+                                : undefined
+                            }
+                          />
+                        );
+                      },
                     )}
                   </div>
                   {view?.rabbitCards && view.rabbitCards.length > 0 ? (
@@ -1083,26 +1153,24 @@ export function TablePage({ user }: { user: User }) {
                         anchorSeatIndex,
                       );
                       const from = seatRingPercents(fromVisual, seatCount);
-                      return [0, 1].map((cardIdx) => {
-                        const step = order * 2 + cardIdx;
-                        return (
-                          <div
-                            key={`deal-${dealBurst.handNumber}-${seatIndex}-${cardIdx}`}
-                            className="deal-flyer"
-                            style={
-                              {
-                                "--deal-from-x": `${from.left}%`,
-                                "--deal-from-y": `${from.top}%`,
-                                "--deal-to-x": `${to.left}%`,
-                                "--deal-to-y": `${to.top}%`,
-                                animationDelay: `${step * 70}ms`,
-                              } as CSSProperties
-                            }
-                          >
-                            <PlayingCard code="?" size="sm" />
-                          </div>
-                        );
-                      });
+                      const n = dealBurst.targets.length;
+                      return [0, 1].map((cardIdx) => (
+                        <div
+                          key={`deal-${dealBurst.handNumber}-${seatIndex}-${cardIdx}`}
+                          className="deal-flyer"
+                          style={
+                            {
+                              "--deal-from-x": `${from.left}%`,
+                              "--deal-from-y": `${from.top}%`,
+                              "--deal-to-x": `${to.left}%`,
+                              "--deal-to-y": `${to.top}%`,
+                              animationDelay: `${holeFlyerDelayMs(order, cardIdx, n)}ms`,
+                            } as CSSProperties
+                          }
+                        >
+                          <PlayingCard code="?" size="sm" />
+                        </div>
+                      ));
                     })}
                   </div>
                 ) : null}
@@ -1235,16 +1303,7 @@ export function TablePage({ user }: { user: User }) {
                         </div>
                         {holeCodes ? (
                           <div
-                            className={`seat-holes${isHero ? " seat-holes--hero" : ""}${
-                              dealingHere ? " seat-holes--deal-in" : ""
-                            }`}
-                            style={
-                              dealingHere && dealOrder >= 0
-                                ? ({
-                                    "--deal-reveal-delay": `${dealOrder * 2 * 70 + 320}ms`,
-                                  } as CSSProperties)
-                                : undefined
-                            }
+                            className={`seat-holes${isHero ? " seat-holes--hero" : ""}`}
                           >
                             {holeCodes.map((c, i) => (
                               <PlayingCard
@@ -1253,13 +1312,19 @@ export function TablePage({ user }: { user: User }) {
                                 size={isHero ? "hero" : "sm"}
                                 className={[
                                   winningCardCodes.has(c) ? "playing-card--winning" : "",
-                                  dealingHere ? "playing-card--dealt" : "",
+                                  dealingHere ? "playing-card--hole-deal" : "",
                                 ]
                                   .filter(Boolean)
                                   .join(" ")}
                                 style={
-                                  dealingHere
-                                    ? ({ animationDelay: `${i * 70}ms` } as CSSProperties)
+                                  dealingHere && dealOrder >= 0 && dealBurst
+                                    ? ({
+                                        animationDelay: `${holeRevealDelayMs(
+                                          dealOrder,
+                                          i,
+                                          dealBurst.targets.length,
+                                        )}ms`,
+                                      } as CSSProperties)
                                     : undefined
                                 }
                               />
