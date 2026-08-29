@@ -1947,12 +1947,17 @@ html[data-theme="sunset"] {
 }
 
 .between-hand--felt {
+  /* Center with inset + margin — not transform — so the `rise` animation
+     (which sets transform) cannot leave the banner stuck at left: 50%. */
   position: absolute;
   top: clamp(0.35rem, 2vw, 0.75rem);
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  margin-inline: auto;
   z-index: 6;
+  box-sizing: border-box;
   width: min(88%, 22rem);
+  max-width: calc(100% - 1rem);
   padding: 0.55rem 0.75rem;
   text-align: center;
   pointer-events: auto;
