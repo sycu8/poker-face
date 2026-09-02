@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Link, Navigate, Route, Routes } from "react-router-dom";
+import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { api, type User } from "./lib/api";
 import { HomePage } from "./features/lobby/HomePage";
 import { BuyMeACoffeeLink } from "./components/BuyMeACoffeeLink";
@@ -9,6 +9,9 @@ const AuthPage = lazy(() =>
 );
 const TablePage = lazy(() =>
   import("./features/table/TablePage").then((m) => ({ default: m.TablePage })),
+);
+const AdminPage = lazy(() =>
+  import("./features/admin/AdminPage").then((m) => ({ default: m.AdminPage })),
 );
 
 function RouteFallback() {
@@ -28,6 +31,8 @@ function loadTheme(): ThemeId {
 }
 
 export function App() {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith("/admin");
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [theme, setTheme] = useState<ThemeId>(loadTheme);
   const [themesEnabled, setThemesEnabled] = useState(true);
@@ -65,6 +70,16 @@ export function App() {
       <div className="app-shell">
         <p className="muted">Loading your table…</p>
       </div>
+    );
+  }
+
+  if (isAdminRoute) {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <Routes>
+          <Route path="/admin" element={<AdminPage user={user} onAuthed={setUser} />} />
+        </Routes>
+      </Suspense>
     );
   }
 

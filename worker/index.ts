@@ -2,6 +2,7 @@ import type { Env } from "./env";
 import { handleOAuth } from "./auth/oauth";
 import { handleAuth } from "./auth/passwordAuth";
 import { handleRooms } from "./routes/rooms";
+import { handleAdmin } from "./routes/admin";
 import { handleVoice } from "./voice/realtimekit";
 import { purgeExpiredSessions, requireUser } from "./auth/session";
 import { readPublicConfig } from "./lib/configKv";
@@ -139,6 +140,9 @@ export default {
 
     const oauthRes = await handleOAuth(request, env, url.pathname);
     if (oauthRes) return withSecurityHeaders(oauthRes);
+
+    const adminRes = await handleAdmin(request, env, url.pathname);
+    if (adminRes) return withSecurityHeaders(adminRes);
 
     const roomsRes = await handleRooms(request, env, url.pathname);
     if (roomsRes) return withSecurityHeaders(roomsRes);
