@@ -2053,3 +2053,105 @@ html[data-theme="sunset"] {
   font-size: 0.82rem;
   line-height: 1.35;
 }
+
+/* —— Admin portal —— */
+.admin-shell {
+  width: min(960px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 1.5rem 0 3rem;
+}
+
+.admin-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.admin-header h1 {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 4vw, 2.4rem);
+}
+
+.admin-eyebrow {
+  margin: 0;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.admin-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-panel {
+  padding: 1.25rem;
+}
+
+.admin-panel h2 {
+  margin: 0 0 0.35rem;
+}
+
+.admin-dashboard {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.admin-dashboard-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.admin-dashboard-head h2 {
+  margin: 0;
+}
+
+.admin-section-title {
+  margin: 0.5rem 0 0;
+  font-size: 1.05rem;
+}
+
+.admin-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem;
+}
+
+.admin-stat-grid--compact {
+  max-width: 720px;
+}
+
+.admin-stat-card {
+  padding: 1rem 1.05rem;
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, #0f4c3544, #07100dcc);
+  border: 1px solid #ffffff14;
+}
+
+.admin-stat-label {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--mist);
+}
+
+.admin-stat-value {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-display);
+  font-size: 2rem;
+  line-height: 1;
+}
+
+.admin-stat-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+}

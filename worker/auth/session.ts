@@ -1,5 +1,6 @@
 import type { Env } from "../env";
 import { sha256Hex } from "../lib/http";
+import { isSuperAdmin, USER_ROLE_USER, type UserRole } from "../lib/roles";
 
 const SESSION_COOKIE = "pf_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -34,6 +35,17 @@ export interface SessionUser {
   username: string | null;
   sessionId: string;
   isGuest: boolean;
+  role: UserRole;
+}
+
+export function publicUserPayload(user: SessionUser) {
+  return {
+    id: user.id,
+    displayName: user.displayName,
+    username: user.username,
+    isGuest: user.isGuest,
+    role: user.role,
+  };
 }
 
 export async function requireUser(
@@ -47,7 +59,7 @@ export async function requireUser(
   const tokenHash = await sha256Hex(`${env.SESSION_SECRET}:${token}`);
   const row = await env.DB.prepare(
     `SELECT s.id as session_id, s.expires_at, s.revoked_at,
-            u.id as user_id, u.display_name, u.username, u.is_guest
+            u.id as user_id, u.display_name, u.username, u.is_guest, u.role
      FROM sessions s JOIN users u ON u.id = s.user_id
      WHERE s.token_hash = ?`,
   )
@@ -60,6 +72,7 @@ export async function requireUser(
       display_name: string;
       username: string | null;
       is_guest: number | null;
+      role: string | null;
     }>();
   if (!row || row.revoked_at || row.expires_at < Date.now()) {
     return { ok: false, status: 401, error: "Session expired." };
@@ -72,8 +85,23 @@ export async function requireUser(
       username: row.username,
       sessionId: row.session_id,
       isGuest: Boolean(row.is_guest),
+      role: (row.role ?? USER_ROLE_USER) as UserRole,
     },
   };
+}
+
+export async function requireSuperAdmin(
+  env: Env,
+  request: Request,
+): Promise<
+  { ok: true; user: SessionUser } | { ok: false; status: number; error: string }
+> {
+  const auth = await requireUser(env, request);
+  if (!auth.ok) return auth;
+  if (!isSuperAdmin(auth.user.role)) {
+    return { ok: false, status: 403, error: "Admin access required." };
+  }
+  return auth;
 }
 
 export async function createSession(

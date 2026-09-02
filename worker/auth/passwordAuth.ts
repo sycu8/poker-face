@@ -4,6 +4,7 @@ import {
   clearSessionCookie,
   createSession,
   GUEST_SESSION_TTL_MS,
+  publicUserPayload,
   readSessionToken,
   requireUser,
   sessionCookieHeader,
@@ -85,14 +86,7 @@ export async function handleAuth(
   if (path === "/api/auth/me" && request.method === "GET") {
     const auth = await requireUser(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
-    return json({
-      user: {
-        id: auth.user.id,
-        displayName: auth.user.displayName,
-        username: auth.user.username,
-        isGuest: auth.user.isGuest,
-      },
-    });
+    return json({ user: publicUserPayload(auth.user) });
   }
 
   if (path === "/api/auth/guest" && request.method === "POST") {
@@ -263,7 +257,7 @@ export async function handleAuth(
       if (!okTurnstile) return errorJson(403, "Turnstile verification failed.");
 
       const row = await env.DB.prepare(
-        `SELECT id, display_name, username, password_hash FROM users WHERE username = ?`,
+        `SELECT id, display_name, username, password_hash, role FROM users WHERE username = ?`,
       )
         .bind(parsed.data.username)
         .first<{
@@ -271,6 +265,7 @@ export async function handleAuth(
           display_name: string;
           username: string;
           password_hash: string | null;
+          role: string | null;
         }>();
 
       const ok = await verifyPasswordOrDummy(parsed.data.password, row?.password_hash);
@@ -296,6 +291,7 @@ export async function handleAuth(
             id: row.id,
             displayName: row.display_name,
             username: row.username,
+            role: row.role ?? "user",
           },
         }),
         {

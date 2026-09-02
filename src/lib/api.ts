@@ -3,6 +3,25 @@ export type User = {
   displayName: string;
   username?: string | null;
   isGuest?: boolean;
+  role?: string;
+};
+
+export type AdminStats = {
+  periodDays: number;
+  periodStart: number;
+  rooms: {
+    total: number;
+    createdInPeriod: number;
+    open: number;
+    activeInPeriod: number;
+    withHandsInPeriod: number;
+    closedInPeriod: number;
+  };
+  users: {
+    total: number;
+    registeredInPeriod: number;
+    guests: number;
+  };
 };
 
 async function parse<T>(res: Response): Promise<T> {
@@ -352,6 +371,10 @@ export const api = {
       method: "POST",
       credentials: "include",
     }).then((r) => parse<VoiceTokenResponse>(r)),
+  adminStats: (days = 5) =>
+    fetch(`/api/admin/stats?days=${days}`, { credentials: "include" }).then((r) =>
+      parse<AdminStats>(r),
+    ),
 };
 
 export type MyRoom = {
