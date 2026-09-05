@@ -109,6 +109,13 @@ export async function handleAdmin(
     const auth = await requireSuperAdmin(env, request);
     if (!auth.ok) return errorJson(auth.status, auth.error);
 
+    const limited = await env.AUTH_RATE_LIMIT.limit({
+      key: `admin-stats:${auth.user.id}`,
+    });
+    if (!limited.success) {
+      return errorJson(429, "Too many admin requests. Try again shortly.");
+    }
+
     const stats = await queryAdminStats(env, parsePeriodDays(new URL(request.url)));
     writeAnalytics(env, "admin_stats_view", auth.user.id, [stats.periodDays]);
     return json(stats);

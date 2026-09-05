@@ -8,6 +8,22 @@ import {
 } from "../../worker/auth/oauth";
 import type { Env } from "../../worker/env";
 
+function mockKv() {
+  const store = new Map<string, string>();
+  return {
+    store,
+    async get(key: string) {
+      return store.get(key) ?? null;
+    },
+    async put(key: string, value: string) {
+      store.set(key, value);
+    },
+    async delete(key: string) {
+      store.delete(key);
+    },
+  };
+}
+
 describe("oauth state", () => {
   it("round-trips a signed state with invite", async () => {
     const secret = "test-session-secret-for-oauth";
@@ -27,12 +43,36 @@ describe("oauth state", () => {
 
   it("rejects expired state", async () => {
     const secret = "test-session-secret-for-oauth";
-    // Craft an already-expired payload by signing manually via create then parsing
-    // after rewriting expiry — use parse with a forged body signed incorrectly fails;
-    // instead verify create always sets future expiry by parsing immediately.
     const state = await createOAuthState(secret, "github");
     const ok = await parseOAuthState(secret, state, "github");
     expect(ok.ok).toBe(true);
+  });
+
+  it("enforces single-use when KV is provided", async () => {
+    const secret = "test-session-secret-for-oauth";
+    const kv = mockKv();
+    const state = await createOAuthState(
+      secret,
+      "github",
+      "XY99ZZ",
+      kv as unknown as KVNamespace,
+    );
+    expect(kv.store.size).toBe(1);
+    const first = await parseOAuthState(
+      secret,
+      state,
+      "github",
+      kv as unknown as KVNamespace,
+    );
+    expect(first).toEqual({ ok: true, invite: "XY99ZZ" });
+    expect(kv.store.size).toBe(0);
+    const replay = await parseOAuthState(
+      secret,
+      state,
+      "github",
+      kv as unknown as KVNamespace,
+    );
+    expect(replay.ok).toBe(false);
   });
 });
 
@@ -53,7 +93,7 @@ describe("oauthProvidersConfigured", () => {
 type Row = Record<string, unknown>;
 
 /** Minimal D1 stub for upsertOAuthUser unit tests. */
-function mockDb(seed: { oauth?: Row | null; emailUser?: Row | null }) {
+function mockDb(seed: { oauth?: Row | null }) {
   const inserts: Array<{ sql: string; binds: unknown[] }> = [];
   const updates: Array<{ sql: string; binds: unknown[] }> = [];
 
@@ -63,9 +103,6 @@ function mockDb(seed: { oauth?: Row | null; emailUser?: Row | null }) {
         first: async <T>(): Promise<T | null> => {
           if (sql.includes("FROM oauth_accounts")) {
             return (seed.oauth as T) ?? null;
-          }
-          if (sql.includes("FROM users WHERE email")) {
-            return (seed.emailUser as T) ?? null;
           }
           return null;
         },
@@ -113,43 +150,22 @@ describe("upsertOAuthUser", () => {
     expect(db.inserts.length).toBe(0);
   });
 
-  it("links by verified email to a full account", async () => {
-    const db = mockDb({
-      oauth: null,
-      emailUser: {
-        id: "usr_email",
-        display_name: "Email User",
-        username: "email_user",
-        is_guest: 0,
-      },
-    });
+  it("does not auto-link by email to a password account", async () => {
+    // Even if a password user already owns alice@example.com, OAuth must create
+    // a separate user — emails from password signup are unverified.
+    const db = mockDb({ oauth: null });
     const env = { DB: db } as unknown as Env;
     const user = await upsertOAuthUser(env, "google", profile);
-    expect(user.userId).toBe("usr_email");
-    expect(db.inserts.length).toBe(1);
-    expect(db.inserts[0]!.sql).toContain("oauth_accounts");
-  });
-
-  it("does not link OAuth to a guest row with the same email", async () => {
-    const db = mockDb({
-      oauth: null,
-      emailUser: {
-        id: "gst_x",
-        display_name: "Guest",
-        username: null,
-        is_guest: 1,
-      },
-    });
-    const env = { DB: db } as unknown as Env;
-    const user = await upsertOAuthUser(env, "google", profile);
-    expect(user.userId).not.toBe("gst_x");
+    expect(user.userId.startsWith("usr_")).toBe(true);
     expect(user.displayName).toBe("Alice");
-    // user insert + oauth_accounts insert
+    expect(user.username).toBeNull();
     expect(db.inserts.length).toBe(2);
+    expect(db.inserts.some((i) => i.sql.includes("oauth_accounts"))).toBe(true);
+    expect(db.inserts.some((i) => i.sql.includes("INSERT INTO users"))).toBe(true);
   });
 
-  it("creates a new full user when no link or email match", async () => {
-    const db = mockDb({ oauth: null, emailUser: null });
+  it("creates a new full user when no provider link exists", async () => {
+    const db = mockDb({ oauth: null });
     const env = { DB: db } as unknown as Env;
     const user = await upsertOAuthUser(env, "github", {
       ...profile,
