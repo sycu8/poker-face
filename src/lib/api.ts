@@ -21,6 +21,9 @@ export type AdminStats = {
     total: number;
     registeredInPeriod: number;
     guests: number;
+    activeInPeriod: number;
+    withActiveSession: number;
+    activeMembers: number;
   };
 };
 
