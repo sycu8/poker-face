@@ -230,6 +230,11 @@ jobs:
             echo "See docs/GITHUB_ACTIONS_DEPLOY.md"
             exit 1
           fi
+          if [ -z "${TURNSTILE_SECRET:-}" ]; then
+            echo "::error::TURNSTILE_SECRET (or TURNSTILE_SECRET_PRODUCTION) is required for production deploy. Auth/join fail closed without it."
+            echo "See docs/GITHUB_ACTIONS_DEPLOY.md"
+            exit 1
+          fi
           node scripts/ci-write-secrets-file.mjs .ci-secrets-production.json
           npx wrangler secret bulk .ci-secrets-production.json --env production --config wrangler.jsonc
           rm -f .ci-secrets-production.json
@@ -245,12 +250,10 @@ jobs:
           fi
           if [ -z "${GOOGLE_CLIENT_ID:-}" ] || [ -z "${GOOGLE_CLIENT_SECRET:-}" ]; then
             echo "::notice::Google OAuth secrets incomplete — Continue with Google stays hidden until GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set."
-          fi
-          if [ -z "${TURNSTILE_SECRET:-}" ]; then
-            echo "::warning::TURNSTILE_SECRET is empty — production auth/join will fail closed. Set Actions secret TURNSTILE_SECRET (or TURNSTILE_SECRET_PRODUCTION)."
           else
-            echo "TURNSTILE_SECRET is present for production (len=${#TURNSTILE_SECRET})."
+            echo "Google OAuth client id is present for production (len=${#GOOGLE_CLIENT_ID})."
           fi
+          echo "TURNSTILE_SECRET is present for production (len=${#TURNSTILE_SECRET})."
       - name: Redeploy production after secrets
         uses: cloudflare/wrangler-action@v3
         with:

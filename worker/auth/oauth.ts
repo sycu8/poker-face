@@ -94,29 +94,48 @@ async function hmacVerify(
   return diff === 0;
 }
 
-/** Build a signed, time-limited OAuth state token (CSRF + invite return). */
+function oauthStateKvKey(nonce: string): string {
+  return `oauth_state:${nonce}`;
+}
+
+/**
+ * Build a signed, time-limited OAuth state token (CSRF + invite return).
+ * When `kv` is provided, the nonce is stored so callbacks can enforce single-use.
+ */
 export async function createOAuthState(
   secret: string,
   provider: OAuthProvider,
   invite?: string | null,
+  kv?: KVNamespace,
 ): Promise<string> {
+  const nonce = crypto.randomUUID();
   const payload: OAuthStatePayload = {
     p: provider,
-    n: crypto.randomUUID(),
+    n: nonce,
     e: Date.now() + STATE_TTL_MS,
   };
   if (invite && /^[A-Za-z0-9]{4,12}$/.test(invite)) {
     payload.invite = invite.toUpperCase();
+  }
+  if (kv) {
+    await kv.put(oauthStateKvKey(nonce), provider, {
+      expirationTtl: Math.ceil(STATE_TTL_MS / 1000),
+    });
   }
   const body = textToBase64Url(JSON.stringify(payload));
   const sig = await hmacSign(secret, body);
   return `${body}.${sig}`;
 }
 
+/**
+ * Verify OAuth state. When `kv` is provided, the nonce must exist and is deleted
+ * (single-use) so replayed callbacks fail.
+ */
 export async function parseOAuthState(
   secret: string,
   state: string,
   expectedProvider: OAuthProvider,
+  kv?: KVNamespace,
 ): Promise<{ ok: true; invite?: string } | { ok: false; error: string }> {
   const parts = state.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
@@ -137,6 +156,17 @@ export async function parseOAuthState(
   }
   if (typeof payload.e !== "number" || payload.e < Date.now()) {
     return { ok: false, error: "OAuth state expired. Try again." };
+  }
+  if (typeof payload.n !== "string" || !payload.n) {
+    return { ok: false, error: "Invalid OAuth state." };
+  }
+  if (kv) {
+    const key = oauthStateKvKey(payload.n);
+    const stored = await kv.get(key);
+    if (!stored || stored !== expectedProvider) {
+      return { ok: false, error: "OAuth state already used or unknown." };
+    }
+    await kv.delete(key);
   }
   return { ok: true, invite: payload.invite };
 }
@@ -311,7 +341,9 @@ async function fetchGoogleProfile(
 
 /**
  * Find or create a full (non-guest) user for an OAuth identity.
- * Links by provider subject first; otherwise by verified email when present.
+ * Links only by provider subject — never by email alone.
+ * Password accounts use unverified emails, so silent email auto-link would
+ * allow account takeover (register with victim email → victim OAuth signs in).
  */
 export async function upsertOAuthUser(
   env: Env,
@@ -341,38 +373,14 @@ export async function upsertOAuthUser(
     };
   }
 
-  let userId: string | null = null;
-  let displayName = profile.displayName;
-  let username: string | null = null;
-
-  if (profile.email && profile.emailVerified) {
-    const byEmail = await env.DB.prepare(
-      `SELECT id, display_name, username, is_guest FROM users WHERE email = ?`,
-    )
-      .bind(profile.email)
-      .first<{
-        id: string;
-        display_name: string;
-        username: string | null;
-        is_guest: number | null;
-      }>();
-    // Only link to full accounts — never attach OAuth to a guest row.
-    if (byEmail && !byEmail.is_guest) {
-      userId = byEmail.id;
-      displayName = byEmail.display_name;
-      username = byEmail.username;
-    }
-  }
-
-  if (!userId) {
-    userId = randomId("usr");
-    await env.DB.prepare(
-      `INSERT INTO users (id, display_name, username, email, password_hash, is_guest, created_at, updated_at)
-       VALUES (?, ?, NULL, ?, NULL, 0, ?, ?)`,
-    )
-      .bind(userId, displayName, profile.email, now, now)
-      .run();
-  }
+  const userId = randomId("usr");
+  const displayName = profile.displayName;
+  await env.DB.prepare(
+    `INSERT INTO users (id, display_name, username, email, password_hash, is_guest, created_at, updated_at)
+     VALUES (?, ?, NULL, ?, NULL, 0, ?, ?)`,
+  )
+    .bind(userId, displayName, profile.email, now, now)
+    .run();
 
   await env.DB.prepare(
     `INSERT INTO oauth_accounts (id, user_id, provider, provider_user_id, email, created_at, updated_at)
@@ -389,7 +397,7 @@ export async function upsertOAuthUser(
     )
     .run();
 
-  return { userId, displayName, username };
+  return { userId, displayName, username: null };
 }
 
 function authorizeUrl(env: Env, provider: OAuthProvider, state: string): string {
@@ -437,7 +445,12 @@ export async function handleOAuth(
 
     const url = new URL(request.url);
     const invite = url.searchParams.get("invite");
-    const state = await createOAuthState(env.SESSION_SECRET, provider, invite);
+    const state = await createOAuthState(
+      env.SESSION_SECRET,
+      provider,
+      invite,
+      env.CONFIG_KV,
+    );
     return Response.redirect(authorizeUrl(env, provider, state), 302);
   }
 
@@ -470,7 +483,12 @@ export async function handleOAuth(
       return redirectWithError(env, "missing_code");
     }
 
-    const parsedState = await parseOAuthState(env.SESSION_SECRET, state, provider);
+    const parsedState = await parseOAuthState(
+      env.SESSION_SECRET,
+      state,
+      provider,
+      env.CONFIG_KV,
+    );
     if (!parsedState.ok) {
       return redirectWithError(env, "bad_state");
     }
