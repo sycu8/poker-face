@@ -11,34 +11,60 @@ import { flushMembershipOps } from "./lib/membershipOps";
 import { errorJson, json } from "./lib/http";
 import { rejectDisallowedOrigin, requiresOriginCheck } from "./lib/origin";
 import { RoomDurableObject } from "./room/RoomDurableObject";
+import {
+  discoveryPreflight,
+  handleDiscovery,
+  isHomepagePath,
+  isPublicDiscoveryPath,
+} from "./discovery/handle";
+import { HOMEPAGE_LINK_HEADER, siteOrigin } from "./discovery/documents";
 
 export { RoomDurableObject };
 
-const SECURITY_HEADERS: Record<string, string> = {
-  "X-Content-Type-Options": "nosniff",
-  "Referrer-Policy": "strict-origin-when-cross-origin",
-  "X-Frame-Options": "DENY",
-  "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
-  "Content-Security-Policy": [
-    "default-src 'self'",
-    "base-uri 'self'",
-    "object-src 'none'",
-    "frame-ancestors 'none'",
-    "form-action 'self'",
-    "script-src 'self' https://challenges.cloudflare.com",
-    "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob: https://cdn.buymeacoffee.com",
-    "font-src 'self'",
-    "connect-src 'self' https: wss:",
-    "frame-src https://challenges.cloudflare.com",
-    "worker-src 'self' blob:",
-  ].join("; "),
-};
+function securityHeaders(env: Env): Record<string, string> {
+  // Vite's dev server injects an inline React refresh preamble. Production
+  // bundles have no inline scripts, so that source stays off outside local.
+  const scriptSrc =
+    env.ENVIRONMENT === "local"
+      ? "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com"
+      : "script-src 'self' https://challenges.cloudflare.com";
+  return {
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "X-Frame-Options": "DENY",
+    "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+    "Content-Security-Policy": [
+      "default-src 'self'",
+      "base-uri 'self'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+      "form-action 'self'",
+      scriptSrc,
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob: https://cdn.buymeacoffee.com",
+      "font-src 'self'",
+      "connect-src 'self' https: wss:",
+      "frame-src https://challenges.cloudflare.com",
+      "worker-src 'self' blob:",
+    ].join("; "),
+  };
+}
 
-function withSecurityHeaders(response: Response): Response {
+function finalizeResponse(response: Response, request: Request, env: Env): Response {
+  const url = new URL(request.url);
   const headers = new Headers(response.headers);
-  for (const [key, value] of Object.entries(SECURITY_HEADERS)) {
+  for (const [key, value] of Object.entries(securityHeaders(env))) {
     if (!headers.has(key)) headers.set(key, value);
+  }
+  if (response.status === 200 && isHomepagePath(url.pathname) && !headers.has("Link")) {
+    headers.set("Link", HOMEPAGE_LINK_HEADER);
+  }
+  if (response.status === 401 && !headers.has("WWW-Authenticate")) {
+    const origin = siteOrigin(env.APP_ORIGIN, url);
+    headers.set(
+      "WWW-Authenticate",
+      `Bearer realm="poker-faces", resource_metadata="${origin}/.well-known/oauth-protected-resource"`,
+    );
   }
   return new Response(response.body, {
     status: response.status,
@@ -100,8 +126,12 @@ export default {
     void ctx;
     const url = new URL(request.url);
 
+    if (request.method === "OPTIONS" && isPublicDiscoveryPath(url.pathname)) {
+      return finalizeResponse(discoveryPreflight(), request, env);
+    }
+
     if (request.method === "OPTIONS") {
-      return withSecurityHeaders(
+      return finalizeResponse(
         new Response(null, {
           headers: {
             "access-control-allow-origin": env.APP_ORIGIN,
@@ -111,53 +141,65 @@ export default {
             "access-control-allow-methods": "GET,POST,OPTIONS",
           },
         }),
+        request,
+        env,
       );
     }
 
+    const discovery = await handleDiscovery(request, env.APP_ORIGIN);
+    if (discovery) return finalizeResponse(discovery, request, env);
+
     if (url.pathname === "/api/health") {
-      return withSecurityHeaders(
+      return finalizeResponse(
         json({
           ok: true,
           service: "poker-faces",
           environment: env.ENVIRONMENT,
           tagline: "Your table. Your people.",
         }),
+        request,
+        env,
       );
     }
 
     if (requiresOriginCheck(request, url.pathname)) {
       const originReject = rejectDisallowedOrigin(request, env.APP_ORIGIN);
-      if (originReject) return withSecurityHeaders(originReject);
+      if (originReject) return finalizeResponse(originReject, request, env);
     }
 
     if (url.pathname === "/api/config") {
       const cfg = await readPublicConfig(env);
-      return withSecurityHeaders(json(cfg));
+      return finalizeResponse(json(cfg), request, env);
     }
 
     const authRes = await handleAuth(request, env, url.pathname);
-    if (authRes) return withSecurityHeaders(authRes);
+    if (authRes) return finalizeResponse(authRes, request, env);
 
     const oauthRes = await handleOAuth(request, env, url.pathname);
-    if (oauthRes) return withSecurityHeaders(oauthRes);
+    if (oauthRes) return finalizeResponse(oauthRes, request, env);
 
     const adminRes = await handleAdmin(request, env, url.pathname);
-    if (adminRes) return withSecurityHeaders(adminRes);
+    if (adminRes) return finalizeResponse(adminRes, request, env);
 
     const roomsRes = await handleRooms(request, env, url.pathname);
-    if (roomsRes) return withSecurityHeaders(roomsRes);
+    if (roomsRes) return finalizeResponse(roomsRes, request, env);
 
     const voiceRes = await handleVoice(request, env, url.pathname);
-    if (voiceRes) return withSecurityHeaders(voiceRes);
+    if (voiceRes) return finalizeResponse(voiceRes, request, env);
 
     const wsMatch = url.pathname.match(/^\/ws\/rooms\/([^/]+)$/);
     if (wsMatch) {
       const auth = await requireUser(env, request);
-      if (!auth.ok) return withSecurityHeaders(errorJson(auth.status, auth.error));
+      if (!auth.ok)
+        return finalizeResponse(errorJson(auth.status, auth.error), request, env);
       const roomId = wsMatch[1]!;
       const member = await requireActiveMember(env, roomId, auth.user.id);
       if (!member.ok) {
-        return withSecurityHeaders(errorJson(403, "Ask to join this table first."));
+        return finalizeResponse(
+          errorJson(403, "Ask to join this table first."),
+          request,
+          env,
+        );
       }
       const stub = env.ROOM.get(env.ROOM.idFromName(roomId));
       const doUrl = new URL("https://room/ws");
@@ -167,11 +209,11 @@ export default {
     }
 
     if (url.pathname.startsWith("/api/")) {
-      return withSecurityHeaders(errorJson(404, "Not found."));
+      return finalizeResponse(errorJson(404, "Not found."), request, env);
     }
 
     const assetRes = await env.ASSETS.fetch(request);
-    return withSecurityHeaders(assetRes);
+    return finalizeResponse(assetRes, request, env);
   },
 
   async queue(batch: MessageBatch, env: Env): Promise<void> {

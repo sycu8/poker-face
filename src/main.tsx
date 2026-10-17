@@ -9,6 +9,7 @@ import "@fontsource/fraunces/600.css";
 import "@fontsource/fraunces/700.css";
 import "./styles/global.css";
 import { App } from "./App";
+import { installWebMcp } from "./webmcp";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -17,6 +18,8 @@ createRoot(document.getElementById("root")!).render(
     </BrowserRouter>
   </StrictMode>,
 );
+
+installWebMcp();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

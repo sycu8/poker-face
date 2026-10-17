@@ -1,0 +1,20 @@
+; DNS for AI Discovery (DNS-AID) for Poker Faces.
+; Names match the custom domains in wrangler.jsonc.
+;
+; Publish these records in the public DNS zone, then enable DNSSEC so
+; validating resolvers return authenticated data. Code points for the
+; experimental SvcParamKeys in draft-mozleywilliams-dnsop-dnsaid (cap, bap,
+; well-known) are not assigned yet. key65280 is private-use (RFC 9460) and
+; carries the ARD catalog path until a registered key exists.
+;
+; ServiceMode priority is 1 (AliasMode would be 0). alpn and port are mandatory.
+
+_index._agents.poker.orangecloud.vn. 3600 IN HTTPS 1 poker.orangecloud.vn. alpn="h2" port=443 mandatory="alpn,port" key65280="/.well-known/ai-catalog.json"
+_mcp._agents.poker.orangecloud.vn. 3600 IN HTTPS 1 poker.orangecloud.vn. alpn="h2" port=443 mandatory="alpn,port"
+_a2a._agents.poker.orangecloud.vn. 3600 IN SVCB 1 poker.orangecloud.vn. alpn="a2a" port=443 mandatory="alpn,port"
+_catalog._agents.poker.orangecloud.vn. 3600 IN TXT "url=https://poker.orangecloud.vn/.well-known/ai-catalog.json"
+
+_index._agents.staging.poker.orangecloud.vn. 3600 IN HTTPS 1 staging.poker.orangecloud.vn. alpn="h2" port=443 mandatory="alpn,port" key65280="/.well-known/ai-catalog.json"
+_mcp._agents.staging.poker.orangecloud.vn. 3600 IN HTTPS 1 staging.poker.orangecloud.vn. alpn="h2" port=443 mandatory="alpn,port"
+_a2a._agents.staging.poker.orangecloud.vn. 3600 IN SVCB 1 staging.poker.orangecloud.vn. alpn="a2a" port=443 mandatory="alpn,port"
+_catalog._agents.staging.poker.orangecloud.vn. 3600 IN TXT "url=https://staging.poker.orangecloud.vn/.well-known/ai-catalog.json"
