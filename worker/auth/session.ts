@@ -1,6 +1,6 @@
 import type { Env } from "../env";
 import { sha256Hex } from "../lib/http";
-import { isSuperAdmin, USER_ROLE_USER, type UserRole } from "../lib/roles";
+import { isSuperAdmin, parseUserRole, type UserRole } from "../lib/roles";
 
 const SESSION_COOKIE = "pf_session";
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
@@ -85,7 +85,7 @@ export async function requireUser(
       username: row.username,
       sessionId: row.session_id,
       isGuest: Boolean(row.is_guest),
-      role: (row.role ?? USER_ROLE_USER) as UserRole,
+      role: parseUserRole(row.role),
     },
   };
 }
