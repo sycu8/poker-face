@@ -233,8 +233,23 @@ export function AdminPage({
               </div>
 
               <h3 className="admin-section-title">Users</h3>
-              <div className="admin-stat-grid admin-stat-grid--compact">
-                <StatCard label="Total users" value={stats.users.total} />
+              <div className="admin-stat-grid">
+                <StatCard label="Total users" value={stats.users.total} hint="All time" />
+                <StatCard
+                  label="Active users"
+                  value={stats.users.activeInPeriod}
+                  hint={`Signed in within last ${stats.periodDays} days`}
+                />
+                <StatCard
+                  label="With active session"
+                  value={stats.users.withActiveSession}
+                  hint="Currently valid session"
+                />
+                <StatCard
+                  label="Active members"
+                  value={stats.users.activeMembers}
+                  hint="Seated, away, or spectating in an open room"
+                />
                 <StatCard
                   label="New registrations"
                   value={stats.users.registeredInPeriod}

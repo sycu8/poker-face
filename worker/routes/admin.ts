@@ -22,6 +22,12 @@ export type AdminUserStats = {
   total: number;
   registeredInPeriod: number;
   guests: number;
+  /** Distinct users who created a session in the period (signed in). */
+  activeInPeriod: number;
+  /** Distinct users with a currently valid (non-expired, non-revoked) session. */
+  withActiveSession: number;
+  /** Distinct users currently seated/away/spectator in an open room. */
+  activeMembers: number;
 };
 
 export async function queryAdminStats(
@@ -60,17 +66,30 @@ export async function queryAdminStats(
       with_hands_in_period: number;
     }>();
 
+  const now = Date.now();
   const usersRow = await env.DB.prepare(
     `SELECT
        (SELECT COUNT(*) FROM users) AS total,
        (SELECT COUNT(*) FROM users WHERE created_at >= ? AND is_guest = 0) AS registered_in_period,
-       (SELECT COUNT(*) FROM users WHERE is_guest = 1) AS guests`,
+       (SELECT COUNT(*) FROM users WHERE is_guest = 1) AS guests,
+       (SELECT COUNT(DISTINCT user_id) FROM sessions
+        WHERE created_at >= ? AND revoked_at IS NULL) AS active_in_period,
+       (SELECT COUNT(DISTINCT user_id) FROM sessions
+        WHERE revoked_at IS NULL AND expires_at > ?) AS with_active_session,
+       (SELECT COUNT(DISTINCT m.user_id)
+        FROM room_members m
+        JOIN rooms r ON r.id = m.room_id
+        WHERE r.status = 'open'
+          AND m.status IN (${ACTIVE_MEMBER_SQL})) AS active_members`,
   )
-    .bind(periodStart)
+    .bind(periodStart, periodStart, now)
     .first<{
       total: number;
       registered_in_period: number;
       guests: number;
+      active_in_period: number;
+      with_active_session: number;
+      active_members: number;
     }>();
 
   return {
@@ -88,6 +107,9 @@ export async function queryAdminStats(
       total: usersRow?.total ?? 0,
       registeredInPeriod: usersRow?.registered_in_period ?? 0,
       guests: usersRow?.guests ?? 0,
+      activeInPeriod: usersRow?.active_in_period ?? 0,
+      withActiveSession: usersRow?.with_active_session ?? 0,
+      activeMembers: usersRow?.active_members ?? 0,
     },
   };
 }

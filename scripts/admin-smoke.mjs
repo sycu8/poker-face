@@ -85,6 +85,11 @@ async function main() {
 
   if (stats.rooms.total < 2) throw new Error("Expected at least 2 seeded rooms");
   if (stats.rooms.activeInPeriod < 1) throw new Error("Expected active room in period");
+  if (stats.users.activeInPeriod < 1) throw new Error("Expected active user in period");
+  if (stats.users.withActiveSession < 1) {
+    throw new Error("Expected user with active session");
+  }
+  if (stats.users.activeMembers < 1) throw new Error("Expected active member");
 
   console.log("admin-smoke ok", JSON.stringify(stats, null, 2));
 }

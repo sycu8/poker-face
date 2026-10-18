@@ -227,6 +227,8 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
       <p style={{ marginInline: "auto" }}>{subtitle}</p>
       <form
         className="panel auth-panel"
+        toolname="poker_faces_account"
+        tooldescription="Create an account, sign in, or continue as a guest on Poker Faces. Virtual chips only."
         onSubmit={(e) => void submit(e)}
         style={{ textAlign: "left" }}
       >
@@ -295,6 +297,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
             <input
               id="guestDisplayName"
               name="displayName"
+              toolparamdescription="Display name friends will see. At least 2 characters. Guest sessions last 24 hours and cannot host."
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="What friends call you"
@@ -320,6 +323,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
               <input
                 id="username"
                 name="username"
+                toolparamdescription="Username, 3 to 32 characters, using letters, numbers, and underscores."
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="your_handle"
@@ -339,6 +343,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
                   id="email"
                   name="email"
                   type="email"
+                  toolparamdescription="Email address for the new account."
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="you@example.com"
@@ -356,6 +361,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
                 <input
                   id="displayName"
                   name="displayName"
+                  toolparamdescription="Optional name friends see at the table."
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="What friends call you"
@@ -370,6 +376,7 @@ export function AuthPage({ onAuthed }: { onAuthed: (user: User) => void }) {
                 id="password"
                 name="password"
                 type="password"
+                toolparamdescription="Password, at least 8 characters."
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={mode === "login" ? "Your password" : "At least 8 characters"}

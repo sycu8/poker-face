@@ -1,5 +1,5 @@
 /* Richer PWA shell — cache app shell assets; never cache live game/API traffic. */
-const CACHE = "poker-faces-shell-v3";
+const CACHE = "poker-faces-shell-v4";
 const PRECACHE = [
   "/",
   "/index.html",
@@ -12,7 +12,14 @@ function isLivePath(pathname) {
   return (
     pathname.startsWith("/api/") ||
     pathname.startsWith("/ws/") ||
-    pathname.startsWith("/table/")
+    pathname.startsWith("/table/") ||
+    pathname.startsWith("/.well-known/") ||
+    pathname.startsWith("/mcp") ||
+    pathname.startsWith("/oauth/") ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    pathname === "/auth.md" ||
+    pathname === "/openapi.json"
   );
 }
 

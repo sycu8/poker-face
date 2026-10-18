@@ -1,7 +1,7 @@
 # Architecture
 
 - **Client:** React SPA/PWA (Vite) with branded UI, username/password + optional GitHub/Google OAuth, room table, chat, optional RealtimeKit voice.
-- **Worker:** Single entry serves Static Assets + `/api/*` + `/ws/*`.
+- **Worker:** Single entry serves Static Assets + `/api/*` + `/ws/*` + public agent-discovery documents. `assets.run_worker_first` is true so those routes are not rewritten to `index.html`.
 - **RoomDurableObject:** One SQLite DO per room — authoritative engine, hibernatable WebSockets, alarms for turn timers, text chat. Reconnect is **snapshot-only** (projected view + `sequence`); unused `room_events` path removed.
 - **D1:** Users (username + email + password hash), OAuth account links, sessions, rooms, membership, join requests, hand summaries, idempotency keys.
 - **KV (`CONFIG_KV`):** Non-authoritative flags/copy (`copy:*`, `flag:*`) for `/api/config`.
@@ -22,3 +22,17 @@
 - **Guest join** (`POST /api/rooms/join-as-guest`): creates a guest session and join request in one call.
 
 Privacy: `projectForPlayer` strips foreign hole cards. Voice failure never blocks game actions.
+
+### Agent discovery
+
+The Worker publishes the public discovery surface from `worker/discovery/`:
+
+- `/robots.txt` allows search crawlers on public pages and disallows training crawlers. Private tables, `/api/`, `/ws/`, `/admin`, and `/mcp` stay closed. Content Signals set `ai-train=no`, `search=yes`, `ai-input=no` for search and the default agent.
+- `/sitemap.xml` lists `/` and `/auth`.
+- `/.well-known/api-catalog`, `/openapi.json`, `/auth.md`, OAuth/OIDC metadata, the MCP server card, the agent-skills index, and `/.well-known/ai-catalog.json`.
+- Homepage responses include RFC 8288 `Link` headers. The browser registers WebMCP tools on load.
+- Protected API `401` responses include `WWW-Authenticate` with `resource_metadata`.
+
+Sessions remain the HttpOnly `pf_session` cookie. `POST /oauth/token` does not issue bearer tokens.
+
+DNS for AI Discovery records live in `dns/dnsaid.zone`. Publish them on the public zone for `poker.orangecloud.vn` (and staging), then enable DNSSEC at the registrar so validating resolvers can authenticate the `_agents` names. The Worker cannot sign DNS.
